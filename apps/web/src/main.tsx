@@ -4,7 +4,12 @@ import { createRoot } from "react-dom/client";
 type HealthStatus = "checking" | "live" | "offline";
 
 type HealthResponse = {
-  service: string;
+  services: ServiceHealth[];
+};
+
+type ServiceHealth = {
+  name: string;
+  url: string;
   status: string;
 };
 
@@ -14,7 +19,7 @@ const gatewayUrl =
 
 function App() {
   const [status, setStatus] = useState<HealthStatus>("checking");
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [health, setHealth] = useState<ServiceHealth[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -23,7 +28,7 @@ function App() {
       setStatus("checking");
 
       try {
-        const response = await fetch(`${gatewayUrl}/healthz`, {
+        const response = await fetch(`${gatewayUrl}/healthz/services`, {
           signal: controller.signal,
         });
 
@@ -32,11 +37,15 @@ function App() {
         }
 
         const data = (await response.json()) as HealthResponse;
-        setHealth(data);
-        setStatus(data.status === "ok" ? "live" : "offline");
+        setHealth(data.services);
+        setStatus(
+          data.services.some((service) => service.status === "ok")
+            ? "live"
+            : "offline",
+        );
       } catch (error) {
         if (!controller.signal.aborted) {
-          setHealth(null);
+          setHealth([]);
           setStatus("offline");
         }
       }
@@ -65,16 +74,41 @@ function App() {
         }}
       >
         <h2 style={{ marginTop: 0 }}>Backend Status</h2>
-        <p>
-          Gateway:{" "}
-          <strong style={{ color: statusColor(status) }}>
-            {statusLabel(status)}
-          </strong>
-        </p>
+        <div style={{ display: "grid", gap: 12 }}>
+          {health.length > 0 ? (
+            health.map((service) => (
+              <div
+                key={service.name}
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>
+                  <strong>{service.name}</strong>
+                  <span style={{ color: "#555" }}> - {service.url}</span>
+                </span>
+                <strong
+                  style={{ color: statusColor(toHealthStatus(service.status)) }}
+                >
+                  {statusLabel(toHealthStatus(service.status))}
+                </strong>
+              </div>
+            ))
+          ) : (
+            <p style={{ margin: 0 }}>
+              Gateway:{" "}
+              <strong style={{ color: statusColor(status) }}>
+                {statusLabel(status)}
+              </strong>
+            </p>
+          )}
+        </div>
         <p style={{ color: "#555", marginBottom: 0 }}>
-          Health endpoint: {gatewayUrl}/healthz
+          Health endpoint: {gatewayUrl}/healthz/services
         </p>
-        {health ? (
+        {health.length > 0 ? (
           <pre
             style={{
               background: "#f6f6f6",
@@ -108,6 +142,10 @@ function statusColor(status: HealthStatus) {
   if (status === "checking") return "#9a6700";
   if (status === "live") return "#1a7f37";
   return "#cf222e";
+}
+
+function toHealthStatus(status: string): HealthStatus {
+  return status === "ok" ? "live" : "offline";
 }
 
 createRoot(document.getElementById("root")!).render(
