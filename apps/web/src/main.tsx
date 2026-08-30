@@ -1,22 +1,21 @@
-// main.tsx - Dev 3 (FE-CORE-01: Feature folder refactor)
-// Entry point. All logic is now in features/* and components/*.
-// Auth state managed by AuthProvider (FE-CORE-04: Protected layout).
+// main.tsx - Dev 3
+// Entry point. Auth + study set flow gọi gateway API thật.
 
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-import { AuthProvider, useAuth } from "./features/auth/AuthContext";
+import { AuthProvider, useAuth, apiFetch } from "./features/auth/AuthContext";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
-import type { StudySet, ServiceHealth, HealthStatus, AppView } from "./types";
+import type { StudySet, ServiceHealth, HealthStatus, AppView, Flashcard } from "./types";
 
 const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
 function AppShell() {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const [view, setView] = useState<AppView>("dashboard");
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
@@ -38,7 +37,6 @@ function AppShell() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Not logged in → auth screen (FE-CORE-04)
   if (!user) {
     return (
       <AuthScreen
@@ -49,24 +47,27 @@ function AppShell() {
     );
   }
 
-  function handleOpenSet(id: number) {
-    // TODO (FE-CORE-07): fetch real set from Dev 2 API
-    // For now find in mock
-    import("./lib/mock/mockData").then(({ MOCK_SETS }) => {
-      const found = MOCK_SETS.find((s) => s.id === id) ?? null;
-      setSelectedSet(found);
-      setView("study");
-    });
+  async function handleOpenSet(id: number) {
+    const data = await apiFetch<StudySet>(`/v1/study-sets/${id}`, token);
+    setSelectedSet(data);
+    setView("study");
+  }
+
+  async function handleToggleStar(card: Flashcard) {
+    await apiFetch(`/v1/flashcards/${card.id}/star`, token, { method: "POST" });
+    if (selectedSet) await handleOpenSet(selectedSet.id);
+  }
+
+  async function handleDeleteSet() {
+    if (!selectedSet) return;
+    await apiFetch(`/v1/study-sets/${selectedSet.id}`, token, { method: "DELETE" });
+    setSelectedSet(null);
+    setView("dashboard");
   }
 
   function handleSaveSet(saved: StudySet) {
     setSelectedSet(saved);
     setView("study");
-  }
-
-  function handleDeleteSet() {
-    setSelectedSet(null);
-    setView("dashboard");
   }
 
   return (
@@ -77,14 +78,14 @@ function AppShell() {
         </button>
         <div className="user-menu">
           <span>{user.name}</span>
-          <button onClick={logout}>Logout</button>
+          <button onClick={() => void logout()}>Logout</button>
         </div>
       </header>
 
       {view === "dashboard" && (
         <Dashboard
           healthStatus={healthStatus}
-          onOpen={handleOpenSet}
+          onOpen={(id) => void handleOpenSet(id)}
           onCreate={() => { setSelectedSet(null); setView("editor"); }}
         />
       )}
@@ -101,8 +102,9 @@ function AppShell() {
         <StudyDetail
           set={selectedSet}
           onEdit={() => setView("editor")}
-          onDelete={handleDeleteSet}
+          onDelete={() => void handleDeleteSet()}
           onBack={() => setView("dashboard")}
+          onToggleStar={(card) => void handleToggleStar(card)}
         />
       )}
     </main>
@@ -118,7 +120,5 @@ function App() {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <React.StrictMode><App /></React.StrictMode>
 );

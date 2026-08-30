@@ -1,9 +1,9 @@
-// Dashboard - Dev 3 (FE-CORE-05: Dashboard study set list)
-// Shows list of study sets, empty state, reload. Uses mock data until Dev 2 ready.
+// Dashboard - Dev 3 (FE-CORE-05)
+// Gọi API thật /v1/study-sets qua gateway. Đã bỏ MOCK_SETS (fix regression).
 
 import React, { useEffect, useState } from "react";
 import type { StudySet, HealthStatus } from "../../types";
-import { MOCK_SETS } from "../../lib/mock/mockData";
+import { useAuth, apiFetch } from "../auth/AuthContext";
 
 type Props = {
   healthStatus: HealthStatus;
@@ -12,6 +12,7 @@ type Props = {
 };
 
 export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
+  const { token } = useAuth();
   const [sets, setSets] = useState<StudySet[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,10 +21,8 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
     setLoading(true);
     setError("");
     try {
-      // TODO (FE-CORE-07): swap to real API when Dev 2 ready
-      // const data = await apiClient.get<StudySet[]>("/v1/study-sets");
-      await new Promise((r) => setTimeout(r, 300)); // simulate network
-      setSets(MOCK_SETS);
+      const data = await apiFetch<StudySet[]>("/v1/study-sets", token);
+      setSets(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được study sets.");
     } finally {
@@ -31,7 +30,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
     }
   };
 
-  useEffect(() => { void loadSets(); }, []);
+  useEffect(() => { void loadSets(); }, [token]);
 
   return (
     <>
@@ -50,12 +49,17 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
         <div className="metric-card"><span>Status</span><strong>{loading ? "loading" : "ready"}</strong></div>
       </section>
 
-      {error && <p className="message message--error">{error}</p>}
+      {error && (
+        <p className="message message--error">
+          {error}{" "}
+          <button className="ghost-button" onClick={() => void loadSets()}>Thử lại</button>
+        </p>
+      )}
 
       <section className="set-grid">
         {loading && <p className="loading-state">Đang tải...</p>}
 
-        {!loading && sets.length === 0 && (
+        {!loading && sets.length === 0 && !error && (
           <div className="empty-panel">
             <h2>Chưa có học phần</h2>
             <p>Tạo bộ thẻ đầu tiên với thuật ngữ và định nghĩa.</p>
