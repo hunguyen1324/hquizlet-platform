@@ -1,9 +1,10 @@
 // LearningContainer — Dev 4
 // FE-LEARN-06: Wraps all 4 learning modes, receives StudySet data from Dev 3
 // Drop-in replacement for the placeholder divs in StudyDetail.tsx (Dev 3)
+// Props aligned with remote branch: modes accept studySet: StudySet
 
 import React from "react";
-import type { StudySet } from "../../types";
+import type { StudySet, Flashcard } from "./types";
 import type { LearningMode } from "./types";
 import { FlashcardsMode } from "./FlashcardsMode";
 import { LearnMode } from "./LearnMode";
@@ -14,9 +15,10 @@ import "./learning.css";
 type Props = {
   set: StudySet;
   mode: LearningMode;
+  onToggleStar?: (card: Flashcard) => void;
 };
 
-export function LearningContainer({ set, mode }: Props) {
+export function LearningContainer({ set, mode, onToggleStar }: Props) {
   const cards = set.flashcards ?? [];
 
   if (cards.length === 0) {
@@ -29,13 +31,13 @@ export function LearningContainer({ set, mode }: Props) {
 
   switch (mode) {
     case "flashcards":
-      return <FlashcardsMode cards={cards} />;
+      return <FlashcardsMode studySet={set} onToggleStar={onToggleStar} />;
     case "learn":
-      return <LearnMode cards={cards} />;
+      return <LearnMode studySet={set} />;
     case "test":
-      return <TestMode cards={cards} />;
+      return <TestMode studySet={set} />;
     case "match":
-      return <MatchMode cards={cards} />;
+      return <MatchMode studySet={set} />;
     default:
       return null;
   }
