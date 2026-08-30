@@ -1,13 +1,21 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
+
+type serviceHealth struct {
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Status string `json:"status"`
+}
 
 func main() {
 	port := env("PORT", "8080")
@@ -15,6 +23,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(cors)
 	r.Get("/healthz", health("gateway"))
+	r.Get("/healthz/services", servicesHealth)
 	r.Get("/v1/auth/me", placeholder("auth service not wired yet"))
 	r.Get("/v1/study-sets", placeholder("study service not wired yet"))
 
@@ -22,6 +31,49 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func servicesHealth(w http.ResponseWriter, r *http.Request) {
+	services := []serviceHealth{
+		{Name: "gateway", URL: "http://localhost:" + env("PORT", "8080") + "/healthz"},
+		{Name: "auth", URL: env("AUTH_SERVICE_URL", "http://localhost:8081") + "/healthz"},
+		{Name: "study", URL: env("STUDY_SERVICE_URL", "http://localhost:8082") + "/healthz"},
+		{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
+	}
+
+	for i := range services {
+		if services[i].Name == "gateway" {
+			services[i].Status = "ok"
+			continue
+		}
+		services[i].Status = checkHealth(r.Context(), services[i].URL)
+	}
+
+	writeJSON(w, http.StatusOK, map[string][]serviceHealth{
+		"services": services,
+	})
+}
+
+func checkHealth(ctx context.Context, url string) string {
+	ctx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "offline"
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "offline"
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "offline"
+	}
+
+	return "ok"
 }
 
 func cors(next http.Handler) http.Handler {
