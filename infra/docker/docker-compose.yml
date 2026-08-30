@@ -37,8 +37,12 @@ services:
         SERVICE: study
     ports:
       - "8082:8082"
+    environment:
+      DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
     volumes:
       - ../../services/study:/src/services/study
+    depends_on:
+      - postgres
 
   quiz:
     build:
