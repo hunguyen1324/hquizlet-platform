@@ -11,6 +11,8 @@ services:
       QUIZ_SERVICE_URL: http://quiz:8083
     ports:
       - "8080:8080"
+    volumes:
+      - ../../services/gateway:/src/services/gateway
     depends_on:
       - auth
       - study
@@ -24,6 +26,8 @@ services:
         SERVICE: auth
     ports:
       - "8081:8081"
+    volumes:
+      - ../../services/auth:/src/services/auth
 
   study:
     build:
@@ -33,6 +37,8 @@ services:
         SERVICE: study
     ports:
       - "8082:8082"
+    volumes:
+      - ../../services/study:/src/services/study
 
   quiz:
     build:
@@ -42,6 +48,8 @@ services:
         SERVICE: quiz
     ports:
       - "8083:8083"
+    volumes:
+      - ../../services/quiz:/src/services/quiz
 
   web:
     build:
@@ -51,6 +59,9 @@ services:
       VITE_GATEWAY_URL: http://localhost:8080
     ports:
       - "5173:5173"
+    volumes:
+      - ../../apps/web:/app
+      - web-node-modules:/app/node_modules
     depends_on:
       - gateway
 
@@ -78,3 +89,4 @@ services:
 
 volumes:
   postgres-data:
+  web-node-modules:
