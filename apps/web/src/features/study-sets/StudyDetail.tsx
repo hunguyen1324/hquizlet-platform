@@ -1,11 +1,12 @@
-// StudyDetail - Dev 3
-// Shows study set detail page. Learning modes (flashcards, learn, test, match) are Dev 4's scope.
-// This component provides the study set data to Dev 4's learning feature via props/context.
+// StudyDetail - Dev 3 + Dev 4 integration
+// Dev 4 (FE-LEARN-06): LearningContainer gắn thật vào các tab learning mode
 
 import React from "react";
 import type { StudySet, Flashcard } from "../../types";
+import type { LearningMode } from "../learning/types";
+import { LearningContainer } from "../learning";
 
-type StudyMode = "dashboard" | "flashcards" | "learn" | "test" | "match";
+type StudyMode = "dashboard" | LearningMode;
 
 type Props = {
   set: StudySet;
@@ -68,16 +69,10 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
           </div>
         )}
 
-        {/* Learning modes: Dev 4 will replace these placeholders */}
+        {/* Dev 4 (FE-LEARN-06): LearningContainer nhận set thật từ Dev 3.
+            studyMode đã là LearningMode khi !== "dashboard" nhờ type alias trên. */}
         {studyMode !== "dashboard" && (
-          <div className="mode-placeholder">
-            <p>
-              Chế độ <strong>{studyMode}</strong> — Dev 4 đang phát triển.
-            </p>
-            <p style={{ fontSize: "0.85rem", color: "#888" }}>
-              ({cards.length} thẻ sẵn sàng để dùng)
-            </p>
-          </div>
+          <LearningContainer set={set} mode={studyMode} />
         )}
       </section>
     </>
