@@ -1,44 +1,568 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 0.1.0
+  version: 1.1.0
+  description: |
+    HQuizlet Platform – Sprint 1 OpenAPI Contract.
+    Tất cả route đi qua gateway tại localhost:8080.
+    Frontend và backend đều dùng file này làm nguồn sự thật.
+
+    CHANGELOG v1.1.0 (fix/sprint1-blockers [dev4]):
+    - User.id: uuid → int64 (khớp backend int64)
+    - User.display_name → name (khớp backend json:"name")
+    - User.avatar_url → image (khớp backend json:"image")
+    - AuthTokens → AuthResponse: access_token → token, bỏ refresh_token/token_type/expires_in
+      thêm authenticated:bool, expiresAt:datetime (khớp SessionResponse backend)
+    - Register/Login request: display_name → name
+    - /v1/auth/me response: trả AuthResponse thay vì chỉ User (backend trả authenticated+token+user)
+    - StudySet.id / Flashcard.id: uuid → int64
+    - StudySet.user_id / Flashcard.study_set_id: uuid → int64
+    - StudySet bỏ is_public, card_count (backend chưa có)
+    - Flashcard bỏ image_url, position (backend chưa có)
+    - /v1/study-sets GET: trả array trực tiếp thay vì PaginatedStudySets (khớp backend)
+    - /v1/study-sets/{id} path param: uuid → integer
+    - /v1/flashcards/{id} path param: uuid → integer
+    - /v1/flashcards/{id}/star response: id uuid → integer
+
 servers:
   - url: http://localhost:8080
+    description: Local dev (qua gateway)
+
+tags:
+  - name: health
+    description: Health check
+  - name: auth
+    description: Xác thực người dùng
+  - name: study-sets
+    description: Quản lý học phần
+  - name: flashcards
+    description: Quản lý thẻ từ vựng
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "invalid credentials"
+        details:
+          type: string
+          example: "password too short"
+
+    # Khớp services/auth/internal/model/model.go User struct
+    User:
+      type: object
+      required: [id, email, name, role, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        name:
+          type: string
+          example: "Nguyen Van A"
+        image:
+          type: string
+          example: ""
+        role:
+          type: string
+          example: "user"
+        createdAt:
+          type: string
+          format: date-time
+
+    # Khớp services/auth/internal/model/model.go SessionResponse struct
+    AuthResponse:
+      type: object
+      required: [authenticated, token, expiresAt, user]
+      properties:
+        authenticated:
+          type: boolean
+          example: true
+        token:
+          type: string
+          description: Bearer token để gửi trong Authorization header
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+
+    # Khớp services/study/internal/model (study_sets table)
+    StudySet:
+      type: object
+      required: [id, user_id, title, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        user_id:
+          type: integer
+          format: int64
+          example: 42
+        title:
+          type: string
+          example: "Từ vựng IELTS Band 7"
+        description:
+          type: string
+          example: ""
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    StudySetDetail:
+      allOf:
+        - $ref: '#/components/schemas/StudySet'
+        - type: object
+          properties:
+            flashcards:
+              type: array
+              items:
+                $ref: '#/components/schemas/Flashcard'
+
+    # Khớp services/study/internal/model (flashcards table)
+    Flashcard:
+      type: object
+      required: [id, study_set_id, term, definition, starred, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        study_set_id:
+          type: integer
+          format: int64
+          example: 1
+        term:
+          type: string
+          example: "Ephemeral"
+        definition:
+          type: string
+          example: "Lasting for a very short time"
+        starred:
+          type: boolean
+          default: false
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
 paths:
+
+  # ── Health ──────────────────────────────────
   /healthz:
     get:
+      tags: [health]
       summary: Gateway health check
       responses:
         "200":
-          description: Service is healthy
+          description: Gateway OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service: { type: string, example: "gateway" }
+                  status:  { type: string, example: "ok" }
+
+  /healthz/services:
+    get:
+      tags: [health]
+      summary: Trạng thái tất cả service
+      responses:
+        "200":
+          description: Danh sách trạng thái service
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:   { type: string }
+                        url:    { type: string }
+                        status: { type: string, enum: [ok, offline] }
+
+  # ── Auth ────────────────────────────────────
+  /v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Đăng ký tài khoản mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  minLength: 6
+                  example: "secret123"
+                name:
+                  type: string
+                  example: "Nguyen Van A"
+      responses:
+        "201":
+          description: Đăng ký thành công
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        "409":
+          description: Email đã tồn tại
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "422":
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Đăng nhập
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Đăng nhập thành công – trả AuthResponse
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        "401":
+          description: Sai email hoặc mật khẩu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Đăng xuất – thu hồi session
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Đăng xuất thành công
+
   /v1/auth/me:
     get:
-      summary: Return current authenticated user
+      tags: [auth]
+      summary: Lấy thông tin người dùng hiện tại
+      security:
+        - BearerAuth: []
       responses:
         "200":
-          description: Current user or anonymous state
+          description: Trả AuthResponse (authenticated=true + user)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        "401":
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Study Sets ────────────────────────────────
   /v1/study-sets:
     get:
-      summary: List visible study sets
+      tags: [study-sets]
+      summary: Danh sách học phần của user hiện tại
+      security:
+        - BearerAuth: []
       responses:
         "200":
-          description: Study set list
-  /v1/live-sessions:
-    post:
-      summary: Create a live quiz session
-      responses:
-        "201":
-          description: Live session created
-  /v1/payments/orders:
-    post:
-      summary: Create payment order
-      responses:
-        "201":
-          description: Payment order created
-  /v1/files/presign-upload:
-    post:
-      summary: Create a signed upload URL
-      responses:
-        "201":
-          description: Upload URL created
+          description: Array học phần (không paginate trong Sprint 1)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudySet'
+        "401":
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
+    post:
+      tags: [study-sets]
+      summary: Tạo học phần mới
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  example: "Từ vựng IELTS Band 7"
+                description:
+                  type: string
+                  example: ""
+      responses:
+        "201":
+          description: Học phần vừa tạo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StudySet' }
+        "401":
+          description: Chưa xác thực
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/study-sets/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer, format: int64 }
+
+    get:
+      tags: [study-sets]
+      summary: Chi tiết học phần (kèm flashcard)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Chi tiết học phần
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StudySetDetail' }
+        "403":
+          description: Không có quyền truy cập
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Không tìm thấy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+    put:
+      tags: [study-sets]
+      summary: Cập nhật thông tin học phần
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:       { type: string }
+                description: { type: string }
+      responses:
+        "200":
+          description: Học phần sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StudySet' }
+        "403":
+          description: Không phải chủ sở hữu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Không tìm thấy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+    delete:
+      tags: [study-sets]
+      summary: Xóa học phần
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Đã xóa thành công
+        "403":
+          description: Không phải chủ sở hữu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Không tìm thấy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Flashcards ───────────────────────────────
+  /v1/study-sets/{study_set_id}/flashcards:
+    parameters:
+      - in: path
+        name: study_set_id
+        required: true
+        schema: { type: integer, format: int64 }
+
+    post:
+      tags: [flashcards]
+      summary: Thêm flashcard vào học phần
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [term, definition]
+              properties:
+                term:
+                  type: string
+                  example: "Ephemeral"
+                definition:
+                  type: string
+                  example: "Lasting for a very short time"
+      responses:
+        "201":
+          description: Flashcard vừa tạo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Flashcard' }
+        "403":
+          description: Không phải chủ sở hữu học phần
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Học phần không tồn tại
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/flashcards/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer, format: int64 }
+
+    put:
+      tags: [flashcards]
+      summary: Cập nhật flashcard
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                term:       { type: string }
+                definition: { type: string }
+      responses:
+        "200":
+          description: Flashcard sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Flashcard' }
+        "403":
+          description: Không phải chủ sở hữu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Không tìm thấy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+    delete:
+      tags: [flashcards]
+      summary: Xóa flashcard
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Đã xóa thành công
+        "403":
+          description: Không phải chủ sở hữu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Không tìm thấy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/flashcards/{id}/star:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer, format: int64 }
+
+    post:
+      tags: [flashcards]
+      summary: Toggle starred cho flashcard
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Trạng thái starred sau khi toggle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:      { type: integer, format: int64 }
+                  starred: { type: boolean }
+        "403":
+          description: Không có quyền
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Không tìm thấy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }

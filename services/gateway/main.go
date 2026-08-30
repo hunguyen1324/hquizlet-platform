@@ -21,16 +21,24 @@ func main() {
 	port := env("PORT", "8080")
 
 	mux := http.NewServeMux()
+
+	// Health
 	mux.HandleFunc("GET /healthz", health("gateway"))
 	mux.HandleFunc("GET /healthz/services", servicesHealth)
+
+	// Auth service – tất cả route /v1/auth/*
 	mux.HandleFunc("/v1/auth/", reverseProxy(env("AUTH_SERVICE_URL", "http://localhost:8081")))
+
+	// Study service – study-sets và flashcards
 	mux.HandleFunc("/v1/study-sets", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
 	mux.HandleFunc("/v1/study-sets/", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
 	mux.HandleFunc("/v1/flashcards/", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
+
+	// Quiz service – live sessions
 	mux.HandleFunc("/v1/live-sessions", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
 	mux.HandleFunc("/v1/live-sessions/", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
 
-	log.Printf("gateway listening on :%s", port)
+	log.Printf("[gateway] listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
 		log.Fatal(err)
 	}
@@ -76,15 +84,25 @@ func checkHealth(ctx context.Context, url string) string {
 	return "ok"
 }
 
+// cors chuẩn hóa cho dev – cho phép localhost:5173 và localhost:3000
 func cors(next http.Handler) http.Handler {
+	allowedOrigins := map[string]bool{
+		"http://localhost:5173":   true,
+		"http://127.0.0.1:5173":  true,
+		"http://localhost:3000":   true,
+		"http://127.0.0.1:3000":  true,
+		"http://web:5173":         true,
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:5173" || origin == "http://127.0.0.1:5173" {
+		if allowedOrigins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -102,6 +120,7 @@ func requestID(next http.Handler) http.Handler {
 			id = time.Now().UTC().Format("20060102150405.000000000")
 		}
 		w.Header().Set("X-Request-ID", id)
+		r.Header.Set("X-Request-ID", id)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -109,9 +128,21 @@ func requestID(next http.Handler) http.Handler {
 func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
+		log.Printf("[gateway] %s %s -> %d (%s)",
+			r.Method, r.URL.Path, rw.status, time.Since(start).Round(time.Millisecond))
 	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
 func health(service string) http.HandlerFunc {
@@ -129,6 +160,9 @@ func reverseProxy(target string) http.HandlerFunc {
 			return
 		}
 		req.Header = r.Header.Clone()
+		// Ghi upstream info để service biết request từ gateway
+		req.Header.Set("X-Forwarded-For", r.RemoteAddr)
+		req.Header.Set("X-Forwarded-Host", r.Host)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
