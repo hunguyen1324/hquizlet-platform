@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type serviceHealth struct {
@@ -20,15 +20,15 @@ type serviceHealth struct {
 func main() {
 	port := env("PORT", "8080")
 
-	r := chi.NewRouter()
-	r.Use(cors)
-	r.Get("/healthz", health("gateway"))
-	r.Get("/healthz/services", servicesHealth)
-	r.Get("/v1/auth/me", placeholder("auth service not wired yet"))
-	r.Get("/v1/study-sets", placeholder("study service not wired yet"))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", health("gateway"))
+	mux.HandleFunc("GET /healthz/services", servicesHealth)
+	mux.HandleFunc("/v1/auth/", reverseProxy(env("AUTH_SERVICE_URL", "http://localhost:8081")))
+	mux.HandleFunc("/v1/study-sets", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
+	mux.HandleFunc("/v1/live-sessions", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
 
 	log.Printf("gateway listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	if err := http.ListenAndServe(":"+port, cors(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -104,11 +104,31 @@ func health(service string) http.HandlerFunc {
 	}
 }
 
-func placeholder(message string) http.HandlerFunc {
+func reverseProxy(target string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"message": message,
-		})
+		targetURL := strings.TrimRight(target, "/") + r.URL.RequestURI()
+
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid upstream request"})
+			return
+		}
+		req.Header = r.Header.Clone()
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		for key, values := range resp.Header {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
 	}
 }
 
