@@ -1,8 +1,10 @@
 // TestMode — Dev 4
-// FE-LEARN-04: Trắc nghiệm từ flashcards, check answer local (Sprint 1)
+// P2-LEARN-03: Trắc nghiệm từ flashcards thật, kết quả chi tiết
+// Phase 2: cần ít nhất 2 cards, kết quả có breakdown, có thể retry, keyboard nav
 
 import React from "react";
 import type { Flashcard, TestState, TestQuestion } from "./types";
+import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import "./learning.css";
 
 type Props = {
@@ -42,12 +44,34 @@ export function TestMode({ cards }: Props) {
     score: 0,
   }));
 
+  if (cards.length < 2) {
+    return (
+      <LearningEmptyState
+        message="Cần ít nhất 2 thẻ để làm bài kiểm tra."
+        hint="Thêm thêm thẻ trong phần 'Sửa thẻ'."
+      />
+    );
+  }
+
   const { questions, currentIndex, submitted } = state;
   const q = questions[currentIndex];
   const total = questions.length;
 
+  // Keyboard: 1-4 to select answer
+  React.useEffect(() => {
+    if (submitted) return;
+    function onKey(e: KeyboardEvent) {
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= q.choices.length && q.userAnswer === null) {
+        handleChoose(q.choices[n - 1]);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [q, submitted]);
+
   function handleChoose(choice: string) {
-    if (q.userAnswer !== null) return; // already answered
+    if (q.userAnswer !== null) return;
     const isCorrect = choice === q.card.definition;
     setState((s) => {
       const updated = s.questions.map((item, i) =>
@@ -76,23 +100,27 @@ export function TestMode({ cards }: Props) {
     });
   }
 
-  if (total === 0) {
-    return (
-      <div className="learning-empty">
-        <p>Cần ít nhất 1 thẻ để làm bài kiểm tra.</p>
-      </div>
-    );
-  }
-
   if (submitted) {
     const pct = Math.round((state.score / total) * 100);
+    const grade =
+      pct >= 90 ? "🎉 Xuất sắc!" :
+      pct >= 70 ? "👍 Tốt!" :
+      pct >= 50 ? "📖 Cần ôn thêm" :
+      "💪 Hãy cố lên!";
+
     return (
       <div className="learn-done">
-        <h2>📝 Kết quả</h2>
+        <h2>📝 Kết quả bài kiểm tra</h2>
         <p className="learn-score">
           <strong>{state.score}</strong> / {total} ({pct}%)
         </p>
+        <p className="grade-label">{grade}</p>
         <div className="learn-review">
+          <div className="review-header">
+            <span>Thuật ngữ</span>
+            <span>Câu trả lời</span>
+            <span>Đáp án đúng</span>
+          </div>
           {state.questions.map((q, i) => (
             <div key={i} className={`review-row ${q.correct ? "correct" : "wrong"}`}>
               <span className="review-term">{q.card.term}</span>
@@ -101,7 +129,9 @@ export function TestMode({ cards }: Props) {
             </div>
           ))}
         </div>
-        <button className="primary-button" onClick={handleRestart}>Làm lại</button>
+        <button className="primary-button" onClick={handleRestart}>
+          Làm lại
+        </button>
       </div>
     );
   }
@@ -132,6 +162,7 @@ export function TestMode({ cards }: Props) {
               className={cls}
               onClick={() => handleChoose(choice)}
               disabled={answered}
+              aria-label={`Đáp án ${String.fromCharCode(65 + i)}: ${choice}`}
             >
               <span className="choice-letter">{String.fromCharCode(65 + i)}</span>
               {choice}
@@ -154,12 +185,21 @@ export function TestMode({ cards }: Props) {
         </div>
       )}
 
-      <div className="progress-bar-track">
+      <div
+        className="progress-bar-track"
+        role="progressbar"
+        aria-valuenow={currentIndex + 1}
+        aria-valuemax={total}
+      >
         <div
           className="progress-bar-fill"
           style={{ width: `${((currentIndex + 1) / total) * 100}%` }}
         />
       </div>
+
+      <p className="keyboard-hint" aria-hidden="true">
+        Nhấn 1–{Math.min(q.choices.length, 4)} để chọn đáp án
+      </p>
     </div>
   );
 }
