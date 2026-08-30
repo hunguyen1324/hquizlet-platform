@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "./styles.css";
 
 type HealthStatus = "checking" | "live" | "offline";
 
@@ -13,13 +14,29 @@ type ServiceHealth = {
   status: string;
 };
 
+type ApiPreview = {
+  label: string;
+  method: "GET" | "POST";
+  path: string;
+};
+
 const gatewayUrl =
   import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ??
   "http://localhost:8080";
 
+const apiPreviews: ApiPreview[] = [
+  { label: "Current user", method: "GET", path: "/v1/auth/me" },
+  { label: "Study sets", method: "GET", path: "/v1/study-sets" },
+  { label: "Create live session", method: "POST", path: "/v1/live-sessions" },
+];
+
 function App() {
   const [status, setStatus] = useState<HealthStatus>("checking");
   const [health, setHealth] = useState<ServiceHealth[]>([]);
+  const [apiResult, setApiResult] = useState(
+    "Select an API call to inspect the gateway response.",
+  );
+  const liveServices = health.filter((service) => service.status === "ok").length;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -60,74 +77,135 @@ function App() {
     };
   }, []);
 
-  return (
-    <main style={{ fontFamily: "system-ui", padding: 32, maxWidth: 720 }}>
-      <h1>HQuizlet Platform</h1>
-      <p>Frontend is separated from the Go backend services.</p>
+  async function callApi(preview: ApiPreview) {
+    setApiResult(`Calling ${preview.method} ${preview.path}...`);
 
-      <section
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          marginTop: 24,
-          padding: 20,
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Backend Status</h2>
-        <div style={{ display: "grid", gap: 12 }}>
-          {health.length > 0 ? (
-            health.map((service) => (
-              <div
-                key={service.name}
-                style={{
-                  alignItems: "center",
-                  display: "flex",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span>
-                  <strong>{service.name}</strong>
-                  <span style={{ color: "#555" }}> - {service.url}</span>
-                </span>
-                <strong
-                  style={{ color: statusColor(toHealthStatus(service.status)) }}
-                >
-                  {statusLabel(toHealthStatus(service.status))}
-                </strong>
-              </div>
-            ))
-          ) : (
-            <p style={{ margin: 0 }}>
-              Gateway:{" "}
-              <strong style={{ color: statusColor(status) }}>
-                {statusLabel(status)}
-              </strong>
-            </p>
-          )}
+    try {
+      const response = await fetch(`${gatewayUrl}${preview.path}`, {
+        method: preview.method,
+      });
+      const body = await response.json();
+      setApiResult(
+        JSON.stringify(
+          {
+            status: response.status,
+            body,
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (error) {
+      setApiResult(
+        JSON.stringify(
+          {
+            status: "offline",
+            error: error instanceof Error ? error.message : "Unknown error",
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  }
+
+  return (
+    <main className="app-shell">
+      <section className="hero">
+        <div>
+          <p className="eyebrow">Microservices dashboard</p>
+          <h1>HQuizlet Platform</h1>
+          <p className="hero-copy">
+            Frontend React rieng, Go services rieng. Gateway la cua vao duy nhat
+            de UI noi chuyen voi backend.
+          </p>
         </div>
-        <p style={{ color: "#555", marginBottom: 0 }}>
-          Health endpoint: {gatewayUrl}/healthz/services
-        </p>
-        {health.length > 0 ? (
-          <pre
-            style={{
-              background: "#f6f6f6",
-              borderRadius: 6,
-              marginTop: 16,
-              padding: 12,
-            }}
-          >
-            {JSON.stringify(health, null, 2)}
-          </pre>
-        ) : null}
+        <div className={`status-pill status-pill--${status}`}>
+          <span />
+          {statusLabel(status)}
+        </div>
       </section>
 
-      <ul>
-        <li>Gateway: http://localhost:8080</li>
-        <li>Auth: http://localhost:8081</li>
-        <li>Study: http://localhost:8082</li>
-        <li>Quiz: http://localhost:8083</li>
-      </ul>
+      <section className="summary-grid">
+        <article className="metric-card">
+          <span>Services live</span>
+          <strong>
+            {liveServices} / {health.length || 4}
+          </strong>
+        </article>
+        <article className="metric-card">
+          <span>Gateway</span>
+          <strong>{gatewayUrl}</strong>
+        </article>
+        <article className="metric-card">
+          <span>Health refresh</span>
+          <strong>5s</strong>
+        </article>
+      </section>
+
+      <section className="content-grid">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Backend status</p>
+              <h2>Service health</h2>
+            </div>
+            <a href={`${gatewayUrl}/healthz/services`} target="_blank">
+              JSON
+            </a>
+          </div>
+
+          <div className="service-list">
+            {health.length > 0 ? (
+              health.map((service) => (
+                <div className="service-row" key={service.name}>
+                  <div>
+                    <strong>{service.name}</strong>
+                    <span>{service.url}</span>
+                  </div>
+                  <span
+                    className={`badge badge--${toHealthStatus(service.status)}`}
+                  >
+                    {statusLabel(toHealthStatus(service.status))}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="service-row">
+                <div>
+                  <strong>gateway</strong>
+                  <span>{gatewayUrl}/healthz/services</span>
+                </div>
+                <span className={`badge badge--${status}`}>
+                  {statusLabel(status)}
+                </span>
+              </div>
+            )}
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Gateway API</p>
+              <h2>Try routes</h2>
+            </div>
+          </div>
+
+          <div className="action-list">
+            {apiPreviews.map((preview) => (
+              <button key={preview.path} onClick={() => void callApi(preview)}>
+                <span>{preview.label}</span>
+                <code>
+                  {preview.method} {preview.path}
+                </code>
+              </button>
+            ))}
+          </div>
+
+          <pre className="response-box">{apiResult}</pre>
+        </article>
+      </section>
     </main>
   );
 }
@@ -136,12 +214,6 @@ function statusLabel(status: HealthStatus) {
   if (status === "checking") return "checking...";
   if (status === "live") return "live";
   return "offline";
-}
-
-function statusColor(status: HealthStatus) {
-  if (status === "checking") return "#9a6700";
-  if (status === "live") return "#1a7f37";
-  return "#cf222e";
 }
 
 function toHealthStatus(status: string): HealthStatus {
