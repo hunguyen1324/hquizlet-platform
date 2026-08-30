@@ -1,8 +1,10 @@
 // LearnMode — Dev 4
-// FE-LEARN-03: Hỏi đáp, check answer local (no backend needed in Sprint 1)
+// P2-LEARN-02: Hỏi đáp, scoring local, retry wrong answers
+// Phase 2: retry sai, score hiển thị, empty state < 2 cards, keyboard nav
 
 import React from "react";
 import type { Flashcard, LearnState } from "./types";
+import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import "./learning.css";
 
 type Props = {
@@ -12,6 +14,8 @@ type Props = {
 function buildQueue(cards: Flashcard[]): Flashcard[] {
   return [...cards];
 }
+
+type Phase = "quiz" | "retry" | "done";
 
 export function LearnMode({ cards }: Props) {
   const [state, setState] = React.useState<LearnState>(() => ({
@@ -23,62 +27,125 @@ export function LearnMode({ cards }: Props) {
   const [input, setInput] = React.useState("");
   const [submitted, setSubmitted] = React.useState(false);
   const [correct, setCorrect] = React.useState<boolean | null>(null);
+  const [phase, setPhase] = React.useState<Phase>("quiz");
+  const [retryQueue, setRetryQueue] = React.useState<Flashcard[]>([]);
+  const [retryIndex, setRetryIndex] = React.useState(0);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const current = state.queue[state.currentIndex];
-  const total = state.queue.length;
+  if (cards.length < 2) {
+    return (
+      <LearningEmptyState
+        message="Cần ít nhất 2 thẻ để học."
+        hint="Thêm thẻ trong phần 'Sửa thẻ' trước khi học."
+      />
+    );
+  }
+
+  // ── Quiz phase ──
+  const current = phase === "retry" ? retryQueue[retryIndex] : state.queue[state.currentIndex];
+  const total = phase === "retry" ? retryQueue.length : state.queue.length;
+  const currentIdx = phase === "retry" ? retryIndex : state.currentIndex;
+
+  function normalize(s: string) {
+    return s.trim().toLowerCase().replace(/\s+/g, " ");
+  }
 
   function handleSubmit() {
     if (!input.trim() || submitted) return;
-    const isCorrect =
-      input.trim().toLowerCase() === current.definition.trim().toLowerCase();
+    const isCorrect = normalize(input) === normalize(current.definition);
     setCorrect(isCorrect);
     setSubmitted(true);
-    setState((s) => ({
-      ...s,
-      answers: {
-        ...s.answers,
-        [current.id]: {
-          card: current,
-          userAnswer: input,
-          submitted: true,
-          correct: isCorrect,
+
+    if (phase === "quiz") {
+      setState((s) => ({
+        ...s,
+        answers: {
+          ...s.answers,
+          [current.id]: {
+            card: current,
+            userAnswer: input,
+            submitted: true,
+            correct: isCorrect,
+          },
         },
-      },
-    }));
+      }));
+    }
   }
 
   function handleNext() {
-    const nextIndex = state.currentIndex + 1;
-    if (nextIndex >= total) {
-      setState((s) => ({ ...s, done: true }));
+    const nextIdx = currentIdx + 1;
+
+    if (phase === "quiz") {
+      if (nextIdx >= total) {
+        // Build retry queue from wrong answers
+        const wrongs = state.queue.filter((c) => {
+          const ans = state.answers[c.id];
+          // include unanswered too (shouldn't happen but safe)
+          return !ans || !ans.correct;
+        }).filter((c) => {
+          const ans = { ...state.answers };
+          // Re-check with current answer just submitted
+          if (c.id === current.id) return !correct;
+          return ans[c.id] && !ans[c.id].correct;
+        });
+
+        if (wrongs.length > 0) {
+          setRetryQueue(wrongs);
+          setRetryIndex(0);
+          setPhase("retry");
+        } else {
+          setState((s) => ({ ...s, done: true }));
+          setPhase("done");
+        }
+      } else {
+        setState((s) => ({ ...s, currentIndex: nextIdx }));
+      }
     } else {
-      setState((s) => ({ ...s, currentIndex: nextIndex }));
+      // retry phase
+      if (nextIdx >= total) {
+        setPhase("done");
+        setState((s) => ({ ...s, done: true }));
+      } else {
+        setRetryIndex(nextIdx);
+      }
     }
+
     setInput("");
     setSubmitted(false);
     setCorrect(null);
+    setTimeout(() => inputRef.current?.focus(), 50);
   }
 
   function handleRestart() {
     setState({ queue: buildQueue(cards), currentIndex: 0, answers: {}, done: false });
+    setRetryQueue([]);
+    setRetryIndex(0);
+    setPhase("quiz");
     setInput("");
     setSubmitted(false);
     setCorrect(null);
+    setTimeout(() => inputRef.current?.focus(), 50);
   }
 
-  if (total === 0) {
-    return <div className="learning-empty"><p>Chưa có thẻ nào.</p></div>;
-  }
+  // Done screen
+  if (phase === "done") {
+    const allAnswers = Object.values(state.answers);
+    const correctCount = allAnswers.filter((a) => a.correct).length;
+    const total2 = state.queue.length;
 
-  if (state.done) {
-    const correctCount = Object.values(state.answers).filter((a) => a.correct).length;
     return (
       <div className="learn-done">
         <h2>🎉 Hoàn thành!</h2>
         <p className="learn-score">
-          Đúng <strong>{correctCount}</strong> / {total} câu
+          Đúng <strong>{correctCount}</strong> / {total2} câu
+          {retryQueue.length > 0 && <span className="retry-note"> (đã ôn {retryQueue.length} câu sai)</span>}
         </p>
         <div className="learn-review">
+          <div className="review-header">
+            <span>Thuật ngữ</span>
+            <span>Câu trả lời</span>
+            <span>Đáp án đúng</span>
+          </div>
           {state.queue.map((card) => {
             const ans = state.answers[card.id];
             return (
@@ -97,10 +164,18 @@ export function LearnMode({ cards }: Props) {
     );
   }
 
+  const isRetry = phase === "retry";
+
   return (
     <div className="learn-mode">
       <div className="learn-header">
-        <span className="flashcards-counter">{state.currentIndex + 1} / {total}</span>
+        <span className="flashcards-counter">
+          {currentIdx + 1} / {total}
+          {isRetry && <span className="retry-badge"> Ôn lại</span>}
+        </span>
+        {isRetry && (
+          <span className="retry-label">Đang ôn lại {retryQueue.length} câu sai</span>
+        )}
       </div>
 
       <div className="learn-card">
@@ -109,8 +184,12 @@ export function LearnMode({ cards }: Props) {
       </div>
 
       <div className="learn-input-area">
-        <label className="learn-input-label">Nhập định nghĩa</label>
+        <label className="learn-input-label" htmlFor="learn-answer">
+          Nhập định nghĩa
+        </label>
         <input
+          id="learn-answer"
+          ref={inputRef}
           className={`learn-input${submitted ? (correct ? " input-correct" : " input-wrong") : ""}`}
           type="text"
           value={input}
@@ -121,6 +200,7 @@ export function LearnMode({ cards }: Props) {
           placeholder="Nhập câu trả lời..."
           disabled={submitted}
           autoFocus
+          autoComplete="off"
         />
 
         {submitted && (
@@ -143,18 +223,27 @@ export function LearnMode({ cards }: Props) {
           </button>
         ) : (
           <button className="primary-button" onClick={handleNext}>
-            {state.currentIndex + 1 >= total ? "Xem kết quả" : "Tiếp theo →"}
+            {currentIdx + 1 >= total ? (isRetry ? "Xem kết quả" : "Xem kết quả") : "Tiếp theo →"}
           </button>
         )}
       </div>
 
-      {/* Mini progress */}
-      <div className="progress-bar-track">
+      {/* Progress */}
+      <div
+        className="progress-bar-track"
+        role="progressbar"
+        aria-valuenow={currentIdx + 1}
+        aria-valuemax={total}
+      >
         <div
           className="progress-bar-fill"
-          style={{ width: `${((state.currentIndex + 1) / total) * 100}%` }}
+          style={{ width: `${((currentIdx + 1) / total) * 100}%` }}
         />
       </div>
+
+      <p className="keyboard-hint" aria-hidden="true">
+        Enter để kiểm tra / chuyển câu
+      </p>
     </div>
   );
 }
