@@ -5,7 +5,7 @@ WORKDIR /src
 
 COPY services/${SERVICE} ./services/${SERVICE}
 WORKDIR /src/services/${SERVICE}
-RUN go mod download
+RUN go mod tidy
 
 RUN go build -o /out/service .
 
