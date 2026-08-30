@@ -27,6 +27,14 @@ flowchart TD
   D --> G["NATS"]
 ```
 
+## Current Gateway Routing
+
+| Client route | Gateway action | Service URL in Docker |
+| --- | --- | --- |
+| `GET /v1/auth/me` | Reverse proxy | `http://auth:8081/v1/auth/me` |
+| `GET /v1/study-sets` | Reverse proxy | `http://study:8082/v1/study-sets` |
+| `POST /v1/live-sessions` | Reverse proxy | `http://quiz:8083/v1/live-sessions` |
+
 ## Auth Direction
 
 The old system uses NextAuth database sessions. During migration, the first Go
@@ -38,4 +46,3 @@ to short-lived access tokens plus refresh tokens.
 Start with one PostgreSQL instance for local development. Keep schemas separated
 by service ownership. Avoid cross-service writes; use events for asynchronous
 side effects.
-
