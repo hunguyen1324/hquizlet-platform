@@ -1,310 +1,133 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import "./login.css";
-import "./register.css";
 
 type HealthStatus = "checking" | "live" | "offline";
-
-type HealthResponse = {
-  services: ServiceHealth[];
-};
-
-type ServiceHealth = {
-  name: string;
-  url: string;
-  status: string;
-};
-
-type ApiPreview = {
-  label: string;
-  method: "GET" | "POST";
-  path: string;
-};
-
 type AuthMode = "login" | "register";
+type StudyMode = "dashboard" | "flashcards" | "learn" | "test" | "match";
+type User = { id: number; name: string; email: string; role: string };
+type AuthResponse = { authenticated: boolean; token: string; user: User };
+type ServiceHealth = { name: string; url: string; status: string };
+type StudySet = { id: number; title: string; description: string; flashcards?: Flashcard[] };
+type Flashcard = { id: number; studySetId: number; term: string; definition: string; starred: boolean };
 
-const gatewayUrl =
-  import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ??
-  "http://localhost:8080";
-
-const apiPreviews: ApiPreview[] = [
-  { label: "Current user", method: "GET", path: "/v1/auth/me" },
-  { label: "Study sets from PostgreSQL", method: "GET", path: "/v1/study-sets" },
-  { label: "Create live session", method: "POST", path: "/v1/live-sessions" },
-];
+const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+const tokenKey = "hquizlet.sessionToken";
 
 function App() {
-  const [status, setStatus] = useState<HealthStatus>("checking");
-  const [health, setHealth] = useState<ServiceHealth[]>([]);
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
+  const [services, setServices] = useState<ServiceHealth[]>([]);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [token, setToken] = useState(() => localStorage.getItem(tokenKey) ?? "");
+  const [user, setUser] = useState<User | null>(null);
   const [name, setName] = useState("Demo User");
   const [email, setEmail] = useState("demo@hquizlet.local");
   const [password, setPassword] = useState("");
-  const [loginMessage, setLoginMessage] = useState(
-    "Create a demo account or check the auth service through gateway.",
-  );
-  const [apiResult, setApiResult] = useState(
-    "Select an API call to inspect the gateway response.",
-  );
-  const liveServices = health.filter((service) => service.status === "ok").length;
+  const [message, setMessage] = useState("Dang nhap de vao dashboard hoc tap.");
+  const [sets, setSets] = useState<StudySet[]>([]);
+  const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [term, setTerm] = useState("");
+  const [definition, setDefinition] = useState("");
+  const [studyMode, setStudyMode] = useState<StudyMode>("dashboard");
+  const [cardIndex, setCardIndex] = useState(0);
+  const [showBack, setShowBack] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [lastResult, setLastResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const cards = selectedSet?.flashcards ?? [];
+  const activeCard = cards[cardIndex] ?? null;
+  const liveCount = services.filter((service) => service.status === "ok").length;
 
   useEffect(() => {
-    const controller = new AbortController();
-
     async function checkGateway() {
-      setStatus("checking");
-
       try {
-        const response = await fetch(`${gatewayUrl}/healthz/services`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Gateway returned ${response.status}`);
-        }
-
-        const data = (await response.json()) as HealthResponse;
-        setHealth(data.services);
-        setStatus(
-          data.services.every((service) => service.status === "ok")
-            ? "live"
-            : "offline",
-        );
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setHealth([]);
-          setStatus("offline");
-        }
+        const response = await fetch(`${gatewayUrl}/healthz/services`);
+        const data = (await response.json()) as { services: ServiceHealth[] };
+        setServices(data.services);
+        setHealthStatus(data.services.every((service) => service.status === "ok") ? "live" : "offline");
+      } catch {
+        setHealthStatus("offline");
       }
     }
-
     void checkGateway();
     const interval = window.setInterval(checkGateway, 5000);
-
-    return () => {
-      controller.abort();
-      window.clearInterval(interval);
-    };
+    return () => window.clearInterval(interval);
   }, []);
 
-  async function callApi(preview: ApiPreview) {
-    setApiResult(`Calling ${preview.method} ${preview.path}...`);
+  useEffect(() => { if (token) void loadMe(token); }, [token]);
+  useEffect(() => { if (user) void loadSets(); }, [user]);
 
-    try {
-      const response = await fetch(`${gatewayUrl}${preview.path}`, {
-        method: preview.method,
-      });
-      const body = await response.json();
-      setApiResult(
-        JSON.stringify(
-          {
-            status: response.status,
-            body,
-          },
-          null,
-          2,
-        ),
-      );
-    } catch (error) {
-      setApiResult(
-        JSON.stringify(
-          {
-            status: "offline",
-            error: error instanceof Error ? error.message : "Unknown error",
-          },
-          null,
-          2,
-        ),
-      );
-    }
+  async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await fetch(`${gatewayUrl}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init.headers },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error ?? `Request failed with ${response.status}`);
+    return body as T;
   }
 
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+  async function loadMe(sessionToken: string) {
+    try {
+      const response = await fetch(`${gatewayUrl}/v1/auth/me`, { headers: { Authorization: `Bearer ${sessionToken}` } });
+      const body = await response.json();
+      if (body.authenticated) { setUser(body.user); return; }
+      logoutLocal();
+    } catch { logoutLocal(); }
+  }
+
+  async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (authMode === "register") {
-      await handleRegister();
-      return;
-    }
-
-    setLoginMessage("Checking auth service through gateway...");
-
+    setLoading(true);
     try {
-      const response = await fetch(`${gatewayUrl}/v1/auth/me`);
-      const body = await response.json();
-      setLoginMessage(
-        body.authenticated
-          ? `Signed in as ${body.user?.email ?? email}`
-          : "Auth service is reachable. Real login API will be added next.",
-      );
-    } catch (error) {
-      setLoginMessage(
-        error instanceof Error
-          ? `Cannot reach auth service: ${error.message}`
-          : "Cannot reach auth service.",
-      );
-    }
+      const body = authMode === "login" ? { email, password } : { name, email, password };
+      const response = await api<AuthResponse>(authMode === "login" ? "/v1/auth/login" : "/v1/auth/register", { method: "POST", body: JSON.stringify(body) });
+      localStorage.setItem(tokenKey, response.token);
+      setToken(response.token);
+      setUser(response.user);
+      setMessage(`Da dang nhap: ${response.user.email}`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Auth failed."); }
+    finally { setLoading(false); }
   }
 
-  async function handleRegister() {
-    setLoginMessage("Creating account through auth service...");
+  async function logout() { if (token) await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined); logoutLocal(); }
+  function logoutLocal() { localStorage.removeItem(tokenKey); setToken(""); setUser(null); setSelectedSet(null); setStudyMode("dashboard"); }
 
-    try {
-      const response = await fetch(`${gatewayUrl}/v1/auth/register`, {
-        body: JSON.stringify({ name, email, password }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
-      const body = await response.json();
-
-      if (!response.ok) {
-        setLoginMessage(body.error ?? "Registration failed.");
-        return;
-      }
-
-      setLoginMessage(`Registered ${body.user.email}. User id: ${body.user.id}`);
-      setApiResult(JSON.stringify({ status: response.status, body }, null, 2));
-    } catch (error) {
-      setLoginMessage(
-        error instanceof Error
-          ? `Cannot reach auth service: ${error.message}`
-          : "Cannot reach auth service.",
-      );
-    }
+  async function loadSets() {
+    setLoading(true);
+    try { setSets(await api<StudySet[]>("/v1/study-sets")); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Khong tai duoc study sets."); }
+    finally { setLoading(false); }
   }
 
-  return (
-    <main className="login-shell">
-      <section className="login-hero">
-        <p className="eyebrow">HQuizlet Platform</p>
-        <h1>Study faster, ship smarter.</h1>
-        <p>
-          A new separated frontend for the Go and Rust microservices platform.
-          Login UI is ready, and the auth service can be wired behind it next.
-        </p>
+  async function openSet(id: number) {
+    const response = await api<StudySet>(`/v1/study-sets/${id}`);
+    setSelectedSet(response); setTitle(response.title); setDescription(response.description); setCardIndex(0); setShowBack(false); setStudyMode("dashboard");
+  }
 
-        <div className="service-strip">
-          <strong>
-            {liveServices} / {health.length || 4}
-          </strong>
-          <span>backend services live</span>
-          <span className={`badge badge--${status}`}>{statusLabel(status)}</span>
-        </div>
-      </section>
+  async function saveSet(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = JSON.stringify({ title, description });
+    const saved = selectedSet
+      ? await api<StudySet>(`/v1/study-sets/${selectedSet.id}`, { method: "PUT", body: payload })
+      : await api<StudySet>("/v1/study-sets", { method: "POST", body: payload });
+    setSelectedSet(saved); setTitle(saved.title); setDescription(saved.description); await loadSets(); await openSet(saved.id);
+  }
 
-      <section className="login-card">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Welcome back</p>
-            <h2>{authMode === "login" ? "Dang nhap" : "Dang ky"}</h2>
-          </div>
-          <span className={`status-dot status-dot--${status}`} />
-        </div>
+  async function deleteSet(id: number) { await api(`/v1/study-sets/${id}`, { method: "DELETE" }); setSelectedSet(null); setTitle(""); setDescription(""); await loadSets(); }
+  async function saveCard(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); if (!selectedSet) return; await api(`/v1/study-sets/${selectedSet.id}/flashcards`, { method: "POST", body: JSON.stringify({ term, definition }) }); setTerm(""); setDefinition(""); await openSet(selectedSet.id); }
+  async function deleteCard(card: Flashcard) { await api(`/v1/flashcards/${card.id}`, { method: "DELETE" }); if (selectedSet) await openSet(selectedSet.id); }
+  async function toggleStar(card: Flashcard) { await api(`/v1/flashcards/${card.id}/star`, { method: "POST" }); if (selectedSet) await openSet(selectedSet.id); }
+  function nextCard(step: number) { if (!cards.length) return; setCardIndex((current) => (current + step + cards.length) % cards.length); setShowBack(false); setAnswer(""); setLastResult(""); }
+  function checkAnswer() { if (!activeCard) return; const ok = answer.trim().toLowerCase() === activeCard.definition.trim().toLowerCase(); setLastResult(ok ? "Dung roi." : `Chua dung. Dap an: ${activeCard.definition}`); }
 
-        <div className="auth-tabs" role="tablist" aria-label="Auth mode">
-          <button
-            className={authMode === "login" ? "auth-tab auth-tab--active" : "auth-tab"}
-            onClick={() => setAuthMode("login")}
-            type="button"
-          >
-            Dang nhap
-          </button>
-          <button
-            className={authMode === "register" ? "auth-tab auth-tab--active" : "auth-tab"}
-            onClick={() => setAuthMode("register")}
-            type="button"
-          >
-            Dang ky
-          </button>
-        </div>
+  if (!user) return <main className="auth-shell"><section className="auth-hero"><p className="eyebrow">HQuizlet Platform</p><h1>Hoc bang flashcard, backend Go, du lieu PostgreSQL.</h1><p>Dang nhap hoac dang ky de tao study set, them flashcard va thu Flashcards, Learn, Test, Match.</p><div className="service-strip"><strong>{liveCount} / {services.length || 4}</strong><span>services live</span><span className={`badge badge--${healthStatus}`}>{healthStatus}</span></div></section><section className="panel auth-card"><div className="tabs"><button className={authMode === "login" ? "tab active" : "tab"} onClick={() => setAuthMode("login")} type="button">Dang nhap</button><button className={authMode === "register" ? "tab active" : "tab"} onClick={() => setAuthMode("register")} type="button">Dang ky</button></div><form className="stack" onSubmit={submitAuth}>{authMode === "register" ? <label>Ten<input value={name} onChange={(event) => setName(event.target.value)} /></label> : null}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Mat khau<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="primary-button" disabled={loading} type="submit">{authMode === "login" ? "Dang nhap" : "Tao tai khoan"}</button></form><p className="message">{message}</p></section></main>;
 
-        <form className="login-form" onSubmit={handleLogin}>
-          {authMode === "register" ? (
-            <label>
-              Name
-              <input
-                autoComplete="name"
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Your name"
-                type="text"
-                value={name}
-              />
-            </label>
-          ) : null}
-
-          <label>
-            Email
-            <input
-              autoComplete="email"
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              type="email"
-              value={email}
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
-              type="password"
-              value={password}
-            />
-          </label>
-
-          <button className="primary-button" type="submit">
-            {authMode === "login" ? "Dang nhap" : "Tao tai khoan"}
-          </button>
-        </form>
-
-        <p className="login-message">{loginMessage}</p>
-
-        <div className="mini-dashboard">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Dev tools</p>
-              <h2>Gateway routes</h2>
-            </div>
-            <a href={`${gatewayUrl}/healthz/services`} target="_blank">
-              Health JSON
-            </a>
-          </div>
-
-          <div className="action-list">
-            {apiPreviews.map((preview) => (
-              <button key={preview.path} onClick={() => void callApi(preview)}>
-                <span>{preview.label}</span>
-                <code>
-                  {preview.method} {preview.path}
-                </code>
-              </button>
-            ))}
-          </div>
-
-          <pre className="response-box">{apiResult}</pre>
-        </div>
-      </section>
-    </main>
-  );
+  return <main className="app-shell"><header className="topbar"><div><p className="eyebrow">Dashboard</p><h1>HQuizlet</h1></div><div className="user-menu"><span>{user.name}</span><button onClick={() => void logout()}>Logout</button></div></header><section className="summary-grid"><Metric label="Study sets" value={sets.length.toString()} /><Metric label="Selected cards" value={cards.length.toString()} /><Metric label="Backend" value={healthStatus} /></section><section className="workspace-grid"><aside className="panel"><div className="panel-heading"><div><p className="eyebrow">Library</p><h2>Study sets</h2></div><button onClick={() => void loadSets()}>Reload</button></div><div className="set-list">{sets.length === 0 ? <p className="empty">Chua co bo the nao.</p> : null}{sets.map((set) => <button className={selectedSet?.id === set.id ? "set-row active" : "set-row"} key={set.id} onClick={() => void openSet(set.id)}><strong>{set.title}</strong><span>{set.description || "No description"}</span></button>)}</div></aside><section className="panel"><div className="panel-heading"><div><p className="eyebrow">Editor</p><h2>{selectedSet ? "Sua bo the" : "Tao bo the"}</h2></div>{selectedSet ? <button className="danger" onClick={() => void deleteSet(selectedSet.id)}>Xoa set</button> : null}</div><form className="stack" onSubmit={saveSet}><label>Tieu de<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Mo ta<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label><button className="primary-button" type="submit">Luu study set</button></form>{selectedSet ? <><hr /><form className="card-form" onSubmit={saveCard}><input placeholder="Term" value={term} onChange={(event) => setTerm(event.target.value)} /><input placeholder="Definition" value={definition} onChange={(event) => setDefinition(event.target.value)} /><button type="submit">Them the</button></form><div className="card-list">{cards.length === 0 ? <p className="empty">Them flashcard dau tien de bat dau hoc.</p> : null}{cards.map((card) => <article className="mini-card" key={card.id}><div><strong>{card.term}</strong><span>{card.definition}</span></div><button onClick={() => void toggleStar(card)}>{card.starred ? "Starred" : "Star"}</button><button className="danger" onClick={() => void deleteCard(card)}>Xoa</button></article>)}</div></> : null}</section></section>{selectedSet ? <section className="panel study-panel"><div className="mode-tabs">{(["dashboard", "flashcards", "learn", "test", "match"] as StudyMode[]).map((mode) => <button className={studyMode === mode ? "tab active" : "tab"} key={mode} onClick={() => setStudyMode(mode)}>{mode}</button>)}</div>{studyMode === "dashboard" ? <p className="message">Chon mode de hoc bo "{selectedSet.title}". Du lieu dang luu trong PostgreSQL.</p> : null}{studyMode === "flashcards" && activeCard ? <div className="study-card" onClick={() => setShowBack((value) => !value)}><p>{showBack ? activeCard.definition : activeCard.term}</p><span>Click de lat the</span><div className="pager"><button onClick={(event) => { event.stopPropagation(); nextCard(-1); }}>Prev</button><strong>{cardIndex + 1} / {cards.length}</strong><button onClick={(event) => { event.stopPropagation(); nextCard(1); }}>Next</button></div></div> : null}{studyMode === "learn" && activeCard ? <div className="learn-box"><h2>{activeCard.term}</h2><input placeholder="Nhap definition" value={answer} onChange={(event) => setAnswer(event.target.value)} /><button onClick={checkAnswer}>Kiem tra</button><button onClick={() => nextCard(1)}>Cau tiep</button><p>{lastResult}</p></div> : null}{studyMode === "test" ? <div className="test-list">{cards.map((card, index) => <label key={card.id}>{index + 1}. {card.term}<input placeholder="Definition" /></label>)}</div> : null}{studyMode === "match" ? <div className="match-grid">{cards.slice(0, 6).map((card) => <div className="match-pair" key={card.id}><strong>{card.term}</strong><span>{card.definition}</span></div>)}</div> : null}</section> : null}<p className="message">{message}</p></main>;
 }
 
-function statusLabel(status: HealthStatus) {
-  if (status === "checking") return "checking...";
-  if (status === "live") return "live";
-  return "offline";
-}
+function Metric({ label, value }: { label: string; value: string }) { return <div className="metric-card"><span>{label}</span><strong>{value}</strong></div>; }
 
-function toHealthStatus(status: string): HealthStatus {
-  return status === "ok" ? "live" : "offline";
-}
-
-createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

@@ -25,10 +25,13 @@ func main() {
 	mux.HandleFunc("GET /healthz/services", servicesHealth)
 	mux.HandleFunc("/v1/auth/", reverseProxy(env("AUTH_SERVICE_URL", "http://localhost:8081")))
 	mux.HandleFunc("/v1/study-sets", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
+	mux.HandleFunc("/v1/study-sets/", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
+	mux.HandleFunc("/v1/flashcards/", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
 	mux.HandleFunc("/v1/live-sessions", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
+	mux.HandleFunc("/v1/live-sessions/", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
 
 	log.Printf("gateway listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, cors(mux)); err != nil {
+	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -49,9 +52,7 @@ func servicesHealth(w http.ResponseWriter, r *http.Request) {
 		services[i].Status = checkHealth(r.Context(), services[i].URL)
 	}
 
-	writeJSON(w, http.StatusOK, map[string][]serviceHealth{
-		"services": services,
-	})
+	writeJSON(w, http.StatusOK, map[string][]serviceHealth{"services": services})
 }
 
 func checkHealth(ctx context.Context, url string) string {
@@ -72,7 +73,6 @@ func checkHealth(ctx context.Context, url string) string {
 	if resp.StatusCode != http.StatusOK {
 		return "offline"
 	}
-
 	return "ok"
 }
 
@@ -83,8 +83,8 @@ func cors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -95,19 +95,34 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
+func requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = time.Now().UTC().Format("20060102150405.000000000")
+		}
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start).Round(time.Millisecond))
+	})
+}
+
 func health(service string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{
-			"service": service,
-			"status":  "ok",
-		})
+		writeJSON(w, http.StatusOK, map[string]string{"service": service, "status": "ok"})
 	}
 }
 
 func reverseProxy(target string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		targetURL := strings.TrimRight(target, "/") + r.URL.RequestURI()
-
 		req, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid upstream request"})
