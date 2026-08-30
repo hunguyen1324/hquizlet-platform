@@ -1,0 +1,5 @@
+apps/web/node_modules
+apps/web/dist
+**/.git
+**/.DS_Store
+**/tmp
