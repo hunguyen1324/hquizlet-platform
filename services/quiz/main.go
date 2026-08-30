@@ -5,20 +5,18 @@ import (
 	"log"
 	"net/http"
 	"os"
-
-	"github.com/go-chi/chi/v5"
 )
 
 func main() {
 	port := env("PORT", "8083")
-	r := chi.NewRouter()
-	r.Get("/healthz", health("quiz"))
-	r.Post("/v1/live-sessions", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", health("quiz"))
+	mux.HandleFunc("POST /v1/live-sessions", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
 	})
 
 	log.Printf("quiz service listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -41,4 +39,3 @@ func env(key, fallback string) string {
 	}
 	return fallback
 }
-
