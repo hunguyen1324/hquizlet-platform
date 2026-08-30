@@ -26,8 +26,12 @@ services:
         SERVICE: auth
     ports:
       - "8081:8081"
+    environment:
+      DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
     volumes:
       - ../../services/auth:/src/services/auth
+    depends_on:
+      - postgres
 
   study:
     build:
