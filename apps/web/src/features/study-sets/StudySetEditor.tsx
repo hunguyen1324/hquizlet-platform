@@ -1,8 +1,9 @@
-// StudySetEditor - Dev 3 (FE-CORE-06: Create/Edit study set page)
-// Supports create and edit mode, multiple card term/definition inputs.
+// StudySetEditor - Dev 3 (FE-CORE-06)
+// Gọi API thật POST/PUT /v1/study-sets và flashcards qua gateway.
 
 import React, { useState } from "react";
-import type { StudySet, DraftCard } from "../../types";
+import type { StudySet, DraftCard, Flashcard } from "../../types";
+import { useAuth, apiFetch } from "../auth/AuthContext";
 
 type Props = {
   existingSet?: StudySet;
@@ -24,6 +25,7 @@ function toDraftCards(cards: StudySet["flashcards"]): DraftCard[] {
 }
 
 export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
+  const { token } = useAuth();
   const isEditing = Boolean(existingSet);
   const [title, setTitle] = useState(existingSet?.title ?? "");
   const [description, setDescription] = useState(existingSet?.description ?? "");
@@ -35,9 +37,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
     setDraftCards((prev) => prev.map((c) => c.key === key ? { ...c, [field]: value } : c));
   }
 
-  function addCard() {
-    setDraftCards((prev) => [...prev, newDraftCard()]);
-  }
+  function addCard() { setDraftCards((prev) => [...prev, newDraftCard()]); }
 
   function removeCard(key: string) {
     setDraftCards((prev) => prev.length === 1 ? prev : prev.filter((c) => c.key !== key));
@@ -60,21 +60,35 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
     setLoading(true);
     try {
-      // TODO (FE-CORE-07): swap to real API when Dev 2 ready
-      // const saved = await apiClient.post/put("/v1/study-sets", ...)
-      const mockSaved: StudySet = {
-        id: existingSet?.id ?? Date.now(),
-        title: title.trim(),
-        description: description.trim(),
-        flashcards: cleanCards.map((c, i) => ({
-          id: c.id ?? Date.now() + i,
-          studySetId: existingSet?.id ?? 0,
-          term: c.term,
-          definition: c.definition,
-          starred: c.starred ?? false,
-        })),
-      };
-      onSave(mockSaved);
+      // Create or update study set
+      const payload = JSON.stringify({ title: title.trim(), description: description.trim() });
+      const saved = existingSet
+        ? await apiFetch<StudySet>(`/v1/study-sets/${existingSet.id}`, token, { method: "PUT", body: payload })
+        : await apiFetch<StudySet>("/v1/study-sets", token, { method: "POST", body: payload });
+
+      // Sync flashcards: update existing, create new, delete removed
+      const existingIds = new Set((existingSet?.flashcards ?? []).map((c) => c.id));
+      for (const card of cleanCards) {
+        if (card.id) {
+          existingIds.delete(card.id);
+          await apiFetch(`/v1/flashcards/${card.id}`, token, {
+            method: "PUT",
+            body: JSON.stringify({ term: card.term, definition: card.definition }),
+          });
+        } else {
+          await apiFetch(`/v1/study-sets/${saved.id}/flashcards`, token, {
+            method: "POST",
+            body: JSON.stringify({ term: card.term, definition: card.definition }),
+          });
+        }
+      }
+      for (const id of existingIds) {
+        await apiFetch(`/v1/flashcards/${id}`, token, { method: "DELETE" });
+      }
+
+      // Fetch updated set with flashcards
+      const updated = await apiFetch<StudySet>(`/v1/study-sets/${saved.id}`, token);
+      onSave(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không lưu được học phần.");
     } finally {
@@ -100,20 +114,11 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
       <section className="create-meta">
         <label>
           Tiêu đề
-          <input
-            autoFocus
-            placeholder="Ví dụ: English Vocabulary Unit 1"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <input autoFocus placeholder="Ví dụ: English Vocabulary Unit 1" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
         <label>
           Mô tả
-          <textarea
-            placeholder="Mô tả ngắn về nội dung bộ thẻ"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <textarea placeholder="Mô tả ngắn về nội dung bộ thẻ" value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
       </section>
 
@@ -121,10 +126,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
       <section className="cards-editor">
         <div className="cards-editor-heading">
-          <div>
-            <p className="eyebrow">Cards</p>
-            <h2>Thuật ngữ và định nghĩa</h2>
-          </div>
+          <div><p className="eyebrow">Cards</p><h2>Thuật ngữ và định nghĩa</h2></div>
           <button className="secondary-button" type="button" onClick={addCard}>+ Thêm thẻ</button>
         </div>
 
@@ -133,34 +135,17 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             <div className="draft-index">{index + 1}</div>
             <label>
               Thuật ngữ
-              <input
-                placeholder="apple"
-                value={card.term}
-                onChange={(e) => updateCard(card.key, "term", e.target.value)}
-              />
+              <input placeholder="apple" value={card.term} onChange={(e) => updateCard(card.key, "term", e.target.value)} />
             </label>
             <label>
               Định nghĩa
-              <input
-                placeholder="quả táo"
-                value={card.definition}
-                onChange={(e) => updateCard(card.key, "definition", e.target.value)}
-              />
+              <input placeholder="quả táo" value={card.definition} onChange={(e) => updateCard(card.key, "definition", e.target.value)} />
             </label>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => removeCard(card.key)}
-              aria-label="Xóa thẻ"
-            >
-              ×
-            </button>
+            <button className="icon-button" type="button" onClick={() => removeCard(card.key)} aria-label="Xóa thẻ">×</button>
           </article>
         ))}
 
-        <button className="add-row" type="button" onClick={addCard}>
-          + Thêm một thẻ nữa
-        </button>
+        <button className="add-row" type="button" onClick={addCard}>+ Thêm một thẻ nữa</button>
       </section>
     </form>
   );

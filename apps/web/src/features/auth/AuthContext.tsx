@@ -1,11 +1,11 @@
-// Auth context - Dev 3 (FE-CORE-04: Protected layout)
-// Uses mock data until Dev 1 backend is ready (FE-CORE-07)
+// AuthContext - Dev 3 (FE-CORE-03, FE-CORE-04)
+// Gọi gateway API thật. Mock đã bị xóa — đây là fix regression từ commit trước.
 
-import React, { createContext, useContext, useState, useCallback } from "react";
-import type { User } from "../../types";
-import { mockLogin, mockRegister } from "../../lib/mock/mockData";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import type { User, AuthResponse } from "../../types";
 
 const TOKEN_KEY = "hquizlet.sessionToken";
+const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
 type AuthContextValue = {
   user: User | null;
@@ -19,19 +19,48 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+async function apiFetch<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${gatewayUrl}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init.headers,
+    },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { error?: string }).error ?? `Request failed ${res.status}`);
+  return body as T;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Restore session on mount
+  useEffect(() => {
+    if (!token) return;
+    apiFetch<{ authenticated: boolean; user: User }>("/v1/auth/me", token)
+      .then((res) => { if (res.authenticated) setUser(res.user); else clearSession(); })
+      .catch(() => clearSession());
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function clearSession() {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken("");
+    setUser(null);
+  }
+
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     setError("");
     try {
-      // TODO (FE-CORE-07): swap to real API when Dev 1 ready
-      // const res = await apiClient.post<AuthResponse>("/v1/auth/login", { email, password });
-      const res = mockLogin(email, password);
+      const res = await apiFetch<AuthResponse>("/v1/auth/login", "", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
       localStorage.setItem(TOKEN_KEY, res.token);
       setToken(res.token);
       setUser(res.user);
@@ -46,8 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError("");
     try {
-      // TODO (FE-CORE-07): swap to real API when Dev 1 ready
-      const res = mockRegister(name, email, password);
+      const res = await apiFetch<AuthResponse>("/v1/auth/register", "", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password }),
+      });
       localStorage.setItem(TOKEN_KEY, res.token);
       setToken(res.token);
       setUser(res.user);
@@ -58,12 +89,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    // TODO (FE-CORE-07): call /v1/auth/logout when Dev 1 ready
-    localStorage.removeItem(TOKEN_KEY);
-    setToken("");
-    setUser(null);
-  }, []);
+  const logout = useCallback(async () => {
+    try {
+      await apiFetch("/v1/auth/logout", token, { method: "POST" });
+    } catch {
+      // best-effort
+    } finally {
+      clearSession();
+    }
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ user, token, loading, error, login, register, logout }}>
@@ -77,3 +111,6 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
 }
+
+// Export apiFetch cho các feature khác dùng (Dashboard, StudySetEditor)
+export { apiFetch };
