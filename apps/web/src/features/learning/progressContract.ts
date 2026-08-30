@@ -68,7 +68,7 @@ export async function saveProgress(
   //   method: "POST",
   //   body: JSON.stringify(data),
   // });
-  if (process.env.NODE_ENV === "development") {
+  if (import.meta.env.DEV) {
     console.debug("[Dev4 Progress Draft] Would save:", data);
   }
 }
