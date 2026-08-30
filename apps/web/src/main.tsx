@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import "./login.css";
+import "./register.css";
 
 type HealthStatus = "checking" | "live" | "offline";
 
@@ -21,6 +22,8 @@ type ApiPreview = {
   path: string;
 };
 
+type AuthMode = "login" | "register";
+
 const gatewayUrl =
   import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ??
   "http://localhost:8080";
@@ -34,10 +37,12 @@ const apiPreviews: ApiPreview[] = [
 function App() {
   const [status, setStatus] = useState<HealthStatus>("checking");
   const [health, setHealth] = useState<ServiceHealth[]>([]);
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [name, setName] = useState("Demo User");
   const [email, setEmail] = useState("demo@hquizlet.local");
   const [password, setPassword] = useState("");
   const [loginMessage, setLoginMessage] = useState(
-    "Auth endpoint is ready for wiring. This form is frontend-first for now.",
+    "Create a demo account or check the auth service through gateway.",
   );
   const [apiResult, setApiResult] = useState(
     "Select an API call to inspect the gateway response.",
@@ -117,6 +122,12 @@ function App() {
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (authMode === "register") {
+      await handleRegister();
+      return;
+    }
+
     setLoginMessage("Checking auth service through gateway...");
 
     try {
@@ -127,6 +138,35 @@ function App() {
           ? `Signed in as ${body.user?.email ?? email}`
           : "Auth service is reachable. Real login API will be added next.",
       );
+    } catch (error) {
+      setLoginMessage(
+        error instanceof Error
+          ? `Cannot reach auth service: ${error.message}`
+          : "Cannot reach auth service.",
+      );
+    }
+  }
+
+  async function handleRegister() {
+    setLoginMessage("Creating account through auth service...");
+
+    try {
+      const response = await fetch(`${gatewayUrl}/v1/auth/register`, {
+        body: JSON.stringify({ name, email, password }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const body = await response.json();
+
+      if (!response.ok) {
+        setLoginMessage(body.error ?? "Registration failed.");
+        return;
+      }
+
+      setLoginMessage(`Registered ${body.user.email}. User id: ${body.user.id}`);
+      setApiResult(JSON.stringify({ status: response.status, body }, null, 2));
     } catch (error) {
       setLoginMessage(
         error instanceof Error
@@ -159,12 +199,42 @@ function App() {
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Welcome back</p>
-            <h2>Dang nhap</h2>
+            <h2>{authMode === "login" ? "Dang nhap" : "Dang ky"}</h2>
           </div>
           <span className={`status-dot status-dot--${status}`} />
         </div>
 
+        <div className="auth-tabs" role="tablist" aria-label="Auth mode">
+          <button
+            className={authMode === "login" ? "auth-tab auth-tab--active" : "auth-tab"}
+            onClick={() => setAuthMode("login")}
+            type="button"
+          >
+            Dang nhap
+          </button>
+          <button
+            className={authMode === "register" ? "auth-tab auth-tab--active" : "auth-tab"}
+            onClick={() => setAuthMode("register")}
+            type="button"
+          >
+            Dang ky
+          </button>
+        </div>
+
         <form className="login-form" onSubmit={handleLogin}>
+          {authMode === "register" ? (
+            <label>
+              Name
+              <input
+                autoComplete="name"
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Your name"
+                type="text"
+                value={name}
+              />
+            </label>
+          ) : null}
+
           <label>
             Email
             <input
@@ -188,7 +258,7 @@ function App() {
           </label>
 
           <button className="primary-button" type="submit">
-            Dang nhap
+            {authMode === "login" ? "Dang nhap" : "Tao tai khoan"}
           </button>
         </form>
 
