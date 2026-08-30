@@ -7,7 +7,7 @@ COPY services/${SERVICE} ./services/${SERVICE}
 WORKDIR /src/services/${SERVICE}
 RUN go mod tidy
 
-RUN go build -o /out/service .
+RUN go build -o /out/service ./cmd/server
 
 FROM alpine:3.20
 
