@@ -1,4 +1,10 @@
+# HQuizlet Platform – Docker Compose (Sprint 1)
+# Chạy: docker compose -f infra/docker/docker-compose.yml up --build
+# Dev 5 – [INT-04]
+
 services:
+
+  # ── Gateway ──────────────────────────────────────────
   gateway:
     build:
       context: ../..
@@ -6,18 +12,26 @@ services:
       args:
         SERVICE: gateway
     environment:
-      AUTH_SERVICE_URL: http://auth:8081
+      PORT: "8080"
+      AUTH_SERVICE_URL:  http://auth:8081
       STUDY_SERVICE_URL: http://study:8082
-      QUIZ_SERVICE_URL: http://quiz:8083
+      QUIZ_SERVICE_URL:  http://quiz:8083
     ports:
       - "8080:8080"
-    volumes:
-      - ../../services/gateway:/src/services/gateway
     depends_on:
-      - auth
-      - study
-      - quiz
+      auth:
+        condition: service_healthy
+      study:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
+  # ── Auth service ─────────────────────────────────────
   auth:
     build:
       context: ../..
@@ -27,12 +41,22 @@ services:
     ports:
       - "8081:8081"
     environment:
+      PORT: "8081"
       DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
-    volumes:
-      - ../../services/auth:/src/services/auth
+      SESSION_TTL:  "3600"
+      JWT_SECRET:   "${JWT_SECRET:-dev-secret-change-in-prod}"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
+  # ── Study service ─────────────────────────────────────
   study:
     build:
       context: ../..
@@ -42,12 +66,21 @@ services:
     ports:
       - "8082:8082"
     environment:
+      PORT: "8082"
       DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
-    volumes:
-      - ../../services/study:/src/services/study
+      AUTH_SERVICE_URL: http://auth:8081
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
+  # ── Quiz service ─────────────────────────────────────
   quiz:
     build:
       context: ../..
@@ -56,9 +89,21 @@ services:
         SERVICE: quiz
     ports:
       - "8083:8083"
-    volumes:
-      - ../../services/quiz:/src/services/quiz
+    environment:
+      PORT: "8083"
+      DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
+  # ── Web (React/Vite) ─────────────────────────────────
   web:
     build:
       context: ../..
@@ -71,29 +116,48 @@ services:
       - ../../apps/web:/app
       - web-node-modules:/app/node_modules
     depends_on:
-      - gateway
+      gateway:
+        condition: service_healthy
+    restart: on-failure
 
+  # ── PostgreSQL ────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: hquizlet
-      POSTGRES_USER: hquizlet
+      POSTGRES_DB:       hquizlet
+      POSTGRES_USER:     hquizlet
       POSTGRES_PASSWORD: hquizlet
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hquizlet -d hquizlet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
+  # ── Redis ─────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
 
+  # ── NATS ──────────────────────────────────────────────
   nats:
     image: nats:2-alpine
     ports:
       - "4222:4222"
       - "8222:8222"
+    restart: unless-stopped
 
 volumes:
   postgres-data:
