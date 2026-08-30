@@ -1,4 +1,59 @@
 services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: gateway
+    environment:
+      AUTH_SERVICE_URL: http://auth:8081
+      STUDY_SERVICE_URL: http://study:8082
+      QUIZ_SERVICE_URL: http://quiz:8083
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth
+      - study
+      - quiz
+
+  auth:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: auth
+    ports:
+      - "8081:8081"
+
+  study:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: study
+    ports:
+      - "8082:8082"
+
+  quiz:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: quiz
+    ports:
+      - "8083:8083"
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    environment:
+      VITE_GATEWAY_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      - gateway
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -23,4 +78,3 @@ services:
 
 volumes:
   postgres-data:
-
