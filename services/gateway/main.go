@@ -13,6 +13,7 @@ func main() {
 	port := env("PORT", "8080")
 
 	r := chi.NewRouter()
+	r.Use(cors)
 	r.Get("/healthz", health("gateway"))
 	r.Get("/v1/auth/me", placeholder("auth service not wired yet"))
 	r.Get("/v1/study-sets", placeholder("study service not wired yet"))
@@ -21,6 +22,25 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "http://localhost:5173" || origin == "http://127.0.0.1:5173" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func health(service string) http.HandlerFunc {
@@ -52,4 +72,3 @@ func env(key, fallback string) string {
 	}
 	return fallback
 }
-
