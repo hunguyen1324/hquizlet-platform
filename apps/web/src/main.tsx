@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import "./login.css";
 
 type HealthStatus = "checking" | "live" | "offline";
 
@@ -33,6 +34,11 @@ const apiPreviews: ApiPreview[] = [
 function App() {
   const [status, setStatus] = useState<HealthStatus>("checking");
   const [health, setHealth] = useState<ServiceHealth[]>([]);
+  const [email, setEmail] = useState("demo@hquizlet.local");
+  const [password, setPassword] = useState("");
+  const [loginMessage, setLoginMessage] = useState(
+    "Auth endpoint is ready for wiring. This form is frontend-first for now.",
+  );
   const [apiResult, setApiResult] = useState(
     "Select an API call to inspect the gateway response.",
   );
@@ -109,87 +115,94 @@ function App() {
     }
   }
 
-  return (
-    <main className="app-shell">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Microservices dashboard</p>
-          <h1>HQuizlet Platform</h1>
-          <p className="hero-copy">
-            Frontend React rieng, Go services rieng. Gateway la cua vao duy nhat
-            de UI noi chuyen voi backend.
-          </p>
-        </div>
-        <div className={`status-pill status-pill--${status}`}>
-          <span />
-          {statusLabel(status)}
-        </div>
-      </section>
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginMessage("Checking auth service through gateway...");
 
-      <section className="summary-grid">
-        <article className="metric-card">
-          <span>Services live</span>
+    try {
+      const response = await fetch(`${gatewayUrl}/v1/auth/me`);
+      const body = await response.json();
+      setLoginMessage(
+        body.authenticated
+          ? `Signed in as ${body.user?.email ?? email}`
+          : "Auth service is reachable. Real login API will be added next.",
+      );
+    } catch (error) {
+      setLoginMessage(
+        error instanceof Error
+          ? `Cannot reach auth service: ${error.message}`
+          : "Cannot reach auth service.",
+      );
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-hero">
+        <p className="eyebrow">HQuizlet Platform</p>
+        <h1>Study faster, ship smarter.</h1>
+        <p>
+          A new separated frontend for the Go and Rust microservices platform.
+          Login UI is ready, and the auth service can be wired behind it next.
+        </p>
+
+        <div className="service-strip">
           <strong>
             {liveServices} / {health.length || 4}
           </strong>
-        </article>
-        <article className="metric-card">
-          <span>Gateway</span>
-          <strong>{gatewayUrl}</strong>
-        </article>
-        <article className="metric-card">
-          <span>Health refresh</span>
-          <strong>5s</strong>
-        </article>
+          <span>backend services live</span>
+          <span className={`badge badge--${status}`}>{statusLabel(status)}</span>
+        </div>
       </section>
 
-      <section className="content-grid">
-        <article className="panel">
+      <section className="login-card">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Welcome back</p>
+            <h2>Dang nhap</h2>
+          </div>
+          <span className={`status-dot status-dot--${status}`} />
+        </div>
+
+        <form className="login-form" onSubmit={handleLogin}>
+          <label>
+            Email
+            <input
+              autoComplete="email"
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              type="email"
+              value={email}
+            />
+          </label>
+
+          <label>
+            Password
+            <input
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter your password"
+              type="password"
+              value={password}
+            />
+          </label>
+
+          <button className="primary-button" type="submit">
+            Dang nhap
+          </button>
+        </form>
+
+        <p className="login-message">{loginMessage}</p>
+
+        <div className="mini-dashboard">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Backend status</p>
-              <h2>Service health</h2>
+              <p className="eyebrow">Dev tools</p>
+              <h2>Gateway routes</h2>
             </div>
             <a href={`${gatewayUrl}/healthz/services`} target="_blank">
-              JSON
+              Health JSON
             </a>
-          </div>
-
-          <div className="service-list">
-            {health.length > 0 ? (
-              health.map((service) => (
-                <div className="service-row" key={service.name}>
-                  <div>
-                    <strong>{service.name}</strong>
-                    <span>{service.url}</span>
-                  </div>
-                  <span
-                    className={`badge badge--${toHealthStatus(service.status)}`}
-                  >
-                    {statusLabel(toHealthStatus(service.status))}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="service-row">
-                <div>
-                  <strong>gateway</strong>
-                  <span>{gatewayUrl}/healthz/services</span>
-                </div>
-                <span className={`badge badge--${status}`}>
-                  {statusLabel(status)}
-                </span>
-              </div>
-            )}
-          </div>
-        </article>
-
-        <article className="panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Gateway API</p>
-              <h2>Try routes</h2>
-            </div>
           </div>
 
           <div className="action-list">
@@ -204,7 +217,7 @@ function App() {
           </div>
 
           <pre className="response-box">{apiResult}</pre>
-        </article>
+        </div>
       </section>
     </main>
   );
