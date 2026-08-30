@@ -9,6 +9,8 @@ WORKDIR /src/services/${SERVICE}
 # Copy chỉ service cần build – mỗi service có go.mod riêng, không cần workspace
 COPY services/${SERVICE} .
 
+# Ensure service modules have checksums for imports introduced by each dev branch.
+RUN go mod tidy
 RUN go mod download
 RUN go mod verify
 
