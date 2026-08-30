@@ -27,7 +27,7 @@ const gatewayUrl =
 
 const apiPreviews: ApiPreview[] = [
   { label: "Current user", method: "GET", path: "/v1/auth/me" },
-  { label: "Study sets", method: "GET", path: "/v1/study-sets" },
+  { label: "Study sets from PostgreSQL", method: "GET", path: "/v1/study-sets" },
   { label: "Create live session", method: "POST", path: "/v1/live-sessions" },
 ];
 
