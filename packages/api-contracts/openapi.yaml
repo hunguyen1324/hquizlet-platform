@@ -1,0 +1,44 @@
+openapi: 3.1.0
+info:
+  title: HQuizlet Platform API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Gateway health check
+      responses:
+        "200":
+          description: Service is healthy
+  /v1/auth/me:
+    get:
+      summary: Return current authenticated user
+      responses:
+        "200":
+          description: Current user or anonymous state
+  /v1/study-sets:
+    get:
+      summary: List visible study sets
+      responses:
+        "200":
+          description: Study set list
+  /v1/live-sessions:
+    post:
+      summary: Create a live quiz session
+      responses:
+        "201":
+          description: Live session created
+  /v1/payments/orders:
+    post:
+      summary: Create payment order
+      responses:
+        "201":
+          description: Payment order created
+  /v1/files/presign-upload:
+    post:
+      summary: Create a signed upload URL
+      responses:
+        "201":
+          description: Upload URL created
+
