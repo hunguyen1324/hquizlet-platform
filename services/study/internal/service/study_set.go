@@ -1,0 +1,95 @@
+// Package service contains business logic for the study service.
+// Handlers should never call repository directly; all logic goes here.
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
+)
+
+// StudySetService orchestrates study-set operations.
+type StudySetService struct {
+	sets  *repository.StudySetRepository
+	cards *repository.FlashcardRepository
+}
+
+// NewStudySetService wires the service with its repositories.
+func NewStudySetService(sets *repository.StudySetRepository, cards *repository.FlashcardRepository) *StudySetService {
+	return &StudySetService{sets: sets, cards: cards}
+}
+
+// List returns all study sets for a user.
+func (s *StudySetService) List(ctx context.Context, userID int64) ([]model.StudySet, error) {
+	if userID == 0 {
+		return s.sets.ListAll(ctx)
+	}
+	return s.sets.List(ctx, userID)
+}
+
+// GetWithCards returns a study set along with its flashcards.
+func (s *StudySetService) GetWithCards(ctx context.Context, id int64) (model.StudySet, error) {
+	set, err := s.sets.Get(ctx, id)
+	if err != nil {
+		return model.StudySet{}, err
+	}
+	cards, err := s.cards.ListByStudySet(ctx, id)
+	if err != nil {
+		return model.StudySet{}, err
+	}
+	set.Flashcards = cards
+	return set, nil
+}
+
+// Create validates input and creates a new study set.
+func (s *StudySetService) Create(ctx context.Context, userID int64, in model.CreateStudySetInput) (model.StudySet, error) {
+	in.Title = strings.TrimSpace(in.Title)
+	in.Description = strings.TrimSpace(in.Description)
+	if in.Title == "" {
+		return model.StudySet{}, errors.New("title is required")
+	}
+	return s.sets.Create(ctx, userID, in)
+}
+
+// Update validates input and updates a study set, checking ownership.
+func (s *StudySetService) Update(ctx context.Context, id, userID int64, in model.UpdateStudySetInput) (model.StudySet, error) {
+	in.Title = strings.TrimSpace(in.Title)
+	in.Description = strings.TrimSpace(in.Description)
+	if in.Title == "" {
+		return model.StudySet{}, errors.New("title is required")
+	}
+	if err := s.checkOwner(ctx, id, userID); err != nil {
+		return model.StudySet{}, err
+	}
+	return s.sets.Update(ctx, id, in)
+}
+
+// Delete removes a study set, checking ownership.
+func (s *StudySetService) Delete(ctx context.Context, id, userID int64) error {
+	if err := s.checkOwner(ctx, id, userID); err != nil {
+		return err
+	}
+	return s.sets.Delete(ctx, id)
+}
+
+// checkOwner returns ErrForbidden if userID does not own the study set.
+func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) error {
+	if userID == 0 {
+		// Auth not yet wired (Sprint 1 fallback); skip ownership check.
+		return nil
+	}
+	ok, err := s.sets.IsOwner(ctx, id, userID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// ErrForbidden is returned when a user tries to modify someone else's resource.
+var ErrForbidden = errors.New("forbidden")
