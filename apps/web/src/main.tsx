@@ -56,7 +56,7 @@ function App() {
         const data = (await response.json()) as HealthResponse;
         setHealth(data.services);
         setStatus(
-          data.services.some((service) => service.status === "ok")
+          data.services.every((service) => service.status === "ok")
             ? "live"
             : "offline",
         );
