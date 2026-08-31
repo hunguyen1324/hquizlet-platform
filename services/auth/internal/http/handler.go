@@ -175,37 +175,56 @@ func healthHandler(serviceName string, db *sql.DB) http.HandlerFunc {
 }
 
 // --- P2-AUTH-04: standardized error responses ---
+//
+// Canonical error envelope shared across ALL Auth endpoints.
+// Dev2 (Study) and Dev5 (Integration) must adopt the same shape.
+//
+// Normal error:
+//   { "code": "<snake_case_code>", "message": "<human readable>" }
+//
+// Validation error (422 only) — superset of the normal envelope:
+//   { "code": "validation_error", "message": "<reason>", "field": "<field_name>" }
 
-// apiError is the canonical error envelope with code + message.
+// apiError is the canonical error envelope for all Auth error responses.
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// writeError sends a structured JSON error.
+// apiValidationError extends apiError with a field name for 422 responses.
+// It is a strict superset of apiError so clients that only read code/message still work.
+type apiValidationError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Field   string `json:"field"`
+}
+
+// writeError sends a structured JSON error using the canonical envelope.
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, apiError{Code: code, Message: msg})
 }
 
-// writeServiceError maps service-layer errors to correct HTTP status + code. P2-AUTH-04.
+// writeServiceError maps service-layer errors to correct HTTP status + canonical code.
+// P2-AUTH-04: every branch must emit {code, message} — never a bare string or {error}.
 func writeServiceError(w http.ResponseWriter, err error) {
 	var ve *service.ValidationError
 	switch {
 	case errors.As(err, &ve):
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-			"code":    "validation_error",
-			"message": ve.Msg,
-			"field":   ve.Field,
+		writeJSON(w, http.StatusUnprocessableEntity, apiValidationError{
+			Code:    "validation_error",
+			Message: ve.Msg,
+			Field:   ve.Field,
 		})
 	case errors.Is(err, service.ErrEmailTaken):
-		writeError(w, http.StatusConflict, "email_taken", err.Error())
+		writeError(w, http.StatusConflict, "email_taken", "email already registered")
 	case errors.Is(err, service.ErrInvalidCredential):
-		writeError(w, http.StatusUnauthorized, "invalid_credential", err.Error())
+		writeError(w, http.StatusUnauthorized, "invalid_credential", "invalid email or password")
 	case errors.Is(err, service.ErrInvalidSession):
-		writeError(w, http.StatusUnauthorized, "invalid_session", err.Error())
+		writeError(w, http.StatusUnauthorized, "invalid_session", "invalid or expired session")
 	case errors.Is(err, service.ErrForbidden):
-		writeError(w, http.StatusForbidden, "forbidden", err.Error())
+		writeError(w, http.StatusForbidden, "forbidden", "access denied")
 	default:
+		log.Printf("[auth] unexpected error: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
 }
