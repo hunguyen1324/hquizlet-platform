@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,6 +16,14 @@ type serviceHealth struct {
 	Name   string `json:"name"`
 	URL    string `json:"url"`
 	Status string `json:"status"`
+}
+
+type verifiedIdentity struct {
+	Authenticated bool   `json:"authenticated"`
+	UserID        int64  `json:"userId"`
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	Role          string `json:"role"`
 }
 
 func main() {
@@ -26,15 +35,20 @@ func main() {
 	mux.HandleFunc("GET /healthz", health("gateway"))
 	mux.HandleFunc("GET /healthz/services", servicesHealth)
 
-	// Auth service – tất cả route /v1/auth/*
+	// Auth service – public/auth lifecycle routes are verified by Auth itself.
 	mux.HandleFunc("/v1/auth/", reverseProxy(env("AUTH_SERVICE_URL", "http://localhost:8081")))
 
-	// Study service – study-sets và flashcards
-	mux.HandleFunc("/v1/study-sets", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
-	mux.HandleFunc("/v1/study-sets/", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
-	mux.HandleFunc("/v1/flashcards/", reverseProxy(env("STUDY_SERVICE_URL", "http://localhost:8082")))
+	// Study/Folder routes are protected here so Study never trusts client-supplied
+	// identity headers. Auth is the source of truth for the canonical user ID.
+	authURL := env("AUTH_SERVICE_URL", "http://localhost:8081")
+	studyURL := env("STUDY_SERVICE_URL", "http://localhost:8082")
+	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/study-sets/", authenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/flashcards/", authenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/folders", authenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/folders/", authenticatedProxy(authURL, studyURL))
 
-	// Quiz service – live sessions
+	// Quiz service – live sessions remain on their existing contract.
 	mux.HandleFunc("/v1/live-sessions", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
 	mux.HandleFunc("/v1/live-sessions/", reverseProxy(env("QUIZ_SERVICE_URL", "http://localhost:8083")))
 
@@ -84,14 +98,71 @@ func checkHealth(ctx context.Context, url string) string {
 	return "ok"
 }
 
+// authenticatedProxy verifies the bearer token with Auth before forwarding a
+// Study/Folder request. Any client-provided X-User-ID is removed and replaced
+// with the verified identity from Auth.
+func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		identity, status, err := verifyIdentity(r.Context(), authTarget, r.Header.Get("Authorization"))
+		if err != nil {
+			if status == http.StatusUnauthorized {
+				writeJSON(w, status, map[string]string{"code": "unauthorized", "message": "authentication required"})
+				return
+			}
+			writeJSON(w, status, map[string]string{"code": "auth_unavailable", "message": "authentication service unavailable"})
+			return
+		}
+
+		// Never trust identity supplied by the browser/client.
+		r.Header.Del("X-User-ID")
+		r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
+		reverseProxy(serviceTarget)(w, r)
+	}
+}
+
+func verifyIdentity(ctx context.Context, authTarget, authorization string) (verifiedIdentity, int, error) {
+	var identity verifiedIdentity
+	if !strings.HasPrefix(authorization, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer ")) == "" {
+		return identity, http.StatusUnauthorized, context.Canceled
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(authTarget, "/")+"/internal/auth/verify", nil)
+	if err != nil {
+		return identity, http.StatusBadGateway, err
+	}
+	req.Header.Set("Authorization", authorization)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return identity, http.StatusBadGateway, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return identity, http.StatusUnauthorized, context.Canceled
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return identity, http.StatusBadGateway, context.Canceled
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&identity); err != nil {
+		return identity, http.StatusBadGateway, err
+	}
+	if !identity.Authenticated || identity.UserID <= 0 {
+		return identity, http.StatusUnauthorized, context.Canceled
+	}
+	return identity, http.StatusOK, nil
+}
+
 // cors chuẩn hóa cho dev – cho phép localhost:5173 và localhost:3000
 func cors(next http.Handler) http.Handler {
 	allowedOrigins := map[string]bool{
-		"http://localhost:5173":   true,
-		"http://127.0.0.1:5173":  true,
-		"http://localhost:3000":   true,
-		"http://127.0.0.1:3000":  true,
-		"http://web:5173":         true,
+		"http://localhost:5173":  true,
+		"http://127.0.0.1:5173": true,
+		"http://localhost:3000":  true,
+		"http://127.0.0.1:3000": true,
+		"http://web:5173":        true,
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -130,8 +201,7 @@ func logging(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
-		log.Printf("[gateway] %s %s -> %d (%s)",
-			r.Method, r.URL.Path, rw.status, time.Since(start).Round(time.Millisecond))
+		log.Printf("[gateway] %s %s -> %d (%s)", r.Method, r.URL.Path, rw.status, time.Since(start).Round(time.Millisecond))
 	})
 }
 
@@ -160,7 +230,6 @@ func reverseProxy(target string) http.HandlerFunc {
 			return
 		}
 		req.Header = r.Header.Clone()
-		// Ghi upstream info để service biết request từ gateway
 		req.Header.Set("X-Forwarded-For", r.RemoteAddr)
 		req.Header.Set("X-Forwarded-Host", r.Host)
 
