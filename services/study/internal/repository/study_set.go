@@ -46,8 +46,8 @@ func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.St
 	return sets, rows.Err()
 }
 
-// ListAll is intentionally not exposed through the StudySets interface.
-// Study API resources are always user-scoped after authentication.
+// ListAll is retained for repository compatibility but is not used by the service.
+// Authenticated Study API operations must always be user-scoped.
 func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, user_id, title, description, created_at, updated_at
@@ -165,7 +165,7 @@ func (r *StudySetRepository) Get(ctx context.Context, id int64) (model.StudySet,
 }
 
 // GetOwned returns a study set only when it belongs to userID.
-// Ownership is enforced in SQL so callers cannot accidentally fetch another user's set.
+// Ownership is enforced directly in SQL.
 func (r *StudySetRepository) GetOwned(ctx context.Context, id, userID int64) (model.StudySet, error) {
 	var s model.StudySet
 	err := r.db.QueryRowContext(ctx, `
@@ -174,7 +174,7 @@ func (r *StudySetRepository) GetOwned(ctx context.Context, id, userID int64) (mo
 		WHERE id = $1 AND user_id = $2
 	`, id, userID).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return model.StudySet{}, ErrForbidden
+		return model.StudySet{}, ErrNotFound
 	}
 	return s, err
 }
@@ -232,6 +232,3 @@ func (r *StudySetRepository) IsOwner(ctx context.Context, id, userID int64) (boo
 	}
 	return owner == userID, nil
 }
-
-// ErrForbidden is returned when a resource exists but is owned by another user.
-var ErrForbidden = errors.New("forbidden")
