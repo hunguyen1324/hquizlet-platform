@@ -1,328 +1,153 @@
-# Phase 2 – Integration Checklist
-# Dev 5 – [P2-INT-04]
-# Chạy checklist này trước khi merge bất kỳ PR nào vào main trong Phase 2.
+# HQuizlet Platform — Phase 2 Integration Checklist
 
-## 0. Chuẩn bị
+**Owner:** Dev5 — Fullstack/Integration  
+**Purpose:** reproducible gate for Docker, gateway auth propagation, API contract, Study ownership, frontend build, and Phase 2 learning flow.
+
+## 0. Fresh environment
 
 ```bash
-# Clone mới về và không dùng cache cũ
 git pull --rebase origin main
-docker compose -f infra/docker/docker-compose.yml down -v  # xóa volume cũ nếu cần
+docker compose -f infra/docker/docker-compose.yml down -v
 docker compose -f infra/docker/docker-compose.yml up --build -d
-
-# Đợi health OK (chạy lại vài lần nếu cần)
-sleep 20
 curl -s http://localhost:8080/healthz/services | python3 -m json.tool
 ```
 
----
+Required: gateway, auth, and study report `ok`.
 
-## 1. Docker Build Gate
+## 1. Auth gate
 
-```bash
-docker compose -f infra/docker/docker-compose.yml build 2>&1 | tail -30
-```
+Register and login through `http://localhost:8080`.
 
-- [ ] Build **không** lỗi (không có `ERROR` hoặc exit non-zero)
-- [ ] Không có service nào dùng `go mod download` thất bại
-
-```bash
-# Kiểm tra go.sum đã commit
-git status services/auth/go.sum services/study/go.sum services/gateway/go.sum
-```
-
-- [ ] Không file `go.sum` nào bị modified mà chưa commit
-
----
-
-## 2. Health Check Gate
-
-```bash
-curl -s http://localhost:8080/healthz
-```
-- [ ] `{"service":"gateway","status":"ok"}`
-
-```bash
-curl -s http://localhost:8080/healthz/services | python3 -m json.tool
-```
-- [ ] `auth` status = `"ok"`
-- [ ] `study` status = `"ok"`
-- [ ] `quiz` status = `"ok"` (hoặc `"offline"` nếu chưa implement)
-
----
-
-## 3. Auth Flow
-
-### Register
-```bash
-curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Phase2 Tester","email":"p2test@example.com","password":"Test1234!"}' \
-  | python3 -m json.tool
-```
-- [ ] HTTP 201
-- [ ] Trả về `authenticated: true`, `token` không rỗng, `user.id` > 0
-- [ ] `user.name` = "Phase2 Tester", `user.email` = "p2test@example.com"
-
-```bash
-# Thử register lại cùng email → phải 409
-curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Dup","email":"p2test@example.com","password":"Test1234!"}'
-```
-- [ ] HTTP 409
-
-### Login
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/v1/auth/login \
-  -H "Content-Type: application/json" \
+  -H 'Content-Type: application/json' \
   -d '{"email":"p2test@example.com","password":"Test1234!"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-echo "TOKEN=$TOKEN"
-```
-- [ ] TOKEN không rỗng
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
 
-```bash
-# Sai password → 401
-curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"p2test@example.com","password":"WrongPass"}'
-```
-- [ ] HTTP 401
-
-### Me
-```bash
 curl -s http://localhost:8080/v1/auth/me \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
-- [ ] `authenticated: true`
-- [ ] `user.email` = "p2test@example.com"
 
-### Logout
-```bash
-curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8080/v1/auth/logout \
-  -H "Authorization: Bearer $TOKEN"
-```
-- [ ] HTTP 204
+- [ ] register/login/me succeed
+- [ ] invalid token is rejected
+- [ ] refresh rotates the session token
+- [ ] logout invalidates the token
 
-### Me sau logout → phải 401
-```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/v1/auth/me \
-  -H "Authorization: Bearer $TOKEN"
-```
-- [ ] HTTP 401
+## 2. Gateway identity gate — P0
 
-### Re-login để lấy token cho các bước tiếp theo
+Protected Study/Folder requests must pass Auth verification first.
+
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8080/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"p2test@example.com","password":"Test1234!"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+curl -i http://localhost:8080/v1/study-sets
+curl -i http://localhost:8080/v1/folders
 ```
 
----
+- [ ] no token → `401`
+- [ ] invalid token → `401`
+- [ ] valid token → gateway calls `/internal/auth/verify`
+- [ ] client-supplied `X-User-ID` is ignored/overwritten
+- [ ] verified user ID is injected as `X-User-ID`
 
-## 4. Study Set Flow
+## 3. Study set gate
 
-### Tạo study set
 ```bash
 SET_ID=$(curl -s -X POST http://localhost:8080/v1/study-sets \
-  -H "Content-Type: application/json" \
+  -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"IELTS Vocab Phase2","description":"Band 7 words"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-echo "SET_ID=$SET_ID"
-```
-- [ ] HTTP 201
-- [ ] SET_ID là số nguyên > 0
+  -d '{"title":"Phase2 Test","description":"integration"}' \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 
-### List study sets
-```bash
-curl -s http://localhost:8080/v1/study-sets \
+curl -s "http://localhost:8080/v1/study-sets?search=Phase2&sort=updated&page=1&per_page=20" \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-```
-- [ ] HTTP 200
-- [ ] Set vừa tạo có trong danh sách
 
-### Search (P2-STUDY-03)
-```bash
-curl -s "http://localhost:8080/v1/study-sets?q=IELTS" \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-```
-- [ ] Kết quả chỉ chứa set có "IELTS" trong title (nếu backend implement)
-  - **Note**: Nếu backend chưa implement filter, result là toàn bộ sets → ghi rõ "filter not yet implemented" vào PR
-
-### Chi tiết study set
-```bash
 curl -s "http://localhost:8080/v1/study-sets/$SET_ID" \
   -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
-- [ ] HTTP 200, có `flashcards` array
 
-### Update study set
+- [ ] list response is `{items,total,page,perPage,totalPages}`
+- [ ] search uses `search`, not `q`
+- [ ] detail is owner-scoped
+- [ ] User B cannot read/update/delete User A's set
+
+## 4. Flashcard + transactional bulk gate
+
+The backend contract is **POST** with `{cards:[...]}`.
+
 ```bash
-curl -s -X PUT "http://localhost:8080/v1/study-sets/$SET_ID" \
-  -H "Content-Type: application/json" \
+curl -s -X POST "http://localhost:8080/v1/study-sets/$SET_ID/flashcards/bulk" \
+  -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"IELTS Vocab Phase2 – Updated"}' | python3 -m json.tool
-```
-- [ ] HTTP 200, `title` đã đổi
-
----
-
-## 5. Flashcard Flow
-
-### Thêm flashcard
-```bash
-CARD_ID=$(curl -s -X POST "http://localhost:8080/v1/study-sets/$SET_ID/flashcards" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"term":"Ephemeral","definition":"Lasting for a very short time"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-echo "CARD_ID=$CARD_ID"
-```
-- [ ] HTTP 201, CARD_ID > 0
-
-### Bulk save (P2-STUDY-02)
-```bash
-curl -s -X PUT "http://localhost:8080/v1/study-sets/$SET_ID/flashcards/bulk" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d "{\"flashcards\":[{\"id\":$CARD_ID,\"term\":\"Ephemeral\",\"definition\":\"Short-lived\"},{\"term\":\"Ubiquitous\",\"definition\":\"Present everywhere\"}]}" \
+  -d '{"cards":[{"term":"Ephemeral","definition":"Short-lived","position":0},{"term":"Ubiquitous","definition":"Present everywhere","position":1}]}' \
   | python3 -m json.tool
 ```
-- [ ] HTTP 200, trả về danh sách flashcards
-  - **Note**: Nếu endpoint chưa implement → ghi "bulk not yet implemented" vào PR
 
-### Update flashcard
+- [ ] HTTP `200`
+- [ ] response contains `created`, `updated`, `deleted`
+- [ ] cross-study-set card IDs are rejected
+- [ ] the operation is atomic
+- [ ] User B cannot mutate User A's cards
+
+## 5. Folder gate
+
 ```bash
-curl -s -X PUT "http://localhost:8080/v1/flashcards/$CARD_ID" \
-  -H "Content-Type: application/json" \
+curl -s http://localhost:8080/v1/folders \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+curl -s -X POST http://localhost:8080/v1/folders \
+  -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"definition":"Very short-lived"}' | python3 -m json.tool
+  -d '{"name":"Phase2 Folder","description":"integration"}' | python3 -m json.tool
 ```
-- [ ] HTTP 200, `definition` đã đổi
 
-### Star toggle
-```bash
-curl -s -X POST "http://localhost:8080/v1/flashcards/$CARD_ID/star" \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-```
-- [ ] HTTP 200, `starred: true`
+- [ ] `/v1/folders` is routed through gateway
+- [ ] folder field is `name`
+- [ ] CRUD and add/remove study-set routes are protected
+- [ ] ownership is enforced
 
-```bash
-# Toggle lại → false
-curl -s -X POST "http://localhost:8080/v1/flashcards/$CARD_ID/star" \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-```
-- [ ] `starred: false`
-
-### Xóa flashcard
-```bash
-curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8080/v1/flashcards/$CARD_ID" \
-  -H "Authorization: Bearer $TOKEN"
-```
-- [ ] HTTP 204
-
----
-
-## 6. Ownership Guard
-
-```bash
-# Tạo user 2
-TOKEN2=$(curl -s -X POST http://localhost:8080/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Other User","email":"other2@example.com","password":"Test1234!"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-
-# User 2 cố xóa set của user 1 → 403
-curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8080/v1/study-sets/$SET_ID" \
-  -H "Authorization: Bearer $TOKEN2"
-```
-- [ ] HTTP 403
-
-```bash
-# User không có token → 401
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/v1/study-sets
-```
-- [ ] HTTP 401
-
----
-
-## 7. CORS Check
-
-```bash
-curl -s -X OPTIONS http://localhost:8080/v1/auth/login \
-  -H "Origin: http://localhost:5173" \
-  -H "Access-Control-Request-Method: POST" \
-  -v 2>&1 | grep -i "access-control"
-```
-- [ ] `Access-Control-Allow-Origin: http://localhost:5173`
-- [ ] `Access-Control-Allow-Methods` chứa `POST`
-
----
-
-## 8. Frontend Build Gate
+## 6. Frontend contract/build gate
 
 ```bash
 cd apps/web
-npm install
-npm run build 2>&1 | tail -20
+npm ci
+npm run build
 ```
-- [ ] Build pass, không lỗi TypeScript
-- [ ] Không có warning `any` hoặc type error nghiêm trọng
 
----
+- [ ] clean install passes
+- [ ] TypeScript/Vite build passes
+- [ ] API client consumes paginated StudySet response
+- [ ] API client uses `POST /flashcards/bulk` and `{cards}`
+- [ ] API client uses `PATCH /v1/auth/profile`
+- [ ] API client uses folder `name`
 
-## 9. Source Code Sanity Check
+## 7. Backend/Docker gate
 
 ```bash
-# Không còn mock trong flow chính
-git grep "mockLogin\|mockRegister\|MOCK_SETS" apps/web/src/features/ apps/web/src/main.tsx
+go test ./...
+go build ./...
+docker compose -f infra/docker/docker-compose.yml build
+docker compose -f infra/docker/docker-compose.yml up --build
 ```
-- [ ] Không có output (hoặc chỉ trong `lib/mock/`)
+
+- [ ] Auth tests pass
+- [ ] Study tests pass
+- [ ] fresh PostgreSQL migrations pass
+- [ ] no missing `go.sum`
+- [ ] `/healthz/services` reports required services `ok`
+
+## 8. Source sanity
 
 ```bash
-# Không có conflict markers
-git grep "<<<<<<<\|=======\|>>>>>>>" -- "*.ts" "*.tsx" "*.go" "*.yaml"
+git grep '<<<<<<<\|=======\|>>>>>>>' -- '*.go' '*.ts' '*.tsx' '*.yaml'
+git grep 'mockLogin\|mockRegister\|MOCK_SETS' apps/web/src/features apps/web/src/main.tsx
 ```
-- [ ] Không có output
 
-```bash
-# go.sum phải tồn tại và được commit
-ls services/auth/go.sum services/study/go.sum services/gateway/go.sum
-```
-- [ ] Tất cả file tồn tại
+- [ ] no conflict markers
+- [ ] no production mock flow
+- [ ] no hard-coded user identity
+- [ ] no client-supplied identity trusted by gateway
 
----
+## Phase 2 GO criteria
 
-## 10. Phase 2 Folder Gate (nếu Dev 2 đã implement P2-STUDY-04)
+All P0 checks above must pass, plus Docker, fresh migrations, backend tests/build, frontend build, OpenAPI alignment, ownership isolation, and the four learning modes using persisted data.
 
-```bash
-FOLDER_ID=$(curl -s -X POST http://localhost:8080/v1/folders \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"My Folder","description":"Phase 2 test"}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-echo "FOLDER_ID=$FOLDER_ID"
-```
-- [ ] HTTP 201 (hoặc 404 nếu chưa route vào gateway → ghi note)
-
----
-
-## Pass Criteria Phase 2
-
-| Hạng mục | Điều kiện |
-| --- | --- |
-| Docker build | Pass không lỗi |
-| Health | gateway + auth + study = `ok` |
-| Auth | register/login/me/logout qua gateway |
-| Study set | CRUD pass, ownership enforced |
-| Flashcard | add/update/star/delete pass |
-| Frontend | `npm run build` pass |
-| Source | Không còn mock trong flow chính |
-| Contract | OpenAPI v2.0.0 commit |
-
----
-
-_Checklist này do Dev 5 maintain. Mọi endpoint mới phải thêm vào đây trước khi merge._
+**Dev5 rule:** do not mark the phase gate GO based only on static review; record reproducible command output in the final PR.
