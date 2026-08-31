@@ -1,33 +1,172 @@
-// apps/web/src/lib/api/client.ts
-// Dev 5 – P2-INT-02: Typed API client wrapper
-// Tất cả feature gọi API qua đây, không gọi fetch trực tiếp.
+// lib/api/client.ts — Dev 5 [P2-INT-02]
+// Canonical frontend API client. Feature code should call this module instead of fetch directly.
 
-import type {
-  User,
-  AuthResponse,
-  StudySet,
-  Flashcard,
-  DraftCard,
-} from "../../types";
+import type { AuthResponse, StudySet, Flashcard, User, DraftCard } from "../../types";
 
-// ── Re-export thêm types Phase 2 ──────────────────────────────────────────
-export type { User, AuthResponse, StudySet, Flashcard, DraftCard };
+const gatewayUrl =
+  import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+
+export type ApiErrorBody = { code?: string; message?: string; field?: string; error?: string };
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+    public readonly field?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export async function apiFetch<T>(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+  params?: Record<string, string | number | undefined>,
+): Promise<T> {
+  const url = new URL(`${gatewayUrl}${path}`);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
+    }
+  }
+
+  const res = await fetch(url.toString(), {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers as Record<string, string> | undefined),
+    },
+  });
+
+  if (res.status === 204) return undefined as unknown as T;
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      body.message ?? body.error ?? `Request failed ${res.status}`,
+      body.code,
+      body.field,
+    );
+  }
+  return body as T;
+}
+
+export const authApi = {
+  login(email: string, password: string): Promise<AuthResponse> {
+    return apiFetch("/v1/auth/login", "", { method: "POST", body: JSON.stringify({ email, password }) });
+  },
+  register(name: string, email: string, password: string): Promise<AuthResponse> {
+    return apiFetch("/v1/auth/register", "", { method: "POST", body: JSON.stringify({ name, email, password }) });
+  },
+  me(token: string): Promise<AuthResponse> { return apiFetch("/v1/auth/me", token); },
+  logout(token: string): Promise<void> { return apiFetch("/v1/auth/logout", token, { method: "POST" }); },
+  refresh(token: string): Promise<AuthResponse> { return apiFetch("/v1/auth/refresh", token, { method: "POST" }); },
+  updateProfile(token: string, payload: { name?: string; image?: string }): Promise<User> {
+    return apiFetch("/v1/auth/profile", token, { method: "PATCH", body: JSON.stringify(payload) });
+  },
+};
+
+export type CreateStudySetPayload = { title: string; description?: string };
+export type UpdateStudySetPayload = { title?: string; description?: string };
+
+export type StudySetListParams = {
+  search?: string;
+  sort?: "updated" | "created" | "title";
+  page?: number;
+  per_page?: number;
+};
+
+export type StudySetListResult = {
+  items: StudySet[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+};
+
+export const studySetApi = {
+  list(token: string, params?: StudySetListParams): Promise<StudySetListResult> {
+    return apiFetch("/v1/study-sets", token, {}, params);
+  },
+  get(token: string, id: number): Promise<StudySet> { return apiFetch(`/v1/study-sets/${id}`, token); },
+  create(token: string, payload: CreateStudySetPayload): Promise<StudySet> {
+    return apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) });
+  },
+  update(token: string, id: number, payload: UpdateStudySetPayload): Promise<StudySet> {
+    return apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) });
+  },
+  delete(token: string, id: number): Promise<void> {
+    return apiFetch(`/v1/study-sets/${id}`, token, { method: "DELETE" });
+  },
+};
+
+export type CreateFlashcardPayload = { term: string; definition: string };
+export type UpdateFlashcardPayload = { term?: string; definition?: string };
+export type BulkFlashcardItem = {
+  id?: number;
+  term: string;
+  definition: string;
+  position?: number;
+  delete?: boolean;
+};
+export type BulkSaveResult = { created: Flashcard[]; updated: Flashcard[]; deleted: number[] };
+
+export const flashcardApi = {
+  create(token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> {
+    return apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, { method: "POST", body: JSON.stringify(payload) });
+  },
+  add(token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> {
+    return this.create(token, studySetId, payload);
+  },
+  bulkSave(token: string, studySetId: number, cards: BulkFlashcardItem[]): Promise<BulkSaveResult> {
+    return apiFetch(`/v1/study-sets/${studySetId}/flashcards/bulk`, token, {
+      method: "POST", body: JSON.stringify({ cards }),
+    });
+  },
+  update(token: string, id: number, payload: UpdateFlashcardPayload): Promise<Flashcard> {
+    return apiFetch(`/v1/flashcards/${id}`, token, { method: "PUT", body: JSON.stringify(payload) });
+  },
+  delete(token: string, id: number): Promise<void> {
+    return apiFetch(`/v1/flashcards/${id}`, token, { method: "DELETE" });
+  },
+  toggleStar(token: string, id: number): Promise<Flashcard> {
+    return apiFetch(`/v1/flashcards/${id}/star`, token, { method: "POST" });
+  },
+};
 
 export type Folder = {
   id: number;
   userId: number;
-  title: string;
+  name: string;
   description: string;
   createdAt: string;
   updatedAt: string;
 };
+export type FolderDetail = Folder & { studySets: StudySet[] };
 
-export type FolderDetail = Folder & {
-  studySets: StudySet[];
+export const folderApi = {
+  list(token: string): Promise<Folder[]> { return apiFetch("/v1/folders", token); },
+  create(token: string, payload: { name: string; description?: string }): Promise<Folder> {
+    return apiFetch("/v1/folders", token, { method: "POST", body: JSON.stringify(payload) });
+  },
+  get(token: string, id: number): Promise<FolderDetail> { return apiFetch(`/v1/folders/${id}`, token); },
+  update(token: string, id: number, payload: { name?: string; description?: string }): Promise<Folder> {
+    return apiFetch(`/v1/folders/${id}`, token, { method: "PUT", body: JSON.stringify(payload) });
+  },
+  delete(token: string, id: number): Promise<void> { return apiFetch(`/v1/folders/${id}`, token, { method: "DELETE" }); },
+  addStudySet(token: string, folderId: number, studySetId: number): Promise<void> {
+    return apiFetch(`/v1/folders/${folderId}/study-sets`, token, { method: "POST", body: JSON.stringify({ studySetId }) });
+  },
+  removeStudySet(token: string, folderId: number, studySetId: number): Promise<void> {
+    return apiFetch(`/v1/folders/${folderId}/study-sets/${studySetId}`, token, { method: "DELETE" });
+  },
 };
 
 export type LearningMode = "flashcards" | "learn" | "test" | "match";
-
 export type LearningProgress = {
   id: number;
   userId: number;
@@ -39,238 +178,21 @@ export type LearningProgress = {
   createdAt: string;
 };
 
-export type StudySetListParams = {
-  q?: string;
-  sort?: "updatedAt" | "createdAt" | "title";
-  order?: "asc" | "desc";
-};
-
-export type BulkFlashcardItem = {
-  id?: number;
-  term: string;
-  definition: string;
-};
-
-// ── Client factory ────────────────────────────────────────────────────────
-
-const GATEWAY_URL =
-  (import.meta.env?.VITE_GATEWAY_URL as string | undefined)?.replace(/\/$/, "") ??
-  "http://localhost:8080";
-
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
-
-async function request<T>(
-  path: string,
-  token: string,
-  init: RequestInit = {},
-  params?: Record<string, string>,
-): Promise<T> {
-  let url = `${GATEWAY_URL}${path}`;
-  if (params) {
-    const qs = new URLSearchParams(
-      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== "")),
-    ).toString();
-    if (qs) url += `?${qs}`;
-  }
-
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
-
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      (body as { error?: string }).error ?? `Request failed ${res.status}`,
-    );
-  }
-  return body as T;
-}
-
-// ── Auth API ─────────────────────────────────────────────────────────────
-
-export const authApi = {
-  register: (name: string, email: string, password: string) =>
-    request<AuthResponse>("/v1/auth/register", "", {
-      method: "POST",
-      body: JSON.stringify({ name, email, password }),
-    }),
-
-  login: (email: string, password: string) =>
-    request<AuthResponse>("/v1/auth/login", "", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-
-  logout: (token: string) =>
-    request<void>("/v1/auth/logout", token, { method: "POST" }),
-
-  me: (token: string) =>
-    request<AuthResponse>("/v1/auth/me", token),
-
-  refresh: (token: string) =>
-    request<AuthResponse>("/v1/auth/refresh", token, { method: "POST" }),
-
-  updateProfile: (token: string, data: { name?: string; image?: string }) =>
-    request<User>("/v1/auth/profile", token, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-};
-
-// ── Study Set API ─────────────────────────────────────────────────────────
-
-export const studySetApi = {
-  list: (token: string, params?: StudySetListParams) =>
-    request<StudySet[]>("/v1/study-sets", token, {}, params as Record<string, string>),
-
-  create: (token: string, data: { title: string; description?: string }) =>
-    request<StudySet>("/v1/study-sets", token, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  get: (token: string, id: number) =>
-    request<StudySet & { flashcards: Flashcard[] }>(`/v1/study-sets/${id}`, token),
-
-  update: (token: string, id: number, data: { title?: string; description?: string }) =>
-    request<StudySet>(`/v1/study-sets/${id}`, token, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-
-  delete: (token: string, id: number) =>
-    request<void>(`/v1/study-sets/${id}`, token, { method: "DELETE" }),
-};
-
-// ── Flashcard API ─────────────────────────────────────────────────────────
-
-export const flashcardApi = {
-  add: (token: string, studySetId: number, data: { term: string; definition: string }) =>
-    request<Flashcard>(`/v1/study-sets/${studySetId}/flashcards`, token, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  /** P2-STUDY-02: Bulk sync toàn bộ flashcards cho một study set */
-  bulkSave: (token: string, studySetId: number, flashcards: BulkFlashcardItem[]) =>
-    request<{ flashcards: Flashcard[] }>(
-      `/v1/study-sets/${studySetId}/flashcards/bulk`,
-      token,
-      { method: "PUT", body: JSON.stringify({ flashcards }) },
-    ),
-
-  update: (token: string, id: number, data: { term?: string; definition?: string }) =>
-    request<Flashcard>(`/v1/flashcards/${id}`, token, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-
-  delete: (token: string, id: number) =>
-    request<void>(`/v1/flashcards/${id}`, token, { method: "DELETE" }),
-
-  toggleStar: (token: string, id: number) =>
-    request<{ id: number; starred: boolean }>(`/v1/flashcards/${id}/star`, token, {
-      method: "POST",
-    }),
-};
-
-// ── Folder API ────────────────────────────────────────────────────────────
-// P2-STUDY-04 — Folder core
-
-export const folderApi = {
-  list: (token: string) =>
-    request<Folder[]>("/v1/folders", token),
-
-  create: (token: string, data: { title: string; description?: string }) =>
-    request<Folder>("/v1/folders", token, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  get: (token: string, id: number) =>
-    request<FolderDetail>(`/v1/folders/${id}`, token),
-
-  update: (token: string, id: number, data: { title?: string; description?: string }) =>
-    request<Folder>(`/v1/folders/${id}`, token, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
-
-  delete: (token: string, id: number) =>
-    request<void>(`/v1/folders/${id}`, token, { method: "DELETE" }),
-
-  addStudySet: (token: string, folderId: number, studySetId: number) =>
-    request<void>(`/v1/folders/${folderId}/study-sets`, token, {
-      method: "POST",
-      body: JSON.stringify({ studySetId }),
-    }),
-
-  removeStudySet: (token: string, folderId: number, studySetId: number) =>
-    request<void>(`/v1/folders/${folderId}/study-sets/${studySetId}`, token, {
-      method: "DELETE",
-    }),
-};
-
-// ── Learning Progress API ─────────────────────────────────────────────────
-// P2-LEARN-05 — DRAFT. Backend chưa implement. Gọi silent (try-catch).
-
+// Draft only. Phase 2 learning progress remains local; no production request is made.
 export const learningApi = {
-  /**
-   * Lưu kết quả học tập. DRAFT – backend Phase 3 implement.
-   * Gọi bằng try-catch silent để không block UI nếu 404/501.
-   */
-  saveProgress: async (
-    token: string,
-    data: { studySetId: number; mode: LearningMode; score: number; total: number },
-  ): Promise<LearningProgress | null> => {
-    try {
-      return await request<LearningProgress>("/v1/learning/progress", token, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
-    } catch {
-      // Backend chưa sẵn trong Phase 2 — silent fail
-      return null;
-    }
-  },
-
-  getProgress: async (token: string, studySetId: number): Promise<LearningProgress[]> => {
-    try {
-      return await request<LearningProgress[]>(`/v1/learning/progress/${studySetId}`, token);
-    } catch {
-      return [];
-    }
-  },
+  saveProgress: async (): Promise<null> => null,
+  getProgress: async (): Promise<LearningProgress[]> => [],
 };
 
-// ── Health API ────────────────────────────────────────────────────────────
-
-export type ServiceHealth = {
-  name: string;
-  url: string;
-  status: "ok" | "offline";
-};
+export type ServiceHealth = { name: string; url: string; status: string };
+export async function fetchHealth(): Promise<ServiceHealth[]> {
+  const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", "");
+  return data.services ?? [];
+}
 
 export const healthApi = {
-  check: () =>
-    fetch(`${GATEWAY_URL}/healthz`).then((r) => r.json() as Promise<{ service: string; status: string }>),
-
-  services: () =>
-    fetch(`${GATEWAY_URL}/healthz/services`).then((r) =>
-      r.json() as Promise<{ services: ServiceHealth[] }>,
-    ),
+  check: () => apiFetch<{ service: string; status: string }>("/healthz", ""),
+  services: () => apiFetch<{ services: ServiceHealth[] }>("/healthz/services", ""),
 };
+
+export type { User, AuthResponse, StudySet, Flashcard, DraftCard };
