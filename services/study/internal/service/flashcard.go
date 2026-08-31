@@ -11,17 +11,16 @@ import (
 
 // FlashcardService orchestrates flashcard operations.
 type FlashcardService struct {
-	sets  *repository.StudySetRepository
-	cards *repository.FlashcardRepository
+	sets  repository.StudySets
+	cards repository.Flashcards
 }
 
 // NewFlashcardService wires the service with its repositories.
-func NewFlashcardService(sets *repository.StudySetRepository, cards *repository.FlashcardRepository) *FlashcardService {
+func NewFlashcardService(sets repository.StudySets, cards repository.Flashcards) *FlashcardService {
 	return &FlashcardService{sets: sets, cards: cards}
 }
 
 // Create validates input and creates a flashcard inside a study set.
-// Verifies the study set exists (and ownership if userID != 0).
 func (s *FlashcardService) Create(ctx context.Context, studySetID, userID int64, in model.CreateFlashcardInput) (model.Flashcard, error) {
 	in.Term = strings.TrimSpace(in.Term)
 	in.Definition = strings.TrimSpace(in.Definition)
@@ -75,9 +74,24 @@ func (s *FlashcardService) Delete(ctx context.Context, cardID, userID int64) err
 	return s.cards.Delete(ctx, cardID)
 }
 
+// BulkSave creates/updates/deletes multiple flashcards in a single transaction.
+func (s *FlashcardService) BulkSave(ctx context.Context, studySetID, userID int64, in model.BulkSaveFlashcardsInput) (model.BulkSaveResult, error) {
+	if err := s.checkSetOwner(ctx, studySetID, userID); err != nil {
+		return model.BulkSaveResult{}, err
+	}
+	for _, item := range in.Cards {
+		if item.Delete {
+			continue
+		}
+		if strings.TrimSpace(item.Term) == "" || strings.TrimSpace(item.Definition) == "" {
+			return model.BulkSaveResult{}, errors.New("each card must have term and definition")
+		}
+	}
+	return s.cards.BulkSave(ctx, studySetID, in.Cards)
+}
+
 func (s *FlashcardService) checkSetOwner(ctx context.Context, setID, userID int64) error {
 	if userID == 0 {
-		// Auth not yet wired; skip.
 		return nil
 	}
 	ok, err := s.sets.IsOwner(ctx, setID, userID)

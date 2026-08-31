@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 )
@@ -66,6 +67,90 @@ func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, err
 		sets = append(sets, s)
 	}
 	return sets, rows.Err()
+}
+
+// ListWithFilter returns paginated study sets for a user with optional search and sort.
+func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f model.StudySetFilter) (model.StudySetListResult, error) {
+	perPage := f.PerPage
+	if perPage <= 0 {
+		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+	page := f.Page
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+
+	orderCol := "updated_at"
+	switch f.SortBy {
+	case "created":
+		orderCol = "created_at"
+	case "title":
+		orderCol = "title"
+	}
+
+	// Build WHERE clause
+	args := []any{userID}
+	whereExtra := ""
+	if f.Search != "" {
+		args = append(args, "%"+f.Search+"%")
+		whereExtra = " AND title ILIKE $" + itoa(len(args))
+	}
+
+	// Count total
+	var total int
+	countQ := "SELECT COUNT(*) FROM study_sets WHERE user_id = $1" + whereExtra
+	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
+		return model.StudySetListResult{}, err
+	}
+
+	// Fetch page
+	args = append(args, perPage, offset)
+	limitN := itoa(len(args) - 1)
+	offsetN := itoa(len(args))
+	q := `SELECT id, user_id, title, description, created_at, updated_at
+		FROM study_sets
+		WHERE user_id = $1` + whereExtra +
+		` ORDER BY ` + orderCol + ` DESC, id DESC
+		LIMIT $` + limitN + ` OFFSET $` + offsetN
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return model.StudySetListResult{}, err
+	}
+	defer rows.Close()
+
+	sets := []model.StudySet{}
+	for rows.Next() {
+		var s model.StudySet
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return model.StudySetListResult{}, err
+		}
+		sets = append(sets, s)
+	}
+	if err := rows.Err(); err != nil {
+		return model.StudySetListResult{}, err
+	}
+
+	totalPages := total / perPage
+	if total%perPage != 0 {
+		totalPages++
+	}
+
+	return model.StudySetListResult{
+		Items:      sets,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }
 
 // Get returns a single study set by id, without flashcards.
