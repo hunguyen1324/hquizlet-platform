@@ -1,8 +1,10 @@
 // Dashboard — Dev 3 [P2-WEB-03]
 // Fix P0-03: dùng StudySetListResult.items, search/sort qua backend query params.
+// Fix sort_by → sort (đúng param tên backend).
+// Fix race condition: dùng AbortController — response của query cũ không ghi đè query mới.
 // Loading skeleton, empty, error states đầy đủ.
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import type { StudySet, HealthStatus } from "../../types";
 import { useAuth } from "../auth/AuthContext";
 import { studySetApi } from "../../lib/api";
@@ -24,30 +26,47 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("updated");
 
-  const loadSets = useCallback(
-    async (search: string, sortBy: SortKey) => {
+  // AbortController ref — hủy request cũ khi query/sort thay đổi
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Debounce 300ms
+    const timer = setTimeout(() => {
+      // Hủy request đang chạy nếu có
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setLoading(true);
       setError("");
-      try {
-        // P0-03: backend trả paginated {items, total, ...} — dùng .items
-        const result = await studySetApi.list(token, { search, sortBy });
-        setSets(result.items ?? []);
-        setTotal(result.total ?? 0);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Không tải được study sets.");
-        setSets([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token]
-  );
 
-  // Debounce search 300ms
-  useEffect(() => {
-    const id = setTimeout(() => void loadSets(query, sort), 300);
-    return () => clearTimeout(id);
-  }, [query, sort, loadSets]);
+      studySetApi
+        .list(token, { search: query, sortBy: sort }, controller.signal)
+        .then((result) => {
+          setSets(result.items ?? []);
+          setTotal(result.total ?? 0);
+        })
+        .catch((err) => {
+          // Bỏ qua lỗi abort — không phải lỗi thật
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setError(err instanceof Error ? err.message : "Không tải được study sets.");
+          setSets([]);
+        })
+        .finally(() => setLoading(false));
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      abortRef.current?.abort();
+    };
+  }, [query, sort, token]);
+
+  function reload() {
+    // Trigger re-run bằng cách force effect — đổi state phụ không ảnh hưởng UI
+    setError("");
+    // Workaround: toggle một lần để effect chạy lại với cùng query/sort
+    setSort((s) => s);
+  }
 
   return (
     <>
@@ -99,7 +118,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
         </select>
         <button
           className="ghost-button"
-          onClick={() => void loadSets(query, sort)}
+          onClick={reload}
           disabled={loading}
           aria-label="Tải lại"
         >
@@ -110,7 +129,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
       {error && (
         <p className="message message--error">
           {error}{" "}
-          <button className="ghost-button" onClick={() => void loadSets(query, sort)}>
+          <button className="ghost-button" onClick={reload}>
             Thử lại
           </button>
         </p>

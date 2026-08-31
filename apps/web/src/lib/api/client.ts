@@ -31,10 +31,12 @@ export class ApiError extends Error {
 export async function apiFetch<T>(
   path: string,
   token: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  signal?: AbortSignal
 ): Promise<T> {
   const res = await fetch(`${gatewayUrl}${path}`, {
     ...init,
+    signal: signal ?? init.signal,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -86,7 +88,7 @@ export const authApi = {
 
 export type StudySetListParams = {
   search?: string;   // backend param: "search"
-  sortBy?: string;   // backend param: "sort_by" — "updated" | "created" | "title"
+  sortBy?: string;   // backend param: "sort" — "updated" | "created" | "title"
   page?: number;
   perPage?: number;
 };
@@ -103,14 +105,14 @@ export type UpdateStudySetPayload = {
 
 export const studySetApi = {
   // P0-03 fix: returns StudySetListResult (paginated), not StudySet[]
-  list(token: string, params: StudySetListParams = {}): Promise<StudySetListResult> {
+  list(token: string, params: StudySetListParams = {}, signal?: AbortSignal): Promise<StudySetListResult> {
     const qs = new URLSearchParams();
     if (params.search)  qs.set("search", params.search);
-    if (params.sortBy)  qs.set("sort_by", params.sortBy);
+    if (params.sortBy)  qs.set("sort", params.sortBy);   // backend reads ?sort=
     if (params.page)    qs.set("page", String(params.page));
     if (params.perPage) qs.set("per_page", String(params.perPage));
     const query = qs.toString() ? `?${qs.toString()}` : "";
-    return apiFetch(`/v1/study-sets${query}`, token);
+    return apiFetch(`/v1/study-sets${query}`, token, {}, signal);
   },
 
   get(token: string, id: number): Promise<StudySet> {
