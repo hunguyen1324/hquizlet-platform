@@ -24,27 +24,27 @@ func NewStudySetService(sets repository.StudySets, cards repository.Flashcards) 
 
 // List returns all study sets for a user.
 func (s *StudySetService) List(ctx context.Context, userID int64) ([]model.StudySet, error) {
-	if userID == 0 {
-		return s.sets.ListAll(ctx)
+	if userID <= 0 {
+		return nil, ErrUnauthorized
 	}
 	return s.sets.List(ctx, userID)
 }
 
 // ListWithFilter returns paginated, filterable study sets for a user.
 func (s *StudySetService) ListWithFilter(ctx context.Context, userID int64, f model.StudySetFilter) (model.StudySetListResult, error) {
-	if userID == 0 {
-		all, err := s.sets.ListAll(ctx)
-		if err != nil {
-			return model.StudySetListResult{}, err
-		}
-		return model.StudySetListResult{Items: all, Total: len(all), Page: 1, PerPage: len(all), TotalPages: 1}, nil
+	if userID <= 0 {
+		return model.StudySetListResult{}, ErrUnauthorized
 	}
 	return s.sets.ListWithFilter(ctx, userID, f)
 }
 
 // GetWithCards returns a study set along with its flashcards.
-func (s *StudySetService) GetWithCards(ctx context.Context, id int64) (model.StudySet, error) {
-	set, err := s.sets.Get(ctx, id)
+// The study set must belong to userID; ownership is enforced by the repository query.
+func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (model.StudySet, error) {
+	if userID <= 0 {
+		return model.StudySet{}, ErrUnauthorized
+	}
+	set, err := s.sets.GetOwned(ctx, id, userID)
 	if err != nil {
 		return model.StudySet{}, err
 	}
@@ -58,6 +58,9 @@ func (s *StudySetService) GetWithCards(ctx context.Context, id int64) (model.Stu
 
 // Create validates input and creates a new study set.
 func (s *StudySetService) Create(ctx context.Context, userID int64, in model.CreateStudySetInput) (model.StudySet, error) {
+	if userID <= 0 {
+		return model.StudySet{}, ErrUnauthorized
+	}
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
 	if in.Title == "" {
@@ -89,8 +92,8 @@ func (s *StudySetService) Delete(ctx context.Context, id, userID int64) error {
 
 // checkOwner returns ErrForbidden if userID does not own the study set.
 func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) error {
-	if userID == 0 {
-		return nil
+	if userID <= 0 {
+		return ErrUnauthorized
 	}
 	ok, err := s.sets.IsOwner(ctx, id, userID)
 	if err != nil {
@@ -104,3 +107,6 @@ func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) erro
 
 // ErrForbidden is returned when a user tries to modify someone else's resource.
 var ErrForbidden = errors.New("forbidden")
+
+// ErrUnauthorized is returned when no authenticated user ID is available.
+var ErrUnauthorized = errors.New("unauthorized")
