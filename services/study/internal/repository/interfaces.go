@@ -15,6 +15,7 @@ type StudySets interface {
 	ListAll(ctx context.Context) ([]model.StudySet, error)
 	ListWithFilter(ctx context.Context, userID int64, f model.StudySetFilter) (model.StudySetListResult, error)
 	Get(ctx context.Context, id int64) (model.StudySet, error)
+	GetOwned(ctx context.Context, id, userID int64) (model.StudySet, error)
 	Create(ctx context.Context, userID int64, in model.CreateStudySetInput) (model.StudySet, error)
 	Update(ctx context.Context, id int64, in model.UpdateStudySetInput) (model.StudySet, error)
 	Delete(ctx context.Context, id int64) error

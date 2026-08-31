@@ -1,3 +1,4 @@
+// Package http contains HTTP handlers for the study service.
 package http
 
 import (

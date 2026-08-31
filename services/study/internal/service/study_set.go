@@ -36,12 +36,14 @@ func (s *StudySetService) ListWithFilter(ctx context.Context, userID int64, f mo
 	return s.sets.ListWithFilter(ctx, userID, f)
 }
 
-// GetWithCards returns a study set and its flashcards only when userID owns the set.
+// GetWithCards returns a study set along with its flashcards.
+// The study set must belong to userID; ownership is enforced by the repository query
+// (GetOwned scopes the SQL lookup itself, so there is no separate app-level bypass window).
 func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (model.StudySet, error) {
-	if err := s.checkOwner(ctx, id, userID); err != nil {
+	if err := requireUserID(userID); err != nil {
 		return model.StudySet{}, err
 	}
-	set, err := s.sets.Get(ctx, id)
+	set, err := s.sets.GetOwned(ctx, id, userID)
 	if err != nil {
 		return model.StudySet{}, err
 	}
@@ -99,12 +101,6 @@ func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) erro
 	return nil
 }
 
-func requireUserID(userID int64) error {
-	if userID <= 0 {
-		return ErrUnauthorized
-	}
-	return nil
-}
-
+// ErrUnauthorized is returned when no authenticated user ID is available.
 var ErrUnauthorized = errors.New("unauthorized")
 var ErrForbidden = errors.New("forbidden")

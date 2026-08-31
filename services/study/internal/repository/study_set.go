@@ -46,7 +46,8 @@ func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.St
 	return sets, rows.Err()
 }
 
-// ListAll returns every study set (used when no auth is present, e.g. public sets).
+// ListAll is retained for repository compatibility but is not used by the service.
+// Authenticated Study API operations must always be user-scoped.
 func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, user_id, title, description, created_at, updated_at
@@ -92,7 +93,6 @@ func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f
 		orderCol = "title"
 	}
 
-	// Build WHERE clause
 	args := []any{userID}
 	whereExtra := ""
 	if f.Search != "" {
@@ -100,14 +100,12 @@ func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f
 		whereExtra = " AND title ILIKE $" + itoa(len(args))
 	}
 
-	// Count total
 	var total int
 	countQ := "SELECT COUNT(*) FROM study_sets WHERE user_id = $1" + whereExtra
 	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
 		return model.StudySetListResult{}, err
 	}
 
-	// Fetch page
 	args = append(args, perPage, offset)
 	limitN := itoa(len(args) - 1)
 	offsetN := itoa(len(args))
@@ -160,6 +158,21 @@ func (r *StudySetRepository) Get(ctx context.Context, id int64) (model.StudySet,
 		SELECT id, user_id, title, description, created_at, updated_at
 		FROM study_sets WHERE id = $1
 	`, id).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.CreatedAt, &s.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.StudySet{}, ErrNotFound
+	}
+	return s, err
+}
+
+// GetOwned returns a study set only when it belongs to userID.
+// Ownership is enforced directly in SQL.
+func (r *StudySetRepository) GetOwned(ctx context.Context, id, userID int64) (model.StudySet, error) {
+	var s model.StudySet
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, user_id, title, description, created_at, updated_at
+		FROM study_sets
+		WHERE id = $1 AND user_id = $2
+	`, id, userID).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.StudySet{}, ErrNotFound
 	}
