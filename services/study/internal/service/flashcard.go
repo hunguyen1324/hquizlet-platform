@@ -91,8 +91,8 @@ func (s *FlashcardService) BulkSave(ctx context.Context, studySetID, userID int6
 }
 
 func (s *FlashcardService) checkSetOwner(ctx context.Context, setID, userID int64) error {
-	if userID == 0 {
-		return nil
+	if userID <= 0 {
+		return ErrUnauthorized
 	}
 	ok, err := s.sets.IsOwner(ctx, setID, userID)
 	if err != nil {
