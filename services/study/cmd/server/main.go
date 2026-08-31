@@ -43,9 +43,11 @@ func main() {
 	mux := http.NewServeMux()
 	studyhttp.New(setSvc, cardSvc, folderSvc, db).Register(mux)
 
+	// All /v1 study resources require a user identity. Health remains public.
 	handler := middleware.Chain(mux,
 		middleware.RequestID,
 		middleware.Logging,
+		middleware.RequireUserID,
 	)
 
 	log.Printf("[study] listening on :%s", cfg.Port)
