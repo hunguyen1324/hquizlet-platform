@@ -18,13 +18,24 @@ func NewFlashcardRepository(db *sql.DB) *FlashcardRepository {
 	return &FlashcardRepository{db: db}
 }
 
-// ListByStudySet returns all flashcards for a study set in insertion order.
+// scanCard scans a full flashcard row (includes position).
+func scanCard(s interface {
+	Scan(...any) error
+}) (model.Flashcard, error) {
+	var c model.Flashcard
+	err := s.Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.Position, &c.CreatedAt, &c.UpdatedAt)
+	return c, err
+}
+
+const selectCols = `id, study_set_id, term, definition, starred, position, created_at, updated_at`
+
+// ListByStudySet returns all flashcards for a study set ordered by position then id.
 func (r *FlashcardRepository) ListByStudySet(ctx context.Context, studySetID int64) ([]model.Flashcard, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, study_set_id, term, definition, starred, created_at, updated_at
+		SELECT `+selectCols+`
 		FROM flashcards
 		WHERE study_set_id = $1
-		ORDER BY id ASC
+		ORDER BY position ASC, id ASC
 	`, studySetID)
 	if err != nil {
 		return nil, err
@@ -33,8 +44,8 @@ func (r *FlashcardRepository) ListByStudySet(ctx context.Context, studySetID int
 
 	cards := []model.Flashcard{}
 	for rows.Next() {
-		var c model.Flashcard
-		if err := rows.Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		c, err := scanCard(rows)
+		if err != nil {
 			return nil, err
 		}
 		cards = append(cards, c)
@@ -44,11 +55,8 @@ func (r *FlashcardRepository) ListByStudySet(ctx context.Context, studySetID int
 
 // Get returns a single flashcard by id.
 func (r *FlashcardRepository) Get(ctx context.Context, id int64) (model.Flashcard, error) {
-	var c model.Flashcard
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, study_set_id, term, definition, starred, created_at, updated_at
-		FROM flashcards WHERE id = $1
-	`, id).Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.CreatedAt, &c.UpdatedAt)
+	row := r.db.QueryRowContext(ctx, `SELECT `+selectCols+` FROM flashcards WHERE id = $1`, id)
+	c, err := scanCard(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Flashcard{}, ErrNotFound
 	}
@@ -57,26 +65,24 @@ func (r *FlashcardRepository) Get(ctx context.Context, id int64) (model.Flashcar
 
 // Create inserts a new flashcard into a study set.
 func (r *FlashcardRepository) Create(ctx context.Context, studySetID int64, in model.CreateFlashcardInput) (model.Flashcard, error) {
-	var c model.Flashcard
-	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO flashcards (study_set_id, term, definition)
-		VALUES ($1, $2, $3)
-		RETURNING id, study_set_id, term, definition, starred, created_at, updated_at
-	`, studySetID, in.Term, in.Definition).
-		Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.CreatedAt, &c.UpdatedAt)
+	row := r.db.QueryRowContext(ctx, `
+		INSERT INTO flashcards (study_set_id, term, definition, position)
+		VALUES ($1, $2, $3, COALESCE((SELECT MAX(position)+1 FROM flashcards WHERE study_set_id = $1), 0))
+		RETURNING `+selectCols,
+		studySetID, in.Term, in.Definition)
+	c, err := scanCard(row)
 	return c, err
 }
 
-// Update modifies term/definition of an existing flashcard.
+// Update modifies term/definition/position of an existing flashcard.
 func (r *FlashcardRepository) Update(ctx context.Context, id int64, in model.UpdateFlashcardInput) (model.Flashcard, error) {
-	var c model.Flashcard
-	err := r.db.QueryRowContext(ctx, `
+	row := r.db.QueryRowContext(ctx, `
 		UPDATE flashcards
 		SET term = $1, definition = $2, updated_at = now()
 		WHERE id = $3
-		RETURNING id, study_set_id, term, definition, starred, created_at, updated_at
-	`, in.Term, in.Definition, id).
-		Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.CreatedAt, &c.UpdatedAt)
+		RETURNING `+selectCols,
+		in.Term, in.Definition, id)
+	c, err := scanCard(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Flashcard{}, ErrNotFound
 	}
@@ -85,13 +91,12 @@ func (r *FlashcardRepository) Update(ctx context.Context, id int64, in model.Upd
 
 // ToggleStar flips the starred flag on a flashcard.
 func (r *FlashcardRepository) ToggleStar(ctx context.Context, id int64) (model.Flashcard, error) {
-	var c model.Flashcard
-	err := r.db.QueryRowContext(ctx, `
+	row := r.db.QueryRowContext(ctx, `
 		UPDATE flashcards
 		SET starred = NOT starred, updated_at = now()
 		WHERE id = $1
-		RETURNING id, study_set_id, term, definition, starred, created_at, updated_at
-	`, id).Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.CreatedAt, &c.UpdatedAt)
+		RETURNING `+selectCols, id)
+	c, err := scanCard(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Flashcard{}, ErrNotFound
 	}
@@ -109,4 +114,71 @@ func (r *FlashcardRepository) Delete(ctx context.Context, id int64) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// BulkSave performs create/update/delete in a single transaction.
+// Only cards belonging to studySetID are modified; cards with wrong ownership are skipped.
+func (r *FlashcardRepository) BulkSave(ctx context.Context, studySetID int64, items []model.BulkFlashcardItem) (model.BulkSaveResult, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.BulkSaveResult{}, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var result model.BulkSaveResult
+	result.Created = []model.Flashcard{}
+	result.Updated = []model.Flashcard{}
+	result.Deleted = []int64{}
+
+	for _, item := range items {
+		if item.Delete && item.ID > 0 {
+			// Verify ownership before delete
+			var ownerSetID int64
+			err := tx.QueryRowContext(ctx, "SELECT study_set_id FROM flashcards WHERE id = $1", item.ID).Scan(&ownerSetID)
+			if err != nil || ownerSetID != studySetID {
+				continue // skip cards not belonging to this set
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM flashcards WHERE id = $1", item.ID); err != nil {
+				return model.BulkSaveResult{}, err
+			}
+			result.Deleted = append(result.Deleted, item.ID)
+			continue
+		}
+
+		if item.ID == 0 {
+			// Create new card
+			row := tx.QueryRowContext(ctx, `
+				INSERT INTO flashcards (study_set_id, term, definition, position)
+				VALUES ($1, $2, $3, $4)
+				RETURNING `+selectCols,
+				studySetID, item.Term, item.Definition, item.Position)
+			c, err := scanCard(row)
+			if err != nil {
+				return model.BulkSaveResult{}, err
+			}
+			result.Created = append(result.Created, c)
+		} else {
+			// Update existing card – check ownership
+			var ownerSetID int64
+			err := tx.QueryRowContext(ctx, "SELECT study_set_id FROM flashcards WHERE id = $1", item.ID).Scan(&ownerSetID)
+			if err != nil || ownerSetID != studySetID {
+				continue
+			}
+			row := tx.QueryRowContext(ctx, `
+				UPDATE flashcards SET term = $1, definition = $2, position = $3, updated_at = now()
+				WHERE id = $4
+				RETURNING `+selectCols,
+				item.Term, item.Definition, item.Position, item.ID)
+			c, err := scanCard(row)
+			if err != nil {
+				return model.BulkSaveResult{}, err
+			}
+			result.Updated = append(result.Updated, c)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.BulkSaveResult{}, err
+	}
+	return result, nil
 }

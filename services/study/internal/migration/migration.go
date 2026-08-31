@@ -78,4 +78,56 @@ var migrations = []string{
 	`INSERT INTO study_sets (user_id, title, description)
 	 SELECT 0, 'Go + Rust migration basics', 'First demo study set stored in PostgreSQL'
 	 WHERE NOT EXISTS (SELECT 1 FROM study_sets LIMIT 1)`,
+
+	// 008 – add position column to flashcards for ordered display
+	`DO $$ BEGIN
+		IF NOT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = 'flashcards' AND column_name = 'position'
+		) THEN
+			ALTER TABLE flashcards ADD COLUMN position INT NOT NULL DEFAULT 0;
+		END IF;
+	END $$`,
+
+	// 009 – starred_flashcards table (user-level, cross-set starring)
+	`CREATE TABLE IF NOT EXISTS starred_flashcards (
+		user_id     BIGINT NOT NULL,
+		flashcard_id BIGINT NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+		created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+		PRIMARY KEY (user_id, flashcard_id)
+	)`,
+
+	// 010 – folders table
+	`CREATE TABLE IF NOT EXISTS folders (
+		id          BIGSERIAL   PRIMARY KEY,
+		user_id     BIGINT      NOT NULL,
+		name        TEXT        NOT NULL,
+		description TEXT        NOT NULL DEFAULT '',
+		created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+		updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`,
+
+	// 011 – folder_study_sets join table
+	`CREATE TABLE IF NOT EXISTS folder_study_sets (
+		folder_id    BIGINT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+		study_set_id BIGINT NOT NULL REFERENCES study_sets(id) ON DELETE CASCADE,
+		added_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+		PRIMARY KEY (folder_id, study_set_id)
+	)`,
+
+	// 012 – indexes for folder queries
+	`CREATE INDEX IF NOT EXISTS folders_user_id_idx ON folders(user_id)`,
+	`CREATE INDEX IF NOT EXISTS folder_study_sets_folder_id_idx ON folder_study_sets(folder_id)`,
+	`CREATE INDEX IF NOT EXISTS starred_flashcards_user_id_idx ON starred_flashcards(user_id)`,
+
+	// 013 – full-text search index on study_sets title
+	`CREATE INDEX IF NOT EXISTS study_sets_title_trgm_idx ON study_sets USING gin(title gin_trgm_ops)
+	 WHERE EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')`,
+
+	// 014 – enable pg_trgm extension if not present (may fail silently on restricted DBs)
+	`DO $$ BEGIN
+		CREATE EXTENSION IF NOT EXISTS pg_trgm;
+	EXCEPTION WHEN OTHERS THEN
+		NULL;
+	END $$`,
 }

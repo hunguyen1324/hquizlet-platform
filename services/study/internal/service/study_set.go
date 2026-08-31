@@ -13,12 +13,12 @@ import (
 
 // StudySetService orchestrates study-set operations.
 type StudySetService struct {
-	sets  *repository.StudySetRepository
-	cards *repository.FlashcardRepository
+	sets  repository.StudySets
+	cards repository.Flashcards
 }
 
 // NewStudySetService wires the service with its repositories.
-func NewStudySetService(sets *repository.StudySetRepository, cards *repository.FlashcardRepository) *StudySetService {
+func NewStudySetService(sets repository.StudySets, cards repository.Flashcards) *StudySetService {
 	return &StudySetService{sets: sets, cards: cards}
 }
 
@@ -28,6 +28,18 @@ func (s *StudySetService) List(ctx context.Context, userID int64) ([]model.Study
 		return s.sets.ListAll(ctx)
 	}
 	return s.sets.List(ctx, userID)
+}
+
+// ListWithFilter returns paginated, filterable study sets for a user.
+func (s *StudySetService) ListWithFilter(ctx context.Context, userID int64, f model.StudySetFilter) (model.StudySetListResult, error) {
+	if userID == 0 {
+		all, err := s.sets.ListAll(ctx)
+		if err != nil {
+			return model.StudySetListResult{}, err
+		}
+		return model.StudySetListResult{Items: all, Total: len(all), Page: 1, PerPage: len(all), TotalPages: 1}, nil
+	}
+	return s.sets.ListWithFilter(ctx, userID, f)
 }
 
 // GetWithCards returns a study set along with its flashcards.
@@ -78,7 +90,6 @@ func (s *StudySetService) Delete(ctx context.Context, id, userID int64) error {
 // checkOwner returns ErrForbidden if userID does not own the study set.
 func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) error {
 	if userID == 0 {
-		// Auth not yet wired (Sprint 1 fallback); skip ownership check.
 		return nil
 	}
 	ok, err := s.sets.IsOwner(ctx, id, userID)

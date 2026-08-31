@@ -32,14 +32,16 @@ func main() {
 	// Repositories
 	setRepo := repository.NewStudySetRepository(db)
 	cardRepo := repository.NewFlashcardRepository(db)
+	folderRepo := repository.NewFolderRepository(db)
 
 	// Services
 	setSvc := service.NewStudySetService(setRepo, cardRepo)
 	cardSvc := service.NewFlashcardService(setRepo, cardRepo)
+	folderSvc := service.NewFolderService(folderRepo, setRepo)
 
 	// HTTP
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, db).Register(mux)
+	studyhttp.New(setSvc, cardSvc, folderSvc, db).Register(mux)
 
 	handler := middleware.Chain(mux,
 		middleware.RequestID,
