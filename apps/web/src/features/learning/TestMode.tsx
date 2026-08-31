@@ -48,12 +48,19 @@ export function TestMode({ cards }: Props) {
 
   React.useEffect(() => {
     if (submitted || !q) return;
+    // Capture `q` and `handleChoose` at effect-registration time.
+    // Both `q` and `submitted` are in deps, so the handler is always fresh.
+    const currentQ = q;
+    const choose = handleChoose;
     function onKey(e: KeyboardEvent) {
       const n = Number(e.key);
-      if (n >= 1 && n <= q.choices.length && q.userAnswer === null) handleChoose(q.choices[n - 1]);
+      if (n >= 1 && n <= currentQ.choices.length && currentQ.userAnswer === null) {
+        choose(currentQ.choices[n - 1]);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, submitted]);
 
   if (cards.length < 2) {

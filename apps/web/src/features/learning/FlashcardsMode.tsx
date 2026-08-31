@@ -56,6 +56,7 @@ export function FlashcardsMode({ cards }: Props) {
   }
 
   // Keyboard: Space = flip, ArrowLeft = prev, ArrowRight = next
+  // Depend on both `total` and `index` so handlePrev/handleNext are never stale.
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLButtonElement) return;
@@ -65,7 +66,9 @@ export function FlashcardsMode({ cards }: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [total]);
+  // handlePrev/handleNext close over `total` and `index`; re-register when either changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, index]);
 
   const starredCount = cards.filter((c) => c.starred).length;
 

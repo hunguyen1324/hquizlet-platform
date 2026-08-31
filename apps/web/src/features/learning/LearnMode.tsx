@@ -42,11 +42,25 @@ export function LearnMode({ cards }: Props) {
     const nextIdx = currentIdx + 1;
     if (phase === "quiz") {
       if (nextIdx >= total) {
-        const wrongs = state.queue.filter((card) => card.id === current.id ? !correct : !state.answers[card.id]?.correct);
+        // Read result for current (last) card from answers map — not from stale `correct` state.
+        // handleSubmit already wrote it synchronously via setState, but setState is batched,
+        // so we build the final answers snapshot here to avoid double source-of-truth.
+        const finalAnswers = {
+          ...state.answers,
+          [current.id]: {
+            card: current,
+            userAnswer: input,
+            submitted: true,
+            correct: correct ?? false,
+          },
+        };
+        const wrongs = state.queue.filter((card) => !finalAnswers[card.id]?.correct);
         if (wrongs.length > 0) {
           setRetryQueue(wrongs); setRetryIndex(0); setPhase("retry");
+          setState((s) => ({ ...s, answers: finalAnswers }));
         } else {
-          setState((s) => ({ ...s, done: true })); setPhase("done");
+          setState((s) => ({ ...s, answers: finalAnswers, done: true }));
+          setPhase("done");
         }
       } else {
         setState((s) => ({ ...s, currentIndex: nextIdx }));

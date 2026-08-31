@@ -52,13 +52,19 @@ function formatTime(ms: number): string {
 
 function useTimer(active: boolean) {
   const [elapsed, setElapsed] = React.useState(0);
+  // Track elapsed in a ref so the effect can resume from the correct offset
+  // without capturing stale state in the closure.
+  const elapsedRef = React.useRef(0);
   const startRef = React.useRef(Date.now());
 
   React.useEffect(() => {
     if (!active) return;
-    startRef.current = Date.now() - elapsed;
+    // Resume from last known elapsed so pausing/restarting stays accurate.
+    startRef.current = Date.now() - elapsedRef.current;
     const id = setInterval(() => {
-      setElapsed(Date.now() - startRef.current);
+      const next = Date.now() - startRef.current;
+      elapsedRef.current = next;
+      setElapsed(next);
     }, 100);
     return () => clearInterval(id);
   }, [active]);
