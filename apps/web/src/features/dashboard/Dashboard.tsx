@@ -1,12 +1,13 @@
 // Dashboard — Dev 3 [P2-WEB-03]
-// Study set list: search, sort, loading/error/empty states. API thật qua studySetApi.
+// Fix P0-03: dùng StudySetListResult.items, search/sort qua backend query params.
+// Loading skeleton, empty, error states đầy đủ.
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import type { StudySet, HealthStatus } from "../../types";
 import { useAuth } from "../auth/AuthContext";
 import { studySetApi } from "../../lib/api";
 
-type SortKey = "updatedAt" | "title" | "cards";
+type SortKey = "updated" | "created" | "title";
 
 type Props = {
   healthStatus: HealthStatus;
@@ -14,51 +15,39 @@ type Props = {
   onCreate: () => void;
 };
 
-function sortSets(sets: StudySet[], key: SortKey): StudySet[] {
-  return [...sets].sort((a, b) => {
-    if (key === "title") return a.title.localeCompare(b.title, "vi");
-    if (key === "cards") return (b.flashcards?.length ?? 0) - (a.flashcards?.length ?? 0);
-    // updatedAt — backend may not always include it; fall back to id desc
-    return b.id - a.id;
-  });
-}
-
 export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
   const { token } = useAuth();
   const [sets, setSets] = useState<StudySet[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("updatedAt");
+  const [sort, setSort] = useState<SortKey>("updated");
 
-  const loadSets = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await studySetApi.list(token);
-      setSets(data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tải được study sets.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadSets = useCallback(
+    async (search: string, sortBy: SortKey) => {
+      setLoading(true);
+      setError("");
+      try {
+        // P0-03: backend trả paginated {items, total, ...} — dùng .items
+        const result = await studySetApi.list(token, { search, sortBy });
+        setSets(result.items ?? []);
+        setTotal(result.total ?? 0);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không tải được study sets.");
+        setSets([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token]
+  );
 
+  // Debounce search 300ms
   useEffect(() => {
-    void loadSets();
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const displayed = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = q
-      ? sets.filter(
-          (s) =>
-            s.title.toLowerCase().includes(q) ||
-            (s.description ?? "").toLowerCase().includes(q)
-        )
-      : sets;
-    return sortSets(filtered, sort);
-  }, [sets, query, sort]);
+    const id = setTimeout(() => void loadSets(query, sort), 300);
+    return () => clearTimeout(id);
+  }, [query, sort, loadSets]);
 
   return (
     <>
@@ -76,7 +65,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
       <section className="summary-grid">
         <div className="metric-card">
           <span>Study sets</span>
-          <strong>{sets.length}</strong>
+          <strong>{total}</strong>
         </div>
         <div className="metric-card">
           <span>Backend</span>
@@ -104,13 +93,13 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
           onChange={(e) => setSort(e.target.value as SortKey)}
           aria-label="Sắp xếp"
         >
-          <option value="updatedAt">Mới nhất</option>
+          <option value="updated">Mới cập nhật</option>
+          <option value="created">Mới tạo</option>
           <option value="title">Tên A→Z</option>
-          <option value="cards">Nhiều thẻ nhất</option>
         </select>
         <button
           className="ghost-button"
-          onClick={() => void loadSets()}
+          onClick={() => void loadSets(query, sort)}
           disabled={loading}
           aria-label="Tải lại"
         >
@@ -121,7 +110,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
       {error && (
         <p className="message message--error">
           {error}{" "}
-          <button className="ghost-button" onClick={() => void loadSets()}>
+          <button className="ghost-button" onClick={() => void loadSets(query, sort)}>
             Thử lại
           </button>
         </p>
@@ -136,7 +125,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
           </div>
         )}
 
-        {!loading && sets.length === 0 && !error && (
+        {!loading && sets.length === 0 && !error && query === "" && (
           <div className="empty-panel">
             <h2>Chưa có học phần</h2>
             <p>Tạo bộ thẻ đầu tiên với thuật ngữ và định nghĩa.</p>
@@ -146,7 +135,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
           </div>
         )}
 
-        {!loading && sets.length > 0 && displayed.length === 0 && (
+        {!loading && sets.length === 0 && !error && query !== "" && (
           <div className="empty-panel">
             <h2>Không tìm thấy</h2>
             <p>Không có học phần nào khớp với "{query}".</p>
@@ -156,13 +145,11 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
           </div>
         )}
 
-        {displayed.map((set) => (
+        {sets.map((set) => (
           <button className="set-card" key={set.id} onClick={() => onOpen(set.id)}>
             <span>{set.description || "Chưa có mô tả"}</span>
             <strong>{set.title}</strong>
-            <small>
-              {set.flashcards?.length ?? 0} thẻ · Mở học phần
-            </small>
+            <small>{set.flashcards?.length ?? 0} thẻ · Mở học phần</small>
           </button>
         ))}
       </section>

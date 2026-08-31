@@ -1,10 +1,15 @@
 // lib/api/client.ts — Dev 3 [P2-WEB-02 / P2-INT-02]
-// Typed API client. Tất cả gọi backend đi qua đây, không gọi fetch trực tiếp trong component.
+// Typed API client. Tất cả gọi backend đi qua đây.
+// Fix P0-03: studySetApi.list trả StudySetListResult (paginated)
+// Fix P0-04: flashcardApi.bulkSave gọi POST /flashcards/bulk
 
 import type {
   AuthResponse,
   StudySet,
+  StudySetListResult,
   Flashcard,
+  BulkSavePayload,
+  BulkSaveResult,
   User,
 } from "../../types";
 
@@ -37,15 +42,16 @@ export async function apiFetch<T>(
     },
   });
 
-  // 204 No Content – không có body
   if (res.status === 204) return undefined as unknown as T;
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      (body as { error?: string }).error ?? `Request failed ${res.status}`
-    );
+    // Auth service trả {code, message}; Study trả {error}
+    const msg =
+      (body as { message?: string }).message ??
+      (body as { error?: string }).error ??
+      `Request failed ${res.status}`;
+    throw new ApiError(res.status, msg);
   }
   return body as T;
 }
@@ -78,6 +84,13 @@ export const authApi = {
 
 // ── Study Set API ─────────────────────────────────────────────────────────
 
+export type StudySetListParams = {
+  search?: string;   // backend param: "search"
+  sortBy?: string;   // backend param: "sort_by" — "updated" | "created" | "title"
+  page?: number;
+  perPage?: number;
+};
+
 export type CreateStudySetPayload = {
   title: string;
   description?: string;
@@ -89,8 +102,15 @@ export type UpdateStudySetPayload = {
 };
 
 export const studySetApi = {
-  list(token: string): Promise<StudySet[]> {
-    return apiFetch("/v1/study-sets", token);
+  // P0-03 fix: returns StudySetListResult (paginated), not StudySet[]
+  list(token: string, params: StudySetListParams = {}): Promise<StudySetListResult> {
+    const qs = new URLSearchParams();
+    if (params.search)  qs.set("search", params.search);
+    if (params.sortBy)  qs.set("sort_by", params.sortBy);
+    if (params.page)    qs.set("page", String(params.page));
+    if (params.perPage) qs.set("per_page", String(params.perPage));
+    const query = qs.toString() ? `?${qs.toString()}` : "";
+    return apiFetch(`/v1/study-sets${query}`, token);
   },
 
   get(token: string, id: number): Promise<StudySet> {
@@ -129,6 +149,14 @@ export type UpdateFlashcardPayload = {
 };
 
 export const flashcardApi = {
+  // P0-04 fix: bulk save — POST /v1/study-sets/{id}/flashcards/bulk
+  bulkSave(token: string, studySetId: number, payload: BulkSavePayload): Promise<BulkSaveResult> {
+    return apiFetch(`/v1/study-sets/${studySetId}/flashcards/bulk`, token, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   create(token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> {
     return apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, {
       method: "POST",
@@ -161,9 +189,6 @@ export type ServiceHealth = {
 };
 
 export async function fetchHealth(): Promise<ServiceHealth[]> {
-  const data = await apiFetch<{ services: ServiceHealth[] }>(
-    "/healthz/services",
-    ""
-  );
+  const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", "");
   return data.services ?? [];
 }

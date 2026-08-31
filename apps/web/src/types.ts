@@ -46,3 +46,31 @@ export type DraftCard = {
   definition: string;
   starred?: boolean;
 };
+
+// Paginated list response từ GET /v1/study-sets
+export type StudySetListResult = {
+  items: StudySet[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+};
+
+// Bulk flashcard save item — ID=0 → create, ID>0 → update, delete=true → delete
+export type BulkFlashcardItem = {
+  id: number;       // 0 for new cards
+  term: string;
+  definition: string;
+  position: number;
+  delete: boolean;
+};
+
+export type BulkSavePayload = {
+  cards: BulkFlashcardItem[];
+};
+
+export type BulkSaveResult = {
+  created: Flashcard[];
+  updated: Flashcard[];
+  deleted: number[];
+};

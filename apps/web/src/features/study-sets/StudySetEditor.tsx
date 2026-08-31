@@ -1,5 +1,6 @@
 // StudySetEditor — Dev 3 [P2-WEB-02]
-// Tạo/sửa study set và flashcards qua studySetApi + flashcardApi.
+// Fix P0-04: dùng POST /v1/study-sets/{id}/flashcards/bulk thay vì sequential requests.
+// Bulk payload: id=0 → create, id>0 → update, delete=true → delete.
 
 import React, { useState } from "react";
 import type { StudySet, DraftCard } from "../../types";
@@ -79,7 +80,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
     setLoading(true);
     try {
-      // Create or update study set header
+      // Step 1: create or update study set header
       const saved = existingSet
         ? await studySetApi.update(token, existingSet.id, {
             title: title.trim(),
@@ -90,27 +91,36 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             description: description.trim(),
           });
 
-      // Sync flashcards: create new, update existing, delete removed
-      const existingIds = new Set((existingSet?.flashcards ?? []).map((c) => c.id));
-      for (const card of cleanCards) {
-        if (card.id) {
-          existingIds.delete(card.id);
-          await flashcardApi.update(token, card.id, {
-            term: card.term,
-            definition: card.definition,
-          });
-        } else {
-          await flashcardApi.create(token, saved.id, {
-            term: card.term,
-            definition: card.definition,
-          });
-        }
-      }
-      for (const id of existingIds) {
-        await flashcardApi.delete(token, id);
-      }
+      // Step 2: P0-04 fix — single bulk request instead of sequential create/update/delete.
+      // id=0 → create; id>0 → update; delete=true → delete removed cards.
+      const existingCardIds = new Set((existingSet?.flashcards ?? []).map((c) => c.id));
 
-      // Fetch updated set with latest flashcards
+      // Cards still present in the form (create or update)
+      const keepItems = cleanCards.map((card, idx) => ({
+        id: card.id ?? 0,
+        term: card.term,
+        definition: card.definition,
+        position: idx,
+        delete: false,
+      }));
+
+      // Cards that were in existingSet but no longer in the form → delete
+      const keptIds = new Set(cleanCards.filter((c) => c.id).map((c) => c.id!));
+      const deleteItems = [...existingCardIds]
+        .filter((id) => !keptIds.has(id))
+        .map((id) => ({
+          id,
+          term: "",
+          definition: "",
+          position: 0,
+          delete: true,
+        }));
+
+      await flashcardApi.bulkSave(token, saved.id, {
+        cards: [...keepItems, ...deleteItems],
+      });
+
+      // Step 3: fetch updated set with latest flashcards
       const updated = await studySetApi.get(token, saved.id);
       onSave(updated);
     } catch (err) {
