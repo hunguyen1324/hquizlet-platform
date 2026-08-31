@@ -1,7 +1,9 @@
 // Dashboard — Dev 3 [P2-WEB-03]
 // Study set list: server-side search/sort + paginated API response.
+// Debounced search + AbortController: an in-flight request from a stale
+// query/sort never overwrites the result of a newer one.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { StudySet, HealthStatus } from "../../types";
 import { useAuth } from "../auth/AuthContext";
 import { studySetApi } from "../../lib/api";
@@ -23,25 +25,41 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("updated");
 
-  const loadSets = async () => {
+  const abortRef = useRef<AbortController | null>(null);
+
+  const loadSets = async (signal?: AbortSignal) => {
     setLoading(true);
     setError("");
     try {
-      const result = await studySetApi.list(token, {
-        search: query.trim() || undefined,
-        sort,
-      });
+      const result = await studySetApi.list(
+        token,
+        { search: query.trim() || undefined, sort },
+        signal
+      );
       setSets(result.items ?? []);
       setTotal(result.total ?? 0);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Không tải được study sets.");
+      setSets([]);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadSets();
+    // Debounce 300ms, hủy request cũ khi query/sort đổi trước khi nó kịp trả về
+    const timer = setTimeout(() => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      void loadSets(controller.signal);
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      abortRef.current?.abort();
+    };
   }, [token, query, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
