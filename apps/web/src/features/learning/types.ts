@@ -1,30 +1,22 @@
 // Learning feature types — Dev 4
 // Aligned with shared types.ts (Dev 3) and OpenAPI contract (Dev 5)
 // Fields: term, definition, starred match contract agreed with Dev 5
+//
+// IMPORTANT: LearningMode and LearningProgress are canonical in lib/api/client.ts (Dev 5).
+// Do NOT re-declare them here — import from there to avoid type conflicts.
 
 import type { StudySet, Flashcard } from "../../types";
+import type { LearningMode } from "../../lib/api/client";
 
-export type { StudySet, Flashcard };
+export type { StudySet, Flashcard, LearningMode };
 
-// Progress state for a single flashcard in a session
+// Session-local progress state for a single flashcard (not persisted, UI-only)
 export type CardProgress = {
   cardId: number;
   seen: boolean;
   correct: boolean;
   attempts: number;
 };
-
-// Overall learning session progress
-export type LearningProgress = {
-  studySetId: number;
-  mode: LearningMode;
-  total: number;
-  seen: number;
-  correct: number;
-  startedAt: number; // timestamp
-};
-
-export type LearningMode = "flashcards" | "learn" | "test" | "match";
 
 // Flashcards mode state
 export type FlashcardsState = {

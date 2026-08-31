@@ -1,109 +1,67 @@
 // progressContract.ts — Dev 4
-// P2-LEARN-05: Đề xuất API lưu progress cho Phase 3
-// Đây là contract DRAFT - chưa gọi backend, chờ Dev 5 review và chốt endpoint
+// P2-LEARN-05: Progress API contract cho Phase 3
+//
+// STATUS: FINALIZED with Dev 5 (follow-up review 2026-08-31)
+// - LearningMode is canonical in lib/api/client.ts — imported from there
+// - LearningProgress (backend record shape) is canonical in lib/api/client.ts
+// - saveProgress / fetchProgress remain no-op stubs until Phase 3 backend is built
+// - Endpoint: POST /v1/study-sets/{studySetId}/progress (resource-based, agreed)
+// - userId is NOT sent in body — derived from auth token by gateway
 
-// ── Types ──────────────────────────────────────────────────────────────────
+import type { LearningMode, LearningProgress } from "../../lib/api/client";
 
-export type LearningMode = "flashcards" | "learn" | "test" | "match";
+export type { LearningMode, LearningProgress };
+
+// ── Request/response types specific to progress submission ──────────────────
 
 /**
- * Gửi lên backend sau khi user hoàn thành 1 session học.
- * Endpoint đề xuất: POST /v1/study-sets/{studySetId}/progress
+ * Payload sent to POST /v1/study-sets/{studySetId}/progress
+ * Fields align with LearningProgress backend record (client.ts).
  */
 export type ProgressSaveRequest = {
   studySetId: number;
   mode: LearningMode;
+  /** Số thẻ đúng trong session */
+  score: number;
   /** Tổng số thẻ trong session */
-  totalCards: number;
-  /** Số thẻ trả lời đúng */
-  correctCards: number;
-  /** Thời gian hoàn thành tính bằng ms */
-  durationMs: number;
-  /** Timestamp bắt đầu (ms epoch) */
-  startedAt: number;
-  /** Timestamp kết thúc (ms epoch) */
-  finishedAt: number;
-  /** Chi tiết từng thẻ (tuỳ chọn, dùng cho adaptive learning sau) */
-  cardResults?: CardResult[];
+  total: number;
 };
 
+/**
+ * Per-card result — optional, sent when available for adaptive learning (Phase 4+).
+ * Truncate to 100 entries max to keep payload size bounded.
+ */
 export type CardResult = {
   cardId: number;
-  /** Đúng hay sai */
   correct: boolean;
-  /** Số lần thử (dùng trong learn mode retry) */
+  /** Số lần thử (Learn mode retry) */
   attempts: number;
-  /** Thời gian phản hồi ms (nếu có đo) */
+  /** Thời gian phản hồi ms — nếu đo được */
   responseTimeMs?: number;
 };
 
-/**
- * Backend trả về sau khi lưu progress.
- * Endpoint đề xuất: GET /v1/study-sets/{studySetId}/progress
- */
-export type ProgressSummary = {
-  studySetId: number;
-  /** Số session đã học */
-  sessionCount: number;
-  /** Điểm tốt nhất theo mode */
-  bestScores: Record<LearningMode, number | null>; // null = chưa chơi
-  /** Thời gian match tốt nhất (ms) */
-  bestMatchTimeMs: number | null;
-  /** Ngày học lần cuối */
-  lastStudiedAt: string; // ISO8601
-};
-
-// ── Placeholder hooks - Phase 3 sẽ implement thật ──────────────────────────
+// ── Placeholder stubs — Phase 3 will replace with real apiFetch calls ───────
 
 /**
- * TODO Phase 3: Gọi POST /v1/study-sets/{studySetId}/progress
- * Hiện tại: no-op, chỉ log để debug
+ * Phase 3: POST /v1/study-sets/{studySetId}/progress
+ * Currently a no-op; UI must handle absence of persisted progress gracefully.
  */
 export async function saveProgress(
   _token: string,
   data: ProgressSaveRequest
 ): Promise<void> {
-  // Phase 3: replace with real API call
-  // await apiFetch(`/v1/study-sets/${data.studySetId}/progress`, token, {
-  //   method: "POST",
-  //   body: JSON.stringify(data),
-  // });
   if (import.meta.env.DEV) {
-    console.debug("[Dev4 Progress Draft] Would save:", data);
+    console.debug("[Dev4 Progress Stub] Would save:", data);
   }
 }
 
 /**
- * TODO Phase 3: Gọi GET /v1/study-sets/{studySetId}/progress
- * Hiện tại: trả về null, UI phải handle gracefully
+ * Phase 3: GET /v1/study-sets/{studySetId}/progress
+ * Returns empty array until backend endpoint exists.
  */
 export async function fetchProgress(
   _token: string,
   _studySetId: number
-): Promise<ProgressSummary | null> {
-  // Phase 3: replace with real API call
-  return null;
+): Promise<LearningProgress[]> {
+  return [];
 }
-
-// ── Dev 5 Review Notes ──────────────────────────────────────────────────────
-/**
- * REVIEW REQUEST (Dev 4 → Dev 5):
- *
- * 1. Endpoint convention:
- *    - Dùng /v1/study-sets/{id}/progress (resource-based) hay /v1/progress?studySetId={id}?
- *    - Nên có sub-resource per mode: /v1/study-sets/{id}/progress/{mode}?
- *
- * 2. Storage strategy:
- *    - Lưu mỗi session riêng (history table) hay chỉ lưu aggregate (best/last)?
- *    - Phase 3 nên có history để vẽ graph progress sau.
- *
- * 3. Auth:
- *    - Progress gắn với userId từ token, không cần gửi userId trong body.
- *
- * 4. Versioning:
- *    - Nếu schema thay đổi giữa Phase 3 và 4, cần migration strategy.
- *
- * 5. cardResults field:
- *    - Optional để tránh payload quá lớn với set nhiều thẻ.
- *    - Có thể truncate nếu > 100 cards.
- */
