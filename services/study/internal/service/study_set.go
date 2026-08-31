@@ -11,39 +11,36 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 )
 
-// StudySetService orchestrates study-set operations.
 type StudySetService struct {
 	sets  repository.StudySets
 	cards repository.Flashcards
 }
 
-// NewStudySetService wires the service with its repositories.
 func NewStudySetService(sets repository.StudySets, cards repository.Flashcards) *StudySetService {
 	return &StudySetService{sets: sets, cards: cards}
 }
 
-// List returns all study sets for a user.
+// List returns only study sets owned by the authenticated user.
 func (s *StudySetService) List(ctx context.Context, userID int64) ([]model.StudySet, error) {
-	if userID == 0 {
-		return s.sets.ListAll(ctx)
+	if err := requireUserID(userID); err != nil {
+		return nil, err
 	}
 	return s.sets.List(ctx, userID)
 }
 
-// ListWithFilter returns paginated, filterable study sets for a user.
+// ListWithFilter returns only study sets owned by the authenticated user.
 func (s *StudySetService) ListWithFilter(ctx context.Context, userID int64, f model.StudySetFilter) (model.StudySetListResult, error) {
-	if userID == 0 {
-		all, err := s.sets.ListAll(ctx)
-		if err != nil {
-			return model.StudySetListResult{}, err
-		}
-		return model.StudySetListResult{Items: all, Total: len(all), Page: 1, PerPage: len(all), TotalPages: 1}, nil
+	if err := requireUserID(userID); err != nil {
+		return model.StudySetListResult{}, err
 	}
 	return s.sets.ListWithFilter(ctx, userID, f)
 }
 
-// GetWithCards returns a study set along with its flashcards.
-func (s *StudySetService) GetWithCards(ctx context.Context, id int64) (model.StudySet, error) {
+// GetWithCards returns a study set and its flashcards only when userID owns the set.
+func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (model.StudySet, error) {
+	if err := s.checkOwner(ctx, id, userID); err != nil {
+		return model.StudySet{}, err
+	}
 	set, err := s.sets.Get(ctx, id)
 	if err != nil {
 		return model.StudySet{}, err
@@ -56,8 +53,10 @@ func (s *StudySetService) GetWithCards(ctx context.Context, id int64) (model.Stu
 	return set, nil
 }
 
-// Create validates input and creates a new study set.
 func (s *StudySetService) Create(ctx context.Context, userID int64, in model.CreateStudySetInput) (model.StudySet, error) {
+	if err := requireUserID(userID); err != nil {
+		return model.StudySet{}, err
+	}
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
 	if in.Title == "" {
@@ -66,7 +65,6 @@ func (s *StudySetService) Create(ctx context.Context, userID int64, in model.Cre
 	return s.sets.Create(ctx, userID, in)
 }
 
-// Update validates input and updates a study set, checking ownership.
 func (s *StudySetService) Update(ctx context.Context, id, userID int64, in model.UpdateStudySetInput) (model.StudySet, error) {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
@@ -79,7 +77,6 @@ func (s *StudySetService) Update(ctx context.Context, id, userID int64, in model
 	return s.sets.Update(ctx, id, in)
 }
 
-// Delete removes a study set, checking ownership.
 func (s *StudySetService) Delete(ctx context.Context, id, userID int64) error {
 	if err := s.checkOwner(ctx, id, userID); err != nil {
 		return err
@@ -87,10 +84,10 @@ func (s *StudySetService) Delete(ctx context.Context, id, userID int64) error {
 	return s.sets.Delete(ctx, id)
 }
 
-// checkOwner returns ErrForbidden if userID does not own the study set.
+// checkOwner never accepts zero/invalid user IDs as an authorization bypass.
 func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) error {
-	if userID == 0 {
-		return nil
+	if err := requireUserID(userID); err != nil {
+		return err
 	}
 	ok, err := s.sets.IsOwner(ctx, id, userID)
 	if err != nil {
@@ -102,5 +99,12 @@ func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) erro
 	return nil
 }
 
-// ErrForbidden is returned when a user tries to modify someone else's resource.
+func requireUserID(userID int64) error {
+	if userID <= 0 {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+var ErrUnauthorized = errors.New("unauthorized")
 var ErrForbidden = errors.New("forbidden")
