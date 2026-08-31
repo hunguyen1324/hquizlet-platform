@@ -22,8 +22,10 @@ func WriteJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func WriteError(w http.ResponseWriter, status int, code, message string) {
-	WriteJSON(w, status, ErrorResponse{Code: code, Message: message})
+// WriteError keeps the existing handler call signature while emitting the
+// canonical {code,message} envelope used by Auth and the frontend client.
+func WriteError(w http.ResponseWriter, status int, message string) {
+	WriteJSON(w, status, ErrorResponse{Code: errorCodeForStatus(status), Message: message})
 }
 
 func WriteValidationError(w http.ResponseWriter, status int, field, message string) {
@@ -33,13 +35,34 @@ func WriteValidationError(w http.ResponseWriter, status int, field, message stri
 func WriteServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		WriteError(w, http.StatusNotFound, "not_found", "resource not found")
+		WriteError(w, http.StatusNotFound, "resource not found")
 	case errors.Is(err, service.ErrUnauthorized):
-		WriteError(w, http.StatusUnauthorized, "unauthorized", "authentication required")
+		WriteError(w, http.StatusUnauthorized, "authentication required")
 	case errors.Is(err, service.ErrForbidden):
-		WriteError(w, http.StatusForbidden, "forbidden", "you do not have permission to perform this action")
+		WriteError(w, http.StatusForbidden, "you do not have permission to perform this action")
 	default:
-		WriteError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		WriteError(w, http.StatusInternalServerError, "internal server error")
+	}
+}
+
+func errorCodeForStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusMethodNotAllowed:
+		return "method_not_allowed"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusUnprocessableEntity:
+		return "validation_error"
+	default:
+		return "internal_error"
 	}
 }
 
