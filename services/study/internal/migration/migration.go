@@ -120,22 +120,9 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS folder_study_sets_folder_id_idx ON folder_study_sets(folder_id)`,
 	`CREATE INDEX IF NOT EXISTS starred_flashcards_user_id_idx ON starred_flashcards(user_id)`,
 
-	// 013 – enable pg_trgm extension (must run before any index that uses
-	// gin_trgm_ops: PostgreSQL resolves the operator class when CREATE INDEX
-	// is parsed, regardless of any WHERE predicate on the index itself).
-	`DO $$ BEGIN
-		CREATE EXTENSION IF NOT EXISTS pg_trgm;
-	EXCEPTION WHEN OTHERS THEN
-		NULL;
-	END $$`,
+	// 013 – enable trigram search before creating the trigram index
+	`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
 
-	// 014 – full-text search index on study_sets title. Guarded so it is a
-	// no-op (not a failure) on databases where pg_trgm could not be enabled
-	// (e.g. restricted managed Postgres without the extension allow-listed).
-	`DO $$ BEGIN
-		IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
-			CREATE INDEX IF NOT EXISTS study_sets_title_trgm_idx
-				ON study_sets USING gin(title gin_trgm_ops);
-		END IF;
-	END $$`,
+	// 014 – full-text search index on study_sets title
+	`CREATE INDEX IF NOT EXISTS study_sets_title_trgm_idx ON study_sets USING gin(title gin_trgm_ops)`,
 }
