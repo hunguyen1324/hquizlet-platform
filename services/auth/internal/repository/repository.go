@@ -126,12 +126,7 @@ func (r *AuthRepository) DeleteAllSessions(ctx context.Context, userID int64) er
 }
 
 // PruneExpiredSessions deletes all expired sessions across all users. P2-AUTH-01.
-func (r *AuthRepository) PruneExpiredSessions(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= now()`)
-	return err
-}
-
-// PruneExpiredSessions removes all expired sessions. Called by a background job or startup.
+// Safe to call on startup or via a background job.
 func (r *AuthRepository) PruneExpiredSessions(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at <= now()`)
 	return err

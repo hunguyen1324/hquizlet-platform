@@ -23,7 +23,9 @@ func RequireAuth(svc *service.AuthService) func(http.Handler) http.Handler {
 			token := bearerToken(r)
 			u, err := svc.VerifyToken(r.Context(), token)
 			if err != nil {
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"code":"unauthorized","message":"invalid or expired token"}`))
 				return
 			}
 			ctx := context.WithValue(r.Context(), UserKey, u)
