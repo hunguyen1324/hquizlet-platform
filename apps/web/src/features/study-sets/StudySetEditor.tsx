@@ -1,5 +1,5 @@
 // StudySetEditor — Dev 3 [P2-WEB-02]
-// Tạo/sửa study set và flashcards qua studySetApi + flashcardApi.
+// Tạo/sửa study set và flashcards qua studySetApi + transactional bulkSave.
 
 import React, { useState } from "react";
 import type { StudySet, DraftCard } from "../../types";
@@ -79,7 +79,6 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
     setLoading(true);
     try {
-      // Create or update study set header
       const saved = existingSet
         ? await studySetApi.update(token, existingSet.id, {
             title: title.trim(),
@@ -90,27 +89,34 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             description: description.trim(),
           });
 
-      // Sync flashcards: create new, update existing, delete removed
-      const existingIds = new Set((existingSet?.flashcards ?? []).map((c) => c.id));
-      for (const card of cleanCards) {
-        if (card.id) {
-          existingIds.delete(card.id);
-          await flashcardApi.update(token, card.id, {
-            term: card.term,
-            definition: card.definition,
-          });
-        } else {
-          await flashcardApi.create(token, saved.id, {
-            term: card.term,
-            definition: card.definition,
-          });
-        }
-      }
-      for (const id of existingIds) {
-        await flashcardApi.delete(token, id);
-      }
+      const keepItems = cleanCards.map((card, position) => ({
+        ...(card.id ? { id: card.id } : {}),
+        term: card.term,
+        definition: card.definition,
+        position,
+      }));
 
-      // Fetch updated set with latest flashcards
+      const keptIds = new Set(
+        cleanCards
+          .map((card) => card.id)
+          .filter((id): id is number => typeof id === "number")
+      );
+
+      const deleteItems = (existingSet?.flashcards ?? [])
+        .filter((card) => !keptIds.has(card.id))
+        .map((card) => ({
+          id: card.id,
+          term: card.term,
+          definition: card.definition,
+          delete: true,
+        }));
+
+      await flashcardApi.bulkSave(
+        token,
+        saved.id,
+        [...keepItems, ...deleteItems]
+      );
+
       const updated = await studySetApi.get(token, saved.id);
       onSave(updated);
     } catch (err) {
