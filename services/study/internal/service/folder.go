@@ -22,19 +22,22 @@ func NewFolderService(folders repository.Folders, sets repository.StudySets) *Fo
 
 // List returns all folders for a user.
 func (s *FolderService) List(ctx context.Context, userID int64) ([]model.Folder, error) {
-	if userID == 0 {
-		return []model.Folder{}, nil
+	if userID <= 0 {
+		return nil, ErrUnauthorized
 	}
 	return s.folders.List(ctx, userID)
 }
 
 // GetWithStudySets returns a folder with its study sets, verifying ownership.
 func (s *FolderService) GetWithStudySets(ctx context.Context, id, userID int64) (model.Folder, error) {
+	if err := requireUserID(userID); err != nil {
+		return model.Folder{}, err
+	}
 	folder, err := s.folders.Get(ctx, id)
 	if err != nil {
 		return model.Folder{}, err
 	}
-	if userID != 0 && folder.UserID != userID {
+	if folder.UserID != userID {
 		return model.Folder{}, ErrForbidden
 	}
 	sets, err := s.folders.ListStudySets(ctx, id)
@@ -47,8 +50,8 @@ func (s *FolderService) GetWithStudySets(ctx context.Context, id, userID int64) 
 
 // Create validates and creates a new folder.
 func (s *FolderService) Create(ctx context.Context, userID int64, in model.CreateFolderInput) (model.Folder, error) {
-	if userID == 0 {
-		return model.Folder{}, errors.New("authentication required")
+	if err := requireUserID(userID); err != nil {
+		return model.Folder{}, err
 	}
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)
@@ -84,14 +87,12 @@ func (s *FolderService) AddStudySet(ctx context.Context, folderID, studySetID, u
 	if err := s.checkOwner(ctx, folderID, userID); err != nil {
 		return err
 	}
-	if userID != 0 {
-		ok, err := s.sets.IsOwner(ctx, studySetID, userID)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return ErrForbidden
-		}
+	ok, err := s.sets.IsOwner(ctx, studySetID, userID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
 	}
 	return s.folders.AddStudySet(ctx, folderID, studySetID)
 }
@@ -105,8 +106,8 @@ func (s *FolderService) RemoveStudySet(ctx context.Context, folderID, studySetID
 }
 
 func (s *FolderService) checkOwner(ctx context.Context, id, userID int64) error {
-	if userID == 0 {
-		return nil
+	if err := requireUserID(userID); err != nil {
+		return err
 	}
 	ok, err := s.folders.IsOwner(ctx, id, userID)
 	if err != nil {
@@ -114,6 +115,13 @@ func (s *FolderService) checkOwner(ctx context.Context, id, userID int64) error 
 	}
 	if !ok {
 		return ErrForbidden
+	}
+	return nil
+}
+
+func requireUserID(userID int64) error {
+	if userID <= 0 {
+		return ErrUnauthorized
 	}
 	return nil
 }
