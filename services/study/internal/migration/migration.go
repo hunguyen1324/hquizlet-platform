@@ -120,14 +120,9 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS folder_study_sets_folder_id_idx ON folder_study_sets(folder_id)`,
 	`CREATE INDEX IF NOT EXISTS starred_flashcards_user_id_idx ON starred_flashcards(user_id)`,
 
-	// 013 – full-text search index on study_sets title
-	`CREATE INDEX IF NOT EXISTS study_sets_title_trgm_idx ON study_sets USING gin(title gin_trgm_ops)
-	 WHERE EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')`,
+	// 013 – enable trigram search before creating the trigram index
+	`CREATE EXTENSION IF NOT EXISTS pg_trgm`,
 
-	// 014 – enable pg_trgm extension if not present (may fail silently on restricted DBs)
-	`DO $$ BEGIN
-		CREATE EXTENSION IF NOT EXISTS pg_trgm;
-	EXCEPTION WHEN OTHERS THEN
-		NULL;
-	END $$`,
+	// 014 – full-text search index on study_sets title
+	`CREATE INDEX IF NOT EXISTS study_sets_title_trgm_idx ON study_sets USING gin(title gin_trgm_ops)`,
 }
