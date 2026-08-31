@@ -1,33 +1,32 @@
-// main.tsx - Dev 3
-// Entry point. Auth + study set flow gọi gateway API thật.
+// main.tsx — Dev 3 [P2-WEB-01, P2-WEB-04]
+// Entry point. Auth + study set flow gọi gateway API thật qua lib/api.
 
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-import { AuthProvider, useAuth, apiFetch } from "./features/auth/AuthContext";
+import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
-import type { StudySet, ServiceHealth, HealthStatus, AppView, Flashcard } from "./types";
-
-const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+import { studySetApi, flashcardApi, fetchHealth } from "./lib/api";
+import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus } from "./types";
 
 function AppShell() {
   const { user, logout, token } = useAuth();
   const [view, setView] = useState<AppView>("dashboard");
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
+  const [loadingSet, setLoadingSet] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
   const [services, setServices] = useState<ServiceHealth[]>([]);
 
   useEffect(() => {
     async function checkGateway() {
       try {
-        const res = await fetch(`${gatewayUrl}/healthz/services`);
-        const data = (await res.json()) as { services: ServiceHealth[] };
-        setServices(data.services);
-        setHealthStatus(data.services.every((s) => s.status === "ok") ? "live" : "offline");
+        const svcs = await fetchHealth();
+        setServices(svcs);
+        setHealthStatus(svcs.every((s) => s.status === "ok") ? "live" : "offline");
       } catch {
         setHealthStatus("offline");
       }
@@ -48,19 +47,24 @@ function AppShell() {
   }
 
   async function handleOpenSet(id: number) {
-    const data = await apiFetch<StudySet>(`/v1/study-sets/${id}`, token);
-    setSelectedSet(data);
-    setView("study");
+    setLoadingSet(true);
+    try {
+      const data = await studySetApi.get(token, id);
+      setSelectedSet(data);
+      setView("study");
+    } finally {
+      setLoadingSet(false);
+    }
   }
 
   async function handleToggleStar(card: Flashcard) {
-    await apiFetch(`/v1/flashcards/${card.id}/star`, token, { method: "POST" });
+    await flashcardApi.toggleStar(token, card.id);
     if (selectedSet) await handleOpenSet(selectedSet.id);
   }
 
   async function handleDeleteSet() {
     if (!selectedSet) return;
-    await apiFetch(`/v1/study-sets/${selectedSet.id}`, token, { method: "DELETE" });
+    await studySetApi.delete(token, selectedSet.id);
     setSelectedSet(null);
     setView("dashboard");
   }
@@ -73,7 +77,13 @@ function AppShell() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="ghost-button" onClick={() => { setView("dashboard"); setSelectedSet(null); }}>
+        <button
+          className="ghost-button"
+          onClick={() => {
+            setView("dashboard");
+            setSelectedSet(null);
+          }}
+        >
           HQuizlet
         </button>
         <div className="user-menu">
@@ -82,11 +92,20 @@ function AppShell() {
         </div>
       </header>
 
-      {view === "dashboard" && (
+      {loadingSet && (
+        <div className="loading-overlay" aria-busy="true">
+          <span>Đang tải học phần...</span>
+        </div>
+      )}
+
+      {!loadingSet && view === "dashboard" && (
         <Dashboard
           healthStatus={healthStatus}
           onOpen={(id) => void handleOpenSet(id)}
-          onCreate={() => { setSelectedSet(null); setView("editor"); }}
+          onCreate={() => {
+            setSelectedSet(null);
+            setView("editor");
+          }}
         />
       )}
 
@@ -98,7 +117,7 @@ function AppShell() {
         />
       )}
 
-      {view === "study" && selectedSet && (
+      {!loadingSet && view === "study" && selectedSet && (
         <StudyDetail
           set={selectedSet}
           onEdit={() => setView("editor")}
@@ -120,5 +139,7 @@ function App() {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <React.StrictMode><App /></React.StrictMode>
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
 );

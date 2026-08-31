@@ -1,11 +1,12 @@
-// AuthContext - Dev 3 (FE-CORE-03, FE-CORE-04)
-// Gọi gateway API thật. Mock đã bị xóa — đây là fix regression từ commit trước.
+// AuthContext — Dev 3 [P2-WEB-01]
+// Auth state: login, register, logout, session restore.
+// Dùng authApi từ lib/api — không gọi fetch trực tiếp.
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { User, AuthResponse } from "../../types";
+import { authApi, apiFetch } from "../../lib/api";
 
 const TOKEN_KEY = "hquizlet.sessionToken";
-const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
 type AuthContextValue = {
   user: User | null;
@@ -19,20 +20,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function apiFetch<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${gatewayUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((body as { error?: string }).error ?? `Request failed ${res.status}`);
-  return body as T;
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
@@ -42,8 +29,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Restore session on mount
   useEffect(() => {
     if (!token) return;
-    apiFetch<{ authenticated: boolean; user: User }>("/v1/auth/me", token)
-      .then((res) => { if (res.authenticated) setUser(res.user); else clearSession(); })
+    authApi
+      .me(token)
+      .then((res) => {
+        if (res.authenticated) setUser(res.user);
+        else clearSession();
+      })
       .catch(() => clearSession());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -53,17 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }
 
+  function persistSession(res: AuthResponse) {
+    localStorage.setItem(TOKEN_KEY, res.token);
+    setToken(res.token);
+    setUser(res.user);
+  }
+
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch<AuthResponse>("/v1/auth/login", "", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      localStorage.setItem(TOKEN_KEY, res.token);
-      setToken(res.token);
-      setUser(res.user);
+      persistSession(await authApi.login(email, password));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng nhập thất bại.");
     } finally {
@@ -75,13 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch<AuthResponse>("/v1/auth/register", "", {
-        method: "POST",
-        body: JSON.stringify({ name, email, password }),
-      });
-      localStorage.setItem(TOKEN_KEY, res.token);
-      setToken(res.token);
-      setUser(res.user);
+      persistSession(await authApi.register(name, email, password));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng ký thất bại.");
     } finally {
@@ -91,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await apiFetch("/v1/auth/logout", token, { method: "POST" });
+      await authApi.logout(token);
     } catch {
       // best-effort
     } finally {
@@ -112,5 +97,5 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-// Export apiFetch cho các feature khác dùng (Dashboard, StudySetEditor)
+// Re-export apiFetch cho các file cũ còn dùng trực tiếp (sẽ migrate dần)
 export { apiFetch };
