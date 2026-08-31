@@ -1,6 +1,6 @@
-# HQuizlet Platform – Docker Compose (Sprint 1)
+# HQuizlet Platform – Docker Compose (Phase 2)
 # Chạy: docker compose -f infra/docker/docker-compose.yml up --build
-# Dev 5 – [INT-04]
+# Dev 5 – [P2-INT-03]
 
 services:
 
@@ -72,6 +72,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      auth:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
@@ -92,6 +94,7 @@ services:
     environment:
       PORT: "8083"
       DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
+      AUTH_SERVICE_URL: http://auth:8081
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,6 +122,12 @@ services:
       gateway:
         condition: service_healthy
     restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5173"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # ── PostgreSQL ────────────────────────────────────────
   postgres:
@@ -148,15 +157,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 3
-    restart: unless-stopped
-
-  # ── NATS ──────────────────────────────────────────────
-  nats:
-    image: nats:2-alpine
-    ports:
-      - "4222:4222"
-      - "8222:8222"
+      retries: 5
     restart: unless-stopped
 
 volumes:
