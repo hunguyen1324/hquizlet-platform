@@ -11,7 +11,9 @@ import (
 )
 
 type ErrorResponse struct {
-	Error string `json:"error"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Field   string `json:"field,omitempty"`
 }
 
 func WriteJSON(w http.ResponseWriter, status int, value any) {
@@ -20,25 +22,31 @@ func WriteJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func WriteError(w http.ResponseWriter, status int, message string) {
-	WriteJSON(w, status, ErrorResponse{Error: message})
+func WriteError(w http.ResponseWriter, status int, code, message string) {
+	WriteJSON(w, status, ErrorResponse{Code: code, Message: message})
+}
+
+func WriteValidationError(w http.ResponseWriter, status int, field, message string) {
+	WriteJSON(w, status, ErrorResponse{Code: "validation_error", Message: message, Field: field})
 }
 
 func WriteServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		WriteError(w, http.StatusNotFound, "resource not found")
+		WriteError(w, http.StatusNotFound, "not_found", "resource not found")
 	case errors.Is(err, service.ErrUnauthorized):
-		WriteError(w, http.StatusUnauthorized, "authentication required")
+		WriteError(w, http.StatusUnauthorized, "unauthorized", "authentication required")
 	case errors.Is(err, service.ErrForbidden):
-		WriteError(w, http.StatusForbidden, "you do not have permission to perform this action")
+		WriteError(w, http.StatusForbidden, "forbidden", "you do not have permission to perform this action")
 	default:
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		WriteError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 	}
 }
 
 func PathParts(path, prefix string) []string {
 	raw := strings.Trim(strings.TrimPrefix(path, prefix), "/")
-	if raw == "" { return nil }
+	if raw == "" {
+		return nil
+	}
 	return strings.Split(raw, "/")
 }
