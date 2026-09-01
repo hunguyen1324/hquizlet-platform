@@ -1,11 +1,11 @@
-// lib/api/client.ts — Dev 5 [P2-INT-02]
+// lib/api/client.ts — Dev 5
 // Canonical frontend API client. Feature code should call this module instead of fetch directly.
 import type { AuthResponse, StudySet, Flashcard, User, DraftCard } from "../../types";
 
 const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
-export type ApiErrorBody = { code?: string; message?: string; field?: string; error?: string };
+export type ApiErrorBody = { code?: string; message?: string; field?: string; error?: string; requestId?: string; details?: Record<string, unknown> };
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string, public readonly code?: string, public readonly field?: string) { super(message); this.name = "ApiError"; }
+  constructor(public readonly status: number, message: string, public readonly code?: string, public readonly field?: string, public readonly requestId?: string) { super(message); this.name = "ApiError"; }
 }
 export async function apiFetch<T>(path: string, token: string, init: RequestInit = {}, params?: Record<string, string | number | undefined>): Promise<T> {
   const url = new URL(`${gatewayUrl}${path}`);
@@ -13,7 +13,7 @@ export async function apiFetch<T>(path: string, token: string, init: RequestInit
   const res = await fetch(url.toString(), { ...init, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers as Record<string, string> | undefined) } });
   if (res.status === 204) return undefined as unknown as T;
   const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
-  if (!res.ok) throw new ApiError(res.status, body.message ?? body.error ?? `Request failed ${res.status}`, body.code, body.field);
+  if (!res.ok) throw new ApiError(res.status, body.message ?? body.error ?? `Request failed ${res.status}`, body.code, body.field, body.requestId);
   return body as T;
 }
 
@@ -65,6 +65,45 @@ export const folderApi = {
 
 export type LearningMode = "flashcards" | "learn" | "test" | "match";
 export type LearningProgress = { id: number; userId: number; studySetId: number; mode: LearningMode; score: number; total: number; completedAt: string | null; createdAt: string };
+
+export type QuizGeneratedItem = {
+  id: string;
+  flashcardId: number;
+  kind: "term" | "definition" | "question" | "pair";
+  text?: string;
+  term?: string;
+  definition?: string;
+  choices?: string[];
+  pairId?: string;
+};
+export type QuizGenerateResponse = {
+  mode: LearningMode;
+  seed: number;
+  items: QuizGeneratedItem[];
+  contractVersion: string;
+};
+export type QuizAnswer = {
+  flashcardId: number;
+  answer?: string;
+  pairId?: string;
+  matchedFlashcardId?: number;
+  attempts: number;
+  responseTimeMs?: number;
+};
+export type QuizEvaluateResponse = {
+  mode: LearningMode;
+  seed: number;
+  score: number;
+  total: number;
+  cardResults: Array<{ flashcardId: number; correct: boolean; attempts: number; responseTimeMs?: number }>;
+  contractVersion: string;
+};
+export const quizApi = {
+  generate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit?: number; options?: Record<string, unknown> }, signal?: AbortSignal): Promise<QuizGenerateResponse> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz/generate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
+  evaluate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; answers: QuizAnswer[] }, signal?: AbortSignal): Promise<QuizEvaluateResponse> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz/evaluate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
+};
 
 export type ServiceHealth = { name: string; url: string; status: string };
 export async function fetchHealth(): Promise<ServiceHealth[]> { const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", ""); return data.services ?? []; }
