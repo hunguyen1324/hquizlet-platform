@@ -53,14 +53,21 @@ components:
   schemas:
     Error:
       type: object
-      required: [error]
+      required: [code, message, requestId, details]
       properties:
-        error:
+        code:
           type: string
-          example: "invalid credentials"
+          example: "INVALID_CREDENTIAL"
+        message:
+          type: string
+          example: "invalid email or password"
+        requestId:
+          type: string
+          example: "20260901143000.000000000"
         details:
-          type: string
-          example: "password too short"
+          type: object
+          additionalProperties: true
+          example: {}
 
     # Khớp services/auth/internal/model/model.go User struct
     User:

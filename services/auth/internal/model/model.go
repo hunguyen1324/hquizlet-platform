@@ -8,15 +8,27 @@ type User struct {
 	Email     string    `json:"email"`
 	Image     string    `json:"image"`
 	Role      string    `json:"role"`
+	Disabled  bool      `json:"-"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Session struct {
-	ID        int64     `json:"id"`
+	ID        int64      `json:"id"`
+	UserID    int64      `json:"userId"`
+	TokenHash string     `json:"-"`
+	ExpiresAt time.Time  `json:"expiresAt"`
+	RevokedAt *time.Time `json:"-"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
+// VerifiedIdentity is the canonical identity returned to trusted services.
+// It deliberately excludes the raw token and token hash.
+type VerifiedIdentity struct {
 	UserID    int64     `json:"userId"`
-	TokenHash string    `json:"-"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Role      string    `json:"role"`
 	ExpiresAt time.Time `json:"expiresAt"`
-	CreatedAt time.Time `json:"createdAt"`
 }
 
 type RegisterInput struct {
