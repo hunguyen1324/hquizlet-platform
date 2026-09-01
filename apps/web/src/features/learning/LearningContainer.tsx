@@ -1,6 +1,6 @@
 // LearningContainer — Dev 4
 // P2-LEARN-01..04: Entry-point nhận StudySet + mode, chạy với data thật
-// Phase 2: không còn mock fallback, empty states đầy đủ
+// P3-LEARN-01..03: Truyền studySetId xuống modes để enable progress save
 
 import React from "react";
 import type { StudySet, Flashcard } from "./types";
@@ -31,13 +31,13 @@ export function LearningContainer({ set, mode }: Props) {
 
   switch (mode) {
     case "flashcards":
-      return <FlashcardsMode cards={cards} />;
+      return <FlashcardsMode cards={cards} studySetId={set.id} />;
     case "learn":
-      return <LearnMode cards={cards} />;
+      return <LearnMode cards={cards} studySetId={set.id} />;
     case "test":
-      return <TestMode cards={cards} />;
+      return <TestMode cards={cards} studySetId={set.id} />;
     case "match":
-      return <MatchMode cards={cards} />;
+      return <MatchMode cards={cards} studySetId={set.id} />;
     default:
       return null;
   }
