@@ -1,0 +1,58 @@
+name: phase3-contract-gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'phase3/**']
+
+permissions:
+  contents: read
+
+jobs:
+  contract-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+
+      - name: Go tests
+        run: go test ./...
+
+      - name: Go build
+        run: go build ./...
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Web build
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Validate OpenAPI YAML
+        run: ruby -e 'require "yaml"; YAML.load_file("packages/api-contracts/openapi.yaml"); puts "OpenAPI YAML syntax: PASS"'
+
+      - name: Lint OpenAPI contract
+        run: npx --yes @redocly/cli@latest lint packages/api-contracts/openapi.yaml
