@@ -1,0 +1,24 @@
+{
+  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/generate — match mode",
+  "request": {
+    "method": "POST",
+    "path": "/v1/study-sets/101/quiz/generate",
+    "headers": { "Authorization": "Bearer <valid-token>" },
+    "body": { "mode": "match", "seed": 42, "limit": 100 }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "mode": "match", "seed": 42, "contractVersion": "1.4.0",
+      "items": {
+        "subset": 4,
+        "pairs": [
+          { "pairId": "card-4001", "flashcardId": 4001, "term": "JavaScript runtime", "definition": "Node.js" },
+          { "pairId": "card-4002", "flashcardId": 4002, "term": "Package manager", "definition": "npm" },
+          { "pairId": "card-4003", "flashcardId": 4003, "term": "Type system", "definition": "TypeScript" },
+          { "pairId": "card-4004", "flashcardId": 4004, "term": "Build tool", "definition": "Vite" }
+        ]
+      }
+    }
+  }
+}

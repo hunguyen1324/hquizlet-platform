@@ -1,0 +1,20 @@
+{
+  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/generate — learn mode",
+  "request": {
+    "method": "POST",
+    "path": "/v1/study-sets/101/quiz/generate",
+    "headers": { "Authorization": "Bearer <valid-token>" },
+    "body": { "mode": "learn", "seed": 7, "limit": 100 }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "mode": "learn", "seed": 7, "contractVersion": "1.4.0",
+      "items": [
+        { "flashcardId": 2001, "term": "HTTP Method for reading", "definition": "GET", "starred": false, "position": 0 },
+        { "flashcardId": 2002, "term": "HTTP Method for creating", "definition": "POST", "starred": true, "position": 1 },
+        { "flashcardId": 2003, "term": "HTTP Method for replacing", "definition": "PUT", "starred": false, "position": 2 }
+      ]
+    }
+  }
+}

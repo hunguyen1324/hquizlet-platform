@@ -34,7 +34,7 @@ export function TestMode({ cards, studySetId }: Props) {
   if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bài kiểm tra…</div>;
   if (generation.state.state === "error") return <div className="learn-error" role="alert">Không thể tạo Test: {generation.state.error.message}<button className="secondary-button" onClick={generation.regenerate}>Thử lại</button></div>;
   if (!q || !data) return <LearningEmptyState message="Backend không trả về câu hỏi hợp lệ." hint="Thử lại để tạo một bài kiểm tra mới." />;
-
+  const seed = data.seed;
   async function submitCurrent() {
     const current = answers[q.flashcardId];
     if (!current || submitted) return;
@@ -49,7 +49,11 @@ export function TestMode({ cards, studySetId }: Props) {
     setError(null);
     const payload: QuizAnswer[] = questions.map((item) => ({ flashcardId: item.flashcardId, answer: nextAnswers[item.flashcardId]?.answer ?? "", attempts: nextAnswers[item.flashcardId]?.attempts ?? 1, responseTimeMs: nextAnswers[item.flashcardId]?.responseTimeMs ?? 0 }));
     try {
-      const evaluated = await quizApi.evaluate(token, studySetId, { mode: "test", seed: data.seed, answers: payload });
+      const evaluated = await quizApi.evaluate(token, studySetId, {
+        mode: "test",
+        seed,
+        answers: payload,
+      });
       const cardResults = evaluated.cardResults as CardResult[];
       setResult({ score: evaluated.score, total: evaluated.total, cardResults });
       onSessionComplete({ score: evaluated.score, total: evaluated.total, cardResults, startedAt });
@@ -75,7 +79,7 @@ export function TestMode({ cards, studySetId }: Props) {
 
   const selected = answers[q.flashcardId];
   return <div className="test-mode">
-    <div className="learn-header"><span className="flashcards-counter">{index + 1} / {questions.length}</span><span>Seed: {data.seed}</span></div>
+    <div className="learn-header"><span className="flashcards-counter">{index + 1} / {questions.length}</span><span>Seed: {seed}</span></div>
     <div className="test-question"><p className="test-question-label">Chọn định nghĩa đúng:</p><p className="test-term">{q.term}</p></div>
     <div className="test-choices">
       {q.choices.map((choice, i) => <button key={`${choice}-${i}`} className={`test-choice${selected?.answer === choice ? " selected" : ""}`} onClick={() => choose(choice)} disabled={Boolean(selected) || submitted} aria-label={`Đáp án ${String.fromCharCode(65 + i)}: ${choice}`}><span className="choice-letter">{String.fromCharCode(65 + i)}</span>{choice}</button>)}

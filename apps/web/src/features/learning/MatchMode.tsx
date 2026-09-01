@@ -93,7 +93,7 @@ export function MatchMode({ cards, studySetId }: Props) {
     <div className="match-grid" role="group" aria-label="Ghép cặp thuật ngữ và định nghĩa">
       {tiles.map((tile) => <button key={tile.id} className={`match-item${matched.has(tile.cardId) ? " matched" : ""}${selectedId === tile.id ? " selected" : ""}`} onClick={() => select(tile)} disabled={matched.has(tile.cardId)} aria-pressed={selectedId === tile.id}><span className="match-item-type">{tile.type === "term" ? "T" : "Đ"}</span><span className="match-item-text">{tile.text}</span></button>)}
     </div>
-    <p className="keyboard-hint" aria-hidden="true">Click để chọn và ghép cặp · Seed: {data.seed}</p>
+    <p className="keyboard-hint" aria-hidden="true">Click để chọn và ghép cặp · Seed: {data?.seed ?? "-"}</p>
   </div>;
 }
 
