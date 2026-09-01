@@ -2,8 +2,6 @@
 // Phase 3: reusable progress summary/history presentation.
 // Deliberately API-agnostic: no endpoint, response shape, or mock data is hard-coded here.
 
-import React from "react";
-
 export type ProgressPanelStatus = "idle" | "loading" | "success" | "empty" | "error";
 
 export type ProgressSummaryView = {
