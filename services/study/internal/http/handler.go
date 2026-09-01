@@ -10,18 +10,20 @@ import (
 	"strings"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
 )
 
 type Handler struct {
-	sets    *service.StudySetService
-	cards   *service.FlashcardService
-	folders *service.FolderService
-	db      *sql.DB
+	sets     *service.StudySetService
+	cards    *service.FlashcardService
+	folders  *service.FolderService
+	progress *service.ProgressService
+	db       *sql.DB
 }
 
-func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, db *sql.DB) *Handler {
-	return &Handler{sets: sets, cards: cards, folders: folders, db: db}
+func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, db *sql.DB) *Handler {
+	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, db: db}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -33,6 +35,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/folders", h.listFolders)
 	mux.HandleFunc("POST /v1/folders", h.createFolder)
 	mux.HandleFunc("/v1/folders/", h.folderRouter)
+	// Progress routes – handled within studySetRouter via path inspection.
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +90,26 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 3 && parts[1] == "flashcards" && parts[2] == "bulk" {
 		if r.Method == http.MethodPost { h.bulkSaveFlashcards(w, r, setID) } else { WriteError(w, http.StatusMethodNotAllowed, "method not allowed") }
+		return
+	}
+
+	// Progress sub-routes:
+	//   POST /v1/study-sets/{id}/progress
+	//   GET  /v1/study-sets/{id}/progress
+	//   GET  /v1/study-sets/{id}/progress/latest
+	if len(parts) == 2 && parts[1] == "progress" {
+		switch r.Method {
+		case http.MethodPost:
+			h.saveProgress(w, r, setID)
+		case http.MethodGet:
+			h.getProgressSummary(w, r, setID)
+		default:
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+	if len(parts) == 3 && parts[1] == "progress" && parts[2] == "latest" {
+		if r.Method == http.MethodGet { h.getLatestProgress(w, r, setID) } else { WriteError(w, http.StatusMethodNotAllowed, "method not allowed") }
 		return
 	}
 
@@ -203,6 +226,71 @@ func (h *Handler) folderRouter(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Progress handlers
+// ---------------------------------------------------------------------------
+
+// saveProgress handles POST /v1/study-sets/{id}/progress.
+// userID is read from the X-User-ID header set by the gateway (never trusted from body).
+func (h *Handler) saveProgress(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	var in model.SaveProgressInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	session, err := h.progress.Save(r.Context(), userIDFromHeader(r), studySetID, in)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrConflict):
+			WriteError(w, http.StatusConflict, "duplicate idempotency key: this session was already saved")
+		case errors.Is(err, service.ErrUnauthorized):
+			WriteError(w, http.StatusUnauthorized, "authentication required")
+		case errors.Is(err, service.ErrForbidden):
+			WriteError(w, http.StatusForbidden, "you do not have permission to perform this action")
+		case errors.Is(err, repository.ErrNotFound):
+			WriteError(w, http.StatusNotFound, "resource not found")
+		default:
+			// Treat unknown errors as validation if they have a message
+			WriteError(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	WriteJSON(w, http.StatusCreated, session)
+}
+
+// getProgressSummary handles GET /v1/study-sets/{id}/progress.
+func (h *Handler) getProgressSummary(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	q := r.URL.Query()
+	filter := model.ProgressFilter{
+		Page:    intQueryParam(q.Get("page"), 1),
+		PerPage: intQueryParam(q.Get("per_page"), 20),
+	}
+	summary, err := h.progress.GetSummary(r.Context(), userIDFromHeader(r), studySetID, filter)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, summary)
+}
+
+// getLatestProgress handles GET /v1/study-sets/{id}/progress/latest.
+func (h *Handler) getLatestProgress(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	modeStr := r.URL.Query().Get("mode")
+	if modeStr == "" {
+		WriteError(w, http.StatusBadRequest, "query param 'mode' is required (flashcards|learn|test|match)")
+		return
+	}
+	mode := model.LearningMode(modeStr)
+	session, err := h.progress.GetLatestByMode(r.Context(), userIDFromHeader(r), studySetID, mode)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, session)
+}
+
+// ---------------------------------------------------------------------------
 
 func userIDFromHeader(r *http.Request) int64 {
 	raw := r.Header.Get("X-User-ID")

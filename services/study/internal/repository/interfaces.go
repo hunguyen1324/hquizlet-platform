@@ -5,6 +5,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 )
@@ -46,9 +47,26 @@ type Folders interface {
 	RemoveStudySet(ctx context.Context, folderID, studySetID int64) error
 }
 
+// LearningProgress is the interface for progress data access.
+// Save must be atomic: it inserts the session and all card results in one transaction,
+// rolling back entirely on any error.
+type LearningProgress interface {
+	// Save inserts a new session + card results atomically.
+	// Returns ErrDuplicateIdempotencyKey if (userID, idempotencyKey) already exists.
+	Save(ctx context.Context, userID, studySetID int64, in model.SaveProgressInput) (model.LearningSession, error)
+	// GetSummary returns aggregate stats + paginated history for one user+set.
+	GetSummary(ctx context.Context, userID, studySetID int64, f model.ProgressFilter) (model.ProgressSummary, error)
+	// GetLatestByMode returns the most-recent session for the given mode, or ErrNotFound.
+	GetLatestByMode(ctx context.Context, userID, studySetID int64, mode model.LearningMode) (model.LearningSession, error)
+}
+
+// ErrDuplicateIdempotencyKey is returned when a retry uses the same idempotency key.
+var ErrDuplicateIdempotencyKey = errors.New("duplicate idempotency key")
+
 // Compile-time interface checks.
 var (
-	_ StudySets = (*StudySetRepository)(nil)
-	_ Flashcards = (*FlashcardRepository)(nil)
-	_ Folders    = (*FolderRepository)(nil)
+	_ StudySets       = (*StudySetRepository)(nil)
+	_ Flashcards      = (*FlashcardRepository)(nil)
+	_ Folders         = (*FolderRepository)(nil)
+	_ LearningProgress = (*LearningProgressRepository)(nil)
 )
