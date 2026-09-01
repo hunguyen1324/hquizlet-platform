@@ -1,233 +1,111 @@
-// MatchMode — Dev 4
-// P2-LEARN-04: Ghép cặp term/definition, timer local, completion state
-// P3-LEARN-01,02,03: Nối completion với saveProgress thật; per-card results từ wrongCount
-
+// MatchMode — Dev 5
+// Phase 4: Match renders only the subset/pairs returned by quiz/generate and
+// sends the selected card identities to quiz/evaluate. No client-side shuffle.
 import React from "react";
-import type { Flashcard, MatchState, MatchItem } from "./types";
+import { useAuth } from "../auth/AuthContext";
+import { quizApi, type QuizAnswer, type QuizGeneratedItem } from "../../lib/api/client";
+import type { Flashcard } from "./types";
 import type { CardResult } from "./progressContract";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
 import { ProgressSaveStatus } from "./ProgressSaveStatus";
+import { useQuizGeneration } from "./useQuizGeneration";
 import "./learning.css";
 
-type Props = {
-  cards: Flashcard[];
-  studySetId: number;
-};
-
-const MAX_CARDS = 6;
-
-function shuffleArray<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function buildItems(cards: Flashcard[]): MatchItem[] {
-  const terms: MatchItem[] = cards.map((c) => ({
-    id: `card-${c.id}-term`, cardId: c.id, text: c.term, type: "term", matched: false, selected: false,
-  }));
-  const defs: MatchItem[] = cards.map((c) => ({
-    id: `card-${c.id}-def`, cardId: c.id, text: c.definition, type: "definition", matched: false, selected: false,
-  }));
-  return shuffleArray([...terms, ...defs]);
-}
-
-function formatTime(ms: number): string {
-  const secs = Math.floor(ms / 1000);
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
-function useTimer(active: boolean) {
-  const [elapsed, setElapsed] = React.useState(0);
-  const elapsedRef = React.useRef(0);
-  const startRef = React.useRef(Date.now());
-  React.useEffect(() => {
-    if (!active) return;
-    startRef.current = Date.now() - elapsedRef.current;
-    const id = setInterval(() => {
-      const next = Date.now() - startRef.current;
-      elapsedRef.current = next;
-      setElapsed(next);
-    }, 100);
-    return () => clearInterval(id);
-  }, [active]);
-  return elapsed;
-}
+type Props = { cards: Flashcard[]; studySetId: number };
+type MatchTile = { id: string; cardId: number; text: string; type: "term" | "definition"; pairId: string };
 
 export function MatchMode({ cards, studySetId }: Props) {
-  const [startedAt, setStartedAt] = React.useState(() => new Date());
-  const [subsetCards, setSubsetCards] = React.useState<Flashcard[]>(() =>
-    shuffleArray(cards).slice(0, MAX_CARDS)
-  );
-  const [state, setState] = React.useState<MatchState>(() => ({
-    items: buildItems(subsetCards),
-    selectedId: null,
-    matchedPairs: 0,
-    totalPairs: Math.min(cards.length, MAX_CARDS),
-    startedAt: Date.now(),
-    finishedAt: null,
-  }));
-  const [wrongPair, setWrongPair] = React.useState<[string, string] | null>(null);
+  const { token } = useAuth();
+  const generation = useQuizGeneration(studySetId, "match", 6);
+  const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "match" });
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [matched, setMatched] = React.useState<Set<number>>(new Set());
   const [wrongCount, setWrongCount] = React.useState(0);
+  const [answers, setAnswers] = React.useState<QuizAnswer[]>([]);
+  const [evaluated, setEvaluated] = React.useState<Set<number>>(new Set());
+  const [startedAt, setStartedAt] = React.useState(() => new Date());
+  const [elapsed, setElapsed] = React.useState(0);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
-    studySetId,
-    mode: "match",
-  });
+  const data = generation.state.state === "ready" ? generation.state.data : null;
+  const tiles = React.useMemo(() => toTiles(data?.items ?? []), [data]);
+  const totalPairs = React.useMemo(() => new Set(tiles.map((x) => x.pairId)).size, [tiles]);
+  const finished = totalPairs > 0 && matched.size === totalPairs;
 
-  const finished = state.matchedPairs === state.totalPairs && state.totalPairs > 0;
-  const elapsed = useTimer(!finished && state.totalPairs > 0);
-
-  // Trigger save on completion — once.
-  const finishTriggeredRef = React.useRef(false);
   React.useEffect(() => {
-    if (!finished || finishTriggeredRef.current) return;
-    finishTriggeredRef.current = true;
-    // Match mode: all cards are "correct" (player matched them all).
-    // wrongCount tracks mismatches for accuracy display, not correctness.
-    const score = state.totalPairs;
-    const total = state.totalPairs;
-    const cardResults: CardResult[] = subsetCards.slice(0, state.totalPairs).map((card) => ({
-      flashcardId: card.id,
-      correct: true,
-      attempts: 1,
-    }));
-    onSessionComplete({ score, total, cardResults, startedAt });
-  }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (finished) return;
+    const timer = window.setInterval(() => setElapsed(Date.now() - startedAt.getTime()), 100);
+    return () => window.clearInterval(timer);
+  }, [finished, startedAt]);
 
-  if (cards.length < 2) {
-    return (
-      <LearningEmptyState
-        message="Cần ít nhất 2 thẻ để chơi ghép cặp."
-        hint="Thêm thẻ trong phần 'Sửa thẻ'."
-      />
-    );
+  React.useEffect(() => {
+    if (!finished || !data || evaluated.size > 0) return;
+    const payload = answers.map((a) => ({ ...a, attempts: Math.max(1, a.attempts) }));
+    if (payload.length !== totalPairs) return;
+    let cancelled = false;
+    quizApi.evaluate(token, studySetId, { mode: "match", seed: data.seed, answers: payload })
+      .then((result) => {
+        if (cancelled) return;
+        const next = new Set(result.cardResults.filter((r) => r.correct).map((r) => r.flashcardId));
+        setEvaluated(next);
+        onSessionComplete({ score: result.score, total: result.total, cardResults: result.cardResults as CardResult[], startedAt });
+      })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : "Không thể chấm kết quả"); });
+    return () => { cancelled = true; };
+  }, [finished, data, answers, evaluated.size, token, studySetId, totalPairs, startedAt, onSessionComplete]);
+
+  if (cards.length < 2) return <LearningEmptyState message="Cần ít nhất 2 thẻ để chơi ghép cặp." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
+  if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
+  if (generation.state.state === "error") return <div className="learn-error" role="alert">Không thể tạo Match: {generation.state.error.message}<button className="secondary-button" onClick={generation.regenerate}>Thử lại</button></div>;
+  if (tiles.length === 0) return <LearningEmptyState message="Backend không trả về cặp ghép hợp lệ." hint="Thử lại để tạo một bộ mới." />;
+
+  function select(tile: MatchTile) {
+    if (matched.has(tile.cardId)) return;
+    if (!selectedId) { setSelectedId(tile.id); return; }
+    const first = tiles.find((x) => x.id === selectedId);
+    if (!first || first.id === tile.id) return;
+    const isCorrect = first.cardId === tile.cardId && first.type !== tile.type;
+    const attempts = (answers.find((x) => x.flashcardId === tile.cardId)?.attempts ?? 0) + 1;
+    setAnswers((current) => [...current.filter((x) => x.flashcardId !== tile.cardId), {
+      flashcardId: tile.cardId,
+      pairId: tile.pairId,
+      matchedFlashcardId: tile.cardId,
+      attempts,
+    }]);
+    if (isCorrect) setMatched((current) => new Set(current).add(tile.cardId));
+    else setWrongCount((n) => n + 1);
+    setSelectedId(null);
   }
 
-  function handleSelect(id: string) {
-    if (wrongPair) return;
-    setState((s) => {
-      const item = s.items.find((x) => x.id === id);
-      if (!item || item.matched || item.selected) return s;
-      if (!s.selectedId) {
-        return { ...s, items: s.items.map((x) => (x.id === id ? { ...x, selected: true } : x)), selectedId: id };
-      }
-      const prev = s.items.find((x) => x.id === s.selectedId);
-      if (!prev) return s;
-      const isMatch = prev.cardId === item.cardId && prev.type !== item.type;
-      if (isMatch) {
-        const newPairs = s.matchedPairs + 1;
-        return {
-          ...s,
-          items: s.items.map((x) =>
-            x.id === id || x.id === s.selectedId ? { ...x, matched: true, selected: false } : x
-          ),
-          selectedId: null,
-          matchedPairs: newPairs,
-          finishedAt: newPairs === s.totalPairs ? Date.now() : s.finishedAt,
-        };
-      } else {
-        const firstId = s.selectedId!;
-        setWrongPair([firstId, id]);
-        setWrongCount((c) => c + 1);
-        setTimeout(() => {
-          setState((ss) => ({
-            ...ss,
-            items: ss.items.map((x) =>
-              x.id === id || x.id === firstId ? { ...x, selected: false } : x
-            ),
-            selectedId: null,
-          }));
-          setWrongPair(null);
-        }, 700);
-        return { ...s, items: s.items.map((x) => (x.id === id ? { ...x, selected: true } : x)) };
-      }
-    });
+  function restart() {
+    resetSave(); setStartedAt(new Date()); setElapsed(0); setSelectedId(null); setMatched(new Set());
+    setWrongCount(0); setAnswers([]); setEvaluated(new Set()); setError(null); generation.regenerate();
   }
 
-  function handleRestart() {
-    resetSave();
-    setStartedAt(new Date());
-    finishTriggeredRef.current = false;
-    const newSubset = shuffleArray(cards).slice(0, MAX_CARDS);
-    setSubsetCards(newSubset);
-    setState({
-      items: buildItems(newSubset),
-      selectedId: null,
-      matchedPairs: 0,
-      totalPairs: Math.min(cards.length, MAX_CARDS),
-      startedAt: Date.now(),
-      finishedAt: null,
-    });
-    setWrongPair(null);
-    setWrongCount(0);
+  if (finished && evaluated.size > 0) {
+    const pct = totalPairs ? Math.round((evaluated.size / totalPairs) * 100) : 0;
+    return <div className="learn-done"><h2>🎉 Ghép xong!</h2><p className="learn-score"><strong>{evaluated.size}</strong> / {totalPairs} ({pct}%)</p><p>Thời gian: {Math.floor(elapsed / 1000)}s · Lần sai: {wrongCount}</p>{error && <p className="learn-error">{error}</p>}<ProgressSaveStatus status={saveStatus} onRetry={() => undefined} /><button className="primary-button" onClick={restart}>Chơi lại</button></div>;
   }
 
-  if (finished) {
-    const duration = state.finishedAt! - state.startedAt;
-    const accuracy = state.totalPairs > 0
-      ? Math.round((state.totalPairs / (state.totalPairs + wrongCount)) * 100)
-      : 100;
-    return (
-      <div className="learn-done">
-        <h2>🎉 Ghép xong!</h2>
-        <div className="match-stats">
-          <div className="match-stat"><span className="stat-label">Thời gian</span><strong className="stat-value">{formatTime(duration)}</strong></div>
-          <div className="match-stat"><span className="stat-label">Chính xác</span><strong className="stat-value">{accuracy}%</strong></div>
-          <div className="match-stat"><span className="stat-label">Số cặp</span><strong className="stat-value">{state.totalPairs}</strong></div>
-        </div>
-        {cards.length > MAX_CARDS && (
-          <p className="match-note" style={{ color: "#9ca3af", fontSize: "0.85rem" }}>
-            (Đã hiển thị {MAX_CARDS}/{cards.length} thẻ ngẫu nhiên)
-          </p>
-        )}
-        <ProgressSaveStatus status={saveStatus} onRetry={() => {
-          const cardResults: CardResult[] = subsetCards.slice(0, state.totalPairs).map((c) => ({
-            flashcardId: c.id, correct: true, attempts: 1,
-          }));
-          onSessionComplete({ score: state.totalPairs, total: state.totalPairs, cardResults, startedAt });
-        }} />
-        <button className="primary-button" onClick={handleRestart}>Chơi lại</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="match-mode">
-      <div className="learn-header">
-        <span className="flashcards-counter">{state.matchedPairs} / {state.totalPairs} cặp</span>
-        <span className="match-timer">{formatTime(elapsed)}</span>
-        {wrongCount > 0 && <span className="wrong-count">❌ {wrongCount} lần sai</span>}
-      </div>
-      {cards.length > MAX_CARDS && <p className="match-note">Hiển thị {MAX_CARDS}/{cards.length} thẻ</p>}
-      <div className="match-grid" role="group" aria-label="Ghép cặp thuật ngữ và định nghĩa">
-        {state.items.map((item) => {
-          let cls = "match-item";
-          if (item.matched) cls += " matched";
-          else if (item.selected) cls += " selected";
-          if (wrongPair && (wrongPair[0] === item.id || wrongPair[1] === item.id)) cls += " wrong-flash";
-          return (
-            <button
-              key={item.id}
-              className={cls}
-              onClick={() => !item.matched && handleSelect(item.id)}
-              disabled={item.matched}
-              aria-pressed={item.selected}
-              aria-label={`${item.type === "term" ? "Thuật ngữ" : "Định nghĩa"}: ${item.text}${item.matched ? " (đã ghép)" : ""}`}
-            >
-              <span className="match-item-type">{item.type === "term" ? "T" : "Đ"}</span>
-              <span className="match-item-text">{item.text}</span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="keyboard-hint" aria-hidden="true">Click để chọn và ghép cặp</p>
+  return <div className="match-mode">
+    <div className="learn-header"><span className="flashcards-counter">{matched.size} / {totalPairs} cặp</span><span className="match-timer">{Math.floor(elapsed / 1000)}s</span>{wrongCount > 0 && <span className="wrong-count">❌ {wrongCount} lần sai</span>}</div>
+    <div className="match-grid" role="group" aria-label="Ghép cặp thuật ngữ và định nghĩa">
+      {tiles.map((tile) => <button key={tile.id} className={`match-item${matched.has(tile.cardId) ? " matched" : ""}${selectedId === tile.id ? " selected" : ""}`} onClick={() => select(tile)} disabled={matched.has(tile.cardId)} aria-pressed={selectedId === tile.id}><span className="match-item-type">{tile.type === "term" ? "T" : "Đ"}</span><span className="match-item-text">{tile.text}</span></button>)}
     </div>
-  );
+    <p className="keyboard-hint" aria-hidden="true">Click để chọn và ghép cặp · Seed: {data.seed}</p>
+  </div>;
+}
+
+function toTiles(items: QuizGeneratedItem[]): MatchTile[] {
+  const result: MatchTile[] = [];
+  for (const item of items) {
+    if (item.kind === "term" || item.kind === "definition") {
+      result.push({ id: item.id, cardId: item.flashcardId, text: item.text ?? "", type: item.kind, pairId: item.pairId ?? String(item.flashcardId) });
+    } else if (item.kind === "pair" && item.term !== undefined && item.definition !== undefined) {
+      result.push({ id: `${item.id}-term`, cardId: item.flashcardId, text: item.term, type: "term", pairId: item.pairId ?? String(item.flashcardId) });
+      result.push({ id: `${item.id}-definition`, cardId: item.flashcardId, text: item.definition, type: "definition", pairId: item.pairId ?? String(item.flashcardId) });
+    }
+  }
+  return result;
 }
