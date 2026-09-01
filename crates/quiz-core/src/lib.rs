@@ -136,11 +136,7 @@ pub fn score_session(results: &[CardResult]) -> SessionScore {
     };
     let total = capped.len() as u32;
     let correct = capped.iter().filter(|r| r.correct).count() as u32;
-    let pct = if total == 0 {
-        0
-    } else {
-        ((correct * 100) / total) as u8
-    };
+    let pct = (correct * 100).checked_div(total).unwrap_or(0) as u8;
     SessionScore { correct, total, pct }
 }
 

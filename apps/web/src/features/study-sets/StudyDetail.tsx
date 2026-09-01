@@ -5,6 +5,9 @@ import React from "react";
 import type { StudySet, Flashcard } from "../../types";
 import type { LearningMode } from "../learning/types";
 import { LearningContainer } from "../learning";
+import { fetchProgressSummary, type ProgressListResponse } from "../learning/progressContract";
+import { useAuth } from "../auth/AuthContext";
+import { ProgressPanel, type ProgressPanelStatus } from "../../components/progress";
 
 type StudyMode = "dashboard" | LearningMode;
 
@@ -18,8 +21,29 @@ type Props = {
 };
 
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
+  const { token } = useAuth();
   const [studyMode, setStudyMode] = React.useState<StudyMode>("dashboard");
+  const [progressStatus, setProgressStatus] = React.useState<ProgressPanelStatus>("idle");
+  const [progress, setProgress] = React.useState<ProgressListResponse | null>(null);
+  const [progressError, setProgressError] = React.useState("");
   const cards = set.flashcards ?? [];
+
+  const loadProgress = React.useCallback(async () => {
+    setProgressStatus("loading");
+    setProgressError("");
+    try {
+      const result = await fetchProgressSummary(token, set.id);
+      setProgress(result);
+      setProgressStatus(result.totalSessions === 0 ? "empty" : "success");
+    } catch (error) {
+      setProgressError(error instanceof Error ? error.message : "Không tải được tiến độ học.");
+      setProgressStatus("error");
+    }
+  }, [token, set.id]);
+
+  React.useEffect(() => {
+    if (studyMode === "dashboard") void loadProgress();
+  }, [studyMode, loadProgress]);
 
   return (
     <>
@@ -51,7 +75,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
 
         {/* Overview tab - card list */}
         {studyMode === "dashboard" && (
-          <div className="card-list">
+          <><div className="card-list">
             {cards.length === 0 && <p className="empty">Chưa có flashcard nào.</p>}
             {cards.map((card) => (
               <article className="mini-card" key={card.id}>
@@ -67,6 +91,21 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               </article>
             ))}
           </div>
+          <ProgressPanel
+            status={progressStatus}
+            errorMessage={progressError}
+            onRetry={loadProgress}
+            summary={progress ? {
+              latestScore: progress.history[0]?.score ?? null,
+              latestTotal: progress.history[0]?.total ?? null,
+              attemptCount: progress.totalSessions,
+              latestMode: progress.lastMode,
+            } : null}
+            history={(progress?.history ?? []).map((item) => ({
+              id: item.id, mode: item.mode, score: item.score,
+              total: item.total, completedAt: item.completedAt,
+            }))}
+          /></>
         )}
 
         {/* Dev 4 (FE-LEARN-06): LearningContainer nhận set thật từ Dev 3.

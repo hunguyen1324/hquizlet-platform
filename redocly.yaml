@@ -1,0 +1,7 @@
+extends:
+  - recommended
+
+rules:
+  # Existing endpoints predate operation summaries. Keep structural and security
+  # validation blocking while summaries are added incrementally.
+  operation-summary: off

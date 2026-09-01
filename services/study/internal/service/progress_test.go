@@ -110,6 +110,9 @@ func (f *fakeProgress) GetLatestByMode(ctx context.Context, userID, studySetID i
 	}
 	return model.LearningSession{}, repository.ErrNotFound
 }
+func (f *fakeProgress) GetLatest(ctx context.Context, userID, studySetID int64) ([]model.LearningSession, error) {
+	return append([]model.LearningSession(nil), f.savedSessions...), nil
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

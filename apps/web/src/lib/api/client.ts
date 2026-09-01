@@ -65,7 +65,6 @@ export const folderApi = {
 
 export type LearningMode = "flashcards" | "learn" | "test" | "match";
 export type LearningProgress = { id: number; userId: number; studySetId: number; mode: LearningMode; score: number; total: number; completedAt: string | null; createdAt: string };
-export const learningApi = { saveProgress: async (): Promise<null> => null, getProgress: async (): Promise<LearningProgress[]> => [] };
 
 export type ServiceHealth = { name: string; url: string; status: string };
 export async function fetchHealth(): Promise<ServiceHealth[]> { const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", ""); return data.services ?? []; }

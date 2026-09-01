@@ -26,7 +26,7 @@ type Phase = "quiz" | "retry" | "done";
 function buildQueue(cards: Flashcard[]): Flashcard[] { return [...cards]; }
 
 export function LearnMode({ cards, studySetId }: Props) {
-  const [startedAt] = React.useState(() => new Date());
+  const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [state, setState] = React.useState<LearnState>(() => ({
     queue: buildQueue(cards), currentIndex: 0, answers: {}, done: false,
   }));
@@ -54,15 +54,13 @@ export function LearnMode({ cards, studySetId }: Props) {
     const isCorrect = normalize(input) === normalize(current.definition);
     setCorrect(isCorrect);
     setSubmitted(true);
-    if (phase === "quiz") {
-      setState((s) => ({
-        ...s,
-        answers: {
-          ...s.answers,
-          [current.id]: { card: current, userAnswer: input, submitted: true, correct: isCorrect },
-        },
-      }));
-    }
+    setState((s) => ({
+      ...s,
+      answers: {
+        ...s.answers,
+        [current.id]: { card: current, userAnswer: input, submitted: true, correct: isCorrect },
+      },
+    }));
   }
 
   function handleNext() {
@@ -84,7 +82,7 @@ export function LearnMode({ cards, studySetId }: Props) {
           const cardResults: CardResult[] = state.queue.map((card) => {
             const ans = finalAnswers[card.id];
             return {
-              cardId: card.id,
+              flashcardId: card.id,
               correct: ans?.correct ?? false,
               attempts: 1,
             };
@@ -101,16 +99,19 @@ export function LearnMode({ cards, studySetId }: Props) {
         setState((s) => ({ ...s, currentIndex: nextIdx }));
       }
     } else if (nextIdx >= total) {
+      const finalAnswers = {
+        ...state.answers,
+        [current.id]: { card: current, userAnswer: input, submitted: true, correct: correct ?? false },
+      };
       setPhase("done");
-      setState((s) => ({ ...s, done: true }));
+      setState((s) => ({ ...s, answers: finalAnswers, done: true }));
       // Build per-card results including retry-corrected cards.
       const cardResults: CardResult[] = state.queue.map((card) => {
-        const ans = state.answers[card.id];
-        const retriedCorrect = !retryQueue.find((r) => r.id === card.id);
+        const ans = finalAnswers[card.id];
         return {
-          cardId: card.id,
-          correct: ans?.correct || retriedCorrect,
-          attempts: ans?.correct ? 1 : 2, // 2 = needed retry
+          flashcardId: card.id,
+          correct: ans?.correct ?? false,
+          attempts: retryQueue.some((r) => r.id === card.id) ? 2 : 1,
         };
       });
       const correctCount = cardResults.filter((r) => r.correct).length;
@@ -129,6 +130,7 @@ export function LearnMode({ cards, studySetId }: Props) {
 
   function handleRestart() {
     resetSave();
+    setStartedAt(new Date());
     setState({ queue: buildQueue(cards), currentIndex: 0, answers: {}, done: false });
     setRetryQueue([]); setRetryIndex(0); setPhase("quiz"); setInput(""); setSubmitted(false); setCorrect(null);
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -149,7 +151,7 @@ export function LearnMode({ cards, studySetId }: Props) {
         </p>
         <ProgressSaveStatus status={saveStatus} onRetry={() => {
           const cardResults: CardResult[] = state.queue.map((card) => ({
-            cardId: card.id,
+            flashcardId: card.id,
             correct: state.answers[card.id]?.correct ?? false,
             attempts: 1,
           }));

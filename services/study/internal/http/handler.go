@@ -251,8 +251,11 @@ func (h *Handler) saveProgress(w http.ResponseWriter, r *http.Request, studySetI
 		case errors.Is(err, repository.ErrNotFound):
 			WriteError(w, http.StatusNotFound, "resource not found")
 		default:
-			// Treat unknown errors as validation if they have a message
-			WriteError(w, http.StatusBadRequest, err.Error())
+			if service.IsProgressValidationError(err) {
+				WriteError(w, http.StatusUnprocessableEntity, err.Error())
+			} else {
+				WriteError(w, http.StatusInternalServerError, "internal server error")
+			}
 		}
 		return
 	}
@@ -276,18 +279,12 @@ func (h *Handler) getProgressSummary(w http.ResponseWriter, r *http.Request, stu
 
 // getLatestProgress handles GET /v1/study-sets/{id}/progress/latest.
 func (h *Handler) getLatestProgress(w http.ResponseWriter, r *http.Request, studySetID int64) {
-	modeStr := r.URL.Query().Get("mode")
-	if modeStr == "" {
-		WriteError(w, http.StatusBadRequest, "query param 'mode' is required (flashcards|learn|test|match)")
-		return
-	}
-	mode := model.LearningMode(modeStr)
-	session, err := h.progress.GetLatestByMode(r.Context(), userIDFromHeader(r), studySetID, mode)
+	sessions, err := h.progress.GetLatest(r.Context(), userIDFromHeader(r), studySetID)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
-	WriteJSON(w, http.StatusOK, session)
+	WriteJSON(w, http.StatusOK, sessions)
 }
 
 // ---------------------------------------------------------------------------

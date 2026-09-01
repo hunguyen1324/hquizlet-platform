@@ -23,4 +23,4 @@ export type {
 
 // Progress API stubs and Phase 3 request types
 export type { ProgressSaveRequest, CardResult } from "./progressContract";
-export { saveProgress, fetchProgress } from "./progressContract";
+export { saveProgress, fetchProgress, fetchProgressSummary, fetchLatestProgress } from "./progressContract";

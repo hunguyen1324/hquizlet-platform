@@ -24,7 +24,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 export function FlashcardsMode({ cards, studySetId }: Props) {
-  const [startedAt] = React.useState(() => new Date());
+  const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
   const [deck, setDeck] = React.useState<Flashcard[]>(cards);
@@ -72,7 +72,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
       onSessionComplete({
         score: total,
         total,
-        cardResults: deck.map((c) => ({ cardId: c.id, correct: true, attempts: 1 })),
+        cardResults: deck.map((c) => ({ flashcardId: c.id, correct: true, attempts: 1 })),
         startedAt,
       });
     }
@@ -91,6 +91,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   function handleRestart() {
     completionTriggered.current = false;
     resetSave();
+    setStartedAt(new Date());
     const base = starredOnly ? cards.filter((c) => c.starred) : cards;
     setDeck(shuffled ? shuffleArray(base) : [...base]);
     setIndex(0);
