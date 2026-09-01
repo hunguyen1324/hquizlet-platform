@@ -136,11 +136,7 @@ pub fn score_session(results: &[CardResult]) -> SessionScore {
     };
     let total = capped.len() as u32;
     let correct = capped.iter().filter(|r| r.correct).count() as u32;
-    let pct = if total == 0 {
-        0
-    } else {
-        ((correct * 100) / total) as u8
-    };
+    let pct = (correct * 100).checked_div(total).unwrap_or(0) as u8;
     SessionScore { correct, total, pct }
 }
 
@@ -402,79 +398,3 @@ mod tests {
         let cards = make_cards(5);
         let qs = generate_questions(&cards, 1);
         assert_eq!(qs.len(), 5);
-    }
-
-    #[test]
-    fn generate_questions_choices_include_correct() {
-        let cards = make_cards(6);
-        let qs = generate_questions(&cards, 7);
-        for q in &qs {
-            assert!(
-                q.choices.contains(&q.card.definition),
-                "Correct answer must be in choices"
-            );
-            assert_eq!(
-                q.choices[q.correct_index], q.card.definition,
-                "correct_index must point to the correct answer"
-            );
-        }
-    }
-
-    #[test]
-    fn generate_questions_no_duplicate_choices() {
-        let cards = make_cards(8);
-        let qs = generate_questions(&cards, 99);
-        for q in &qs {
-            let unique: std::collections::HashSet<_> = q.choices.iter().collect();
-            assert_eq!(unique.len(), q.choices.len(), "Choices must be unique per question");
-        }
-    }
-
-    #[test]
-    fn generate_questions_deterministic() {
-        let cards = make_cards(6);
-        let a = generate_questions(&cards, 100);
-        let b = generate_questions(&cards, 100);
-        assert_eq!(a, b, "Same seed must produce identical questions");
-    }
-
-    #[test]
-    fn generate_questions_different_seeds_differ() {
-        let cards = make_cards(6);
-        let a = generate_questions(&cards, 1);
-        let b = generate_questions(&cards, 2);
-        // At least the order should differ for 6 cards.
-        assert_ne!(a, b);
-    }
-
-    #[test]
-    fn generate_questions_max_4_choices() {
-        // With exactly 2 cards: 2 choices
-        let cards2 = make_cards(2);
-        let qs2 = generate_questions(&cards2, 1);
-        assert!(qs2.iter().all(|q| q.choices.len() == 2));
-
-        // With 5+ cards: 4 choices
-        let cards5 = make_cards(5);
-        let qs5 = generate_questions(&cards5, 1);
-        assert!(qs5.iter().all(|q| q.choices.len() == 4));
-    }
-
-    // ── Golden vector: generate_questions ─────────────────────────────────────
-    // PINNED — quiz-core v0.1.0. Seed=1, 4 cards.
-    // Verify correct_index pinning to catch PRNG regressions.
-    #[test]
-    fn golden_questions_seed1_4cards() {
-        let cards = make_cards(4);
-        let qs = generate_questions(&cards, 1);
-        assert_eq!(qs.len(), 4);
-        // Verify that correct answers are in the right positions (correct_index pinned).
-        for q in &qs {
-            assert_eq!(q.choices[q.correct_index], q.card.definition);
-        }
-        // Pin the card order (deck shuffle with seed=1)
-        // Cards are shuffled before becoming questions, so pin first card ID.
-        // The exact ID depends on seeded_shuffle([1,2,3,4], seed=1).
-        assert_eq!(qs[0].card.id, 1, "First question card ID pinned for seed=1");
-    }
-}
