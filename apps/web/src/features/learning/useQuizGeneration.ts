@@ -12,7 +12,7 @@ export function useQuizGeneration(studySetId: number, mode: LearningMode, limit?
   const [seed, setSeed] = React.useState(() => randomSeed());
   const [state, setState] = React.useState<QuizGenerationState>({ state: "loading" });
 
-  const generate = React.useCallback((nextSeed = randomSeed()) => {
+  const generate = React.useCallback((nextSeed: number) => {
     setSeed(nextSeed);
     setState({ state: "loading" });
     const controller = new AbortController();
@@ -25,7 +25,7 @@ export function useQuizGeneration(studySetId: number, mode: LearningMode, limit?
     return () => controller.abort();
   }, [token, studySetId, mode, limit]);
 
-  React.useEffect(() => generate(seed), [generate, seed]);
+  React.useEffect(() => generate(seed), [generate]);
 
   return { state, seed, regenerate: () => generate(randomSeed()) };
 }
