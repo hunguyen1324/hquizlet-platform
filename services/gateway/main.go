@@ -34,22 +34,33 @@ func main() {
 
 	authURL := env("AUTH_SERVICE_URL", "http://localhost:8081")
 	studyURL := env("STUDY_SERVICE_URL", "http://localhost:8082")
+	quizURL := env("QUIZ_SERVICE_URL", "http://localhost:8083")
 	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
-	// The study-set prefix also covers Phase 3 progress endpoints:
-	// /v1/study-sets/{studySetId}/progress and /latest.
+	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
-	mux.HandleFunc("/v1/study-sets/", authenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/study-sets/", routeStudySets(authURL, studyURL, quizURL))
 	mux.HandleFunc("/v1/flashcards/", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/folders", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/folders/", authenticatedProxy(authURL, studyURL))
 
-	quizURL := env("QUIZ_SERVICE_URL", "http://localhost:8083")
 	mux.HandleFunc("/v1/live-sessions", reverseProxy(quizURL))
 	mux.HandleFunc("/v1/live-sessions/", reverseProxy(quizURL))
 
 	log.Printf("[gateway] listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func routeStudySets(authTarget, studyTarget, quizTarget string) http.HandlerFunc {
+	studyHandler := authenticatedProxy(authTarget, studyTarget)
+	quizHandler := authenticatedProxy(authTarget, quizTarget)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/quiz/") {
+			quizHandler(w, r)
+			return
+		}
+		studyHandler(w, r)
 	}
 }
 

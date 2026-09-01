@@ -6,13 +6,15 @@ Nền tảng học tập dạng flashcard – viết lại bằng Go (backend) v
 
 | Layer    | Tech |
 |----------|------|
-| Gateway  | Go 1.22 |
-| Auth     | Go 1.22 + PostgreSQL |
-| Study    | Go 1.22 + PostgreSQL |
+| Gateway  | Go 1.23 |
+| Auth     | Go 1.23 + PostgreSQL |
+| Study    | Go 1.23 + PostgreSQL |
+| Quiz     | Go 1.23 + deterministic engine |
 | Frontend | React + Vite + TypeScript |
 | DB       | PostgreSQL 16 |
 | Cache    | Redis 7 |
 | Broker   | NATS 2 |
+| Rust     | quiz-core crate (algorithm spec) |
 | Infra    | Docker Compose |
 
 ---
@@ -44,6 +46,7 @@ Sau khi các container healthy:
 | Gateway  | http://localhost:8080 |
 | Auth     | http://localhost:8081 |
 | Study    | http://localhost:8082 |
+| Quiz     | http://localhost:8083 |
 | Web      | http://localhost:5173 |
 | Postgres | localhost:5432 |
 
@@ -118,9 +121,13 @@ migrate -path services/auth/migrations \
 
 ## API Contract
 
-File OpenAPI đầy đủ: [`packages/api-contracts/openapi.yaml`](packages/api-contracts/openapi.yaml)
+File OpenAPI đầy đủ: [`packages/api-contracts/openapi.yaml`](packages/api-contracts/openapi.yaml) (v1.4.0)
 
 Xem online: paste nội dung vào [editor.swagger.io](https://editor.swagger.io)
+
+Golden JSON examples: [`packages/api-contracts/examples/quiz/`](packages/api-contracts/examples/quiz/)
+
+Internal API docs: [`packages/api-contracts/quiz-study-internal-api.md`](packages/api-contracts/quiz-study-internal-api.md)
 
 ---
 
@@ -133,29 +140,84 @@ hquizlet-platform/
 ├── services/
 │   ├── gateway/           # API Gateway (Go)
 │   ├── auth/              # Auth service (Go)
-│   ├── study/             # Study + Flashcard service (Go)
-│   └── quiz/              # Live quiz service (Go)
+│   ├── study/             # Study + Flashcard + Progress service (Go)
+│   └── quiz/              # Quiz engine service (Go)
+├── crates/
+│   ├── quiz-core/         # Rust deterministic quiz engine (spec)
+│   └── import-core/       # Rust import engine
 ├── packages/
-│   └── api-contracts/     # OpenAPI spec (nguồn sự thật)
+│   └── api-contracts/     # OpenAPI spec + golden examples (nguồn sự thật)
 ├── infra/
 │   └── docker/            # Dockerfile + docker-compose.yml
 ├── docs/
-│   └── migration/         # Kế hoạch Sprint
+│   └── phase/             # Phase execution plans
 ├── .env.example
 └── README.md
 ```
 
 ---
 
-## Team Sprint 1
+## Phase 4 – Quiz Architecture
+
+Phase 4 triển khai 4 learning modes (Flashcards, Learn, Test, Match) trên dữ liệu thật.
+
+### Sequence Flow
+
+```
+Frontend → Gateway → Auth (verify token)
+                  → Quiz Service → Study Service (GET /internal/.../flashcards)
+                  → Quiz engine (shuffle/generate/evaluate)
+                  → Frontend renders items
+                  → Frontend sends answers → Quiz evaluate → score + cardResults
+                  → Frontend saves progress via Progress API (Phase 3)
+```
+
+### Key Design Decisions
+
+- **Contract-first**: OpenAPI v1.4.0 freezes before any implementation code.
+- **Server-side scoring**: Frontend never computes its own score. Quiz service is the single source of truth.
+- **Deterministic**: Same seed + same study set = same output (Rust and Go must match).
+- **No Rust FFI in request path**: Go port of the algorithm runs in HTTP. Rust crate is the spec.
+
+### Curl Examples
+
+```bash
+# Generate flashcards quiz
+curl -X POST http://localhost:8080/v1/study-sets/101/quiz/generate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "flashcards", "seed": 42, "limit": 100}'
+
+# Generate test questions
+curl -X POST http://localhost:8080/v1/study-sets/101/quiz/generate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "test", "seed": 42, "limit": 100}'
+
+# Evaluate answers (learn mode)
+curl -X POST http://localhost:8080/v1/study-sets/101/quiz/evaluate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "learn", "seed": 7, "answers": [{"flashcardId": 2001, "submitted": "GET", "attempts": 1}]}'
+
+# Generate match pairs
+curl -X POST http://localhost:8080/v1/study-sets/101/quiz/generate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "match", "seed": 42}'
+```
+
+---
+
+## Team Phase 4
 
 | Dev | Role | Phạm vi |
 |-----|------|---------|
-| Dev 1 | Backend Go – Auth | `services/auth/**` |
-| Dev 2 | Backend Go – Study | `services/study/**` |
-| Dev 3 | Frontend React – Core | `apps/web/src/features/auth,dashboard,study-sets` |
-| Dev 4 | Frontend React – Learning | `apps/web/src/features/learning` |
-| Dev 5 | Fullstack/Integration | `services/gateway, infra, packages/api-contracts, docs` |
+| Dev 1 | Contract, Gateway & Integration Owner | OpenAPI, golden examples, gateway routing, CI gate |
+| Dev 2 | Rust quiz-core Owner | Deterministic engine, golden vectors, benchmarks |
+| Dev 3 | Go Quiz Service Owner | API handlers, Go port, ownership, validation |
+| Dev 4 | Frontend Flashcards & Learn Owner | Flashcards/Learn UX, API integration |
+| Dev 5 | Frontend Match/Test & E2E Owner | Match/Test UX, Docker E2E, release gate |
 
 ---
 

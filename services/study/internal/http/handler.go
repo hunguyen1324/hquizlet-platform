@@ -36,6 +36,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/folders", h.createFolder)
 	mux.HandleFunc("/v1/folders/", h.folderRouter)
 	// Progress routes – handled within studySetRouter via path inspection.
+	// Phase 4 internal API: Quiz service fetches flashcards by ownership.
+	mux.HandleFunc("/internal/study-sets/", h.internalRouter)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -285,6 +287,40 @@ func (h *Handler) getLatestProgress(w http.ResponseWriter, r *http.Request, stud
 		return
 	}
 	WriteJSON(w, http.StatusOK, sessions)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Internal API for Quiz service
+
+// internalRouter handles /internal/study-sets/{id}/* routes.
+func (h *Handler) internalRouter(w http.ResponseWriter, r *http.Request) {
+	parts := PathParts(r.URL.Path, "/internal/study-sets/")
+	if len(parts) == 0 {
+		WriteError(w, http.StatusNotFound, "study set not found")
+		return
+	}
+	setID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid study set id")
+		return
+	}
+	if len(parts) == 2 && parts[1] == "flashcards" && r.Method == http.MethodGet {
+		h.getFlashcardsInternal(w, r, setID)
+		return
+	}
+	WriteError(w, http.StatusNotFound, "endpoint not found")
+}
+
+// getFlashcardsInternal returns all flashcards for a study set.
+// Used by Quiz service to fetch cards by ownership via X-User-ID header.
+func (h *Handler) getFlashcardsInternal(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	userID := userIDFromHeader(r)
+	set, err := h.sets.GetWithCards(r.Context(), studySetID, userID)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, set)
 }
 
 // ---------------------------------------------------------------------------
