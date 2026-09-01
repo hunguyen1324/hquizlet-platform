@@ -35,6 +35,8 @@ func main() {
 	authURL := env("AUTH_SERVICE_URL", "http://localhost:8081")
 	studyURL := env("STUDY_SERVICE_URL", "http://localhost:8082")
 	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
+	// The study-set prefix also covers Phase 3 progress endpoints:
+	// /v1/study-sets/{studySetId}/progress and /latest.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/study-sets/", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/flashcards/", authenticatedProxy(authURL, studyURL))
@@ -84,12 +86,14 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 		identity, status, err := verifyIdentity(r.Context(), authTarget, r.Header.Get("Authorization"))
 		if err != nil {
 			if status == http.StatusUnauthorized {
-				writeJSON(w, status, map[string]string{"code": "unauthorized", "message": "authentication required"})
+				writeGatewayError(w, r, status, "UNAUTHORIZED", "authentication required")
 				return
 			}
-			writeJSON(w, status, map[string]string{"code": "auth_unavailable", "message": "authentication service unavailable"})
+			writeGatewayError(w, r, status, "AUTH_UNAVAILABLE", "authentication service unavailable")
 			return
 		}
+		// Never forward a client-supplied identity. Only the identity returned by
+		// the authenticated internal verification endpoint reaches Study.
 		r.Header.Del("X-User-ID")
 		r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
 		reverseProxy(serviceTarget)(w, r)
@@ -135,9 +139,10 @@ func cors(next http.Handler) http.Handler {
 
 func requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get("X-Request-ID")
+		id := strings.TrimSpace(r.Header.Get("X-Request-ID"))
 		if id == "" { id = time.Now().UTC().Format("20060102150405.000000000") }
-		w.Header().Set("X-Request-ID", id); r.Header.Set("X-Request-ID", id)
+		w.Header().Set("X-Request-ID", id)
+		r.Header.Set("X-Request-ID", id)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -158,16 +163,27 @@ func reverseProxy(target string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		targetURL := strings.TrimRight(target, "/") + r.URL.RequestURI()
 		req, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, r.Body)
-		if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid upstream request"}); return }
+		if err != nil { writeGatewayError(w, r, http.StatusBadGateway, "BAD_GATEWAY", "invalid upstream request"); return }
 		req.Header = r.Header.Clone()
 		req.Header.Set("X-Forwarded-For", r.RemoteAddr)
 		req.Header.Set("X-Forwarded-Host", r.Host)
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error": "upstream unavailable"}); return }
+		if err != nil { writeGatewayError(w, r, http.StatusBadGateway, "UPSTREAM_UNAVAILABLE", "upstream unavailable"); return }
 		defer resp.Body.Close()
 		for key, values := range resp.Header { for _, value := range values { w.Header().Add(key, value) } }
 		w.WriteHeader(resp.StatusCode); _, _ = io.Copy(w, resp.Body)
 	}
+}
+
+type errorEnvelope struct {
+	Code string `json:"code"`
+	Message string `json:"message"`
+	RequestID string `json:"requestId"`
+	Details map[string]any `json:"details"`
+}
+
+func writeGatewayError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	writeJSON(w, status, errorEnvelope{Code: code, Message: message, RequestID: r.Header.Get("X-Request-ID"), Details: map[string]any{}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) { w.Header().Set("Content-Type", "application/json"); w.WriteHeader(status); _ = json.NewEncoder(w).Encode(value) }
