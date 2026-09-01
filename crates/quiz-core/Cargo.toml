@@ -2,7 +2,7 @@
 name = "quiz-core"
 version = "0.1.0"
 edition = "2021"
+description = "Deterministic quiz engine: seeded shuffle, scoring, question generation. Pure functions, no I/O, no DB, no HTTP."
 
 [lib]
 path = "src/lib.rs"
-
