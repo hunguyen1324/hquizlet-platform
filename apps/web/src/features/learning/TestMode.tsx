@@ -1,13 +1,19 @@
 // TestMode — Dev 4
 // P2-LEARN-03: Trắc nghiệm từ flashcards thật, kết quả chi tiết
-// Phase 2: cần ít nhất 2 cards, kết quả có breakdown, có thể retry, keyboard nav
+// P3-LEARN-01,02,03: Nối completion với saveProgress thật; per-card results
 
 import React from "react";
 import type { Flashcard, TestState, TestQuestion } from "./types";
+import type { CardResult } from "./progressContract";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
+import { useProgressSave } from "./useProgressSave";
+import { ProgressSaveStatus } from "./ProgressSaveStatus";
 import "./learning.css";
 
-type Props = { cards: Flashcard[] };
+type Props = {
+  cards: Flashcard[];
+  studySetId: number;
+};
 
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -26,10 +32,16 @@ function buildQuestions(cards: Flashcard[]): TestQuestion[] {
   });
 }
 
-export function TestMode({ cards }: Props) {
+export function TestMode({ cards, studySetId }: Props) {
+  const [startedAt] = React.useState(() => new Date());
   const [state, setState] = React.useState<TestState>(() => ({
     questions: buildQuestions(cards), currentIndex: 0, submitted: false, score: 0,
   }));
+
+  const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
+    studySetId,
+    mode: "test",
+  });
 
   const { questions, currentIndex, submitted } = state;
   const q = questions[currentIndex];
@@ -48,8 +60,6 @@ export function TestMode({ cards }: Props) {
 
   React.useEffect(() => {
     if (submitted || !q) return;
-    // Capture `q` and `handleChoose` at effect-registration time.
-    // Both `q` and `submitted` are in deps, so the handler is always fresh.
     const currentQ = q;
     const choose = handleChoose;
     function onKey(e: KeyboardEvent) {
@@ -77,23 +87,39 @@ export function TestMode({ cards }: Props) {
     if (nextIndex >= total) {
       const score = state.questions.filter((item) => item.correct).length;
       setState((s) => ({ ...s, submitted: true, score }));
+      // Save progress with per-card results.
+      const cardResults: CardResult[] = state.questions.map((item) => ({
+        cardId: item.card.id,
+        correct: item.correct ?? false,
+        attempts: 1,
+      }));
+      onSessionComplete({ score, total, cardResults, startedAt });
     } else {
       setState((s) => ({ ...s, currentIndex: nextIndex }));
     }
   }
 
   function handleRestart() {
+    resetSave();
     setState({ questions: buildQuestions(cards), currentIndex: 0, submitted: false, score: 0 });
   }
 
   if (submitted) {
     const pct = Math.round((state.score / total) * 100);
     const grade = pct >= 90 ? "🎉 Xuất sắc!" : pct >= 70 ? "👍 Tốt!" : pct >= 50 ? "📖 Cần ôn thêm" : "💪 Hãy cố lên!";
+    const cardResults: CardResult[] = state.questions.map((item) => ({
+      cardId: item.card.id,
+      correct: item.correct ?? false,
+      attempts: 1,
+    }));
     return (
       <div className="learn-done">
         <h2>📝 Kết quả bài kiểm tra</h2>
         <p className="learn-score"><strong>{state.score}</strong> / {total} ({pct}%)</p>
         <p className="grade-label">{grade}</p>
+        <ProgressSaveStatus status={saveStatus} onRetry={() =>
+          onSessionComplete({ score: state.score, total, cardResults, startedAt })
+        } />
         <div className="learn-review">
           <div className="review-header"><span>Thuật ngữ</span><span>Câu trả lời</span><span>Đáp án đúng</span></div>
           {state.questions.map((item, i) => (
@@ -113,7 +139,10 @@ export function TestMode({ cards }: Props) {
   return (
     <div className="test-mode">
       <div className="learn-header"><span className="flashcards-counter">{currentIndex + 1} / {total}</span></div>
-      <div className="test-question"><p className="test-question-label">Định nghĩa của từ nào sau đây là:</p><p className="test-term">{q.card.term}</p></div>
+      <div className="test-question">
+        <p className="test-question-label">Định nghĩa của từ nào sau đây là:</p>
+        <p className="test-term">{q.card.term}</p>
+      </div>
       <div className="test-choices">
         {q.choices.map((choice, i) => {
           let cls = "test-choice";
@@ -122,15 +151,33 @@ export function TestMode({ cards }: Props) {
             else if (choice === q.userAnswer) cls += " choice-wrong";
           }
           return (
-            <button key={i} className={cls} onClick={() => handleChoose(choice)} disabled={answered} aria-label={`Đáp án ${String.fromCharCode(65 + i)}: ${choice}`}>
+            <button
+              key={i}
+              className={cls}
+              onClick={() => handleChoose(choice)}
+              disabled={answered}
+              aria-label={`Đáp án ${String.fromCharCode(65 + i)}: ${choice}`}
+            >
               <span className="choice-letter">{String.fromCharCode(65 + i)}</span>{choice}
             </button>
           );
         })}
       </div>
-      {answered && <div className={`learn-feedback ${q.correct ? "feedback-correct" : "feedback-wrong"}`}>{q.correct ? "✅ Chính xác!" : `❌ Đáp án đúng: ${q.card.definition}`}</div>}
-      {answered && <div className="learn-actions"><button className="primary-button" onClick={handleNext}>{currentIndex + 1 >= total ? "Xem kết quả" : "Câu tiếp →"}</button></div>}
-      <div className="progress-bar-track" role="progressbar" aria-valuenow={currentIndex + 1} aria-valuemax={total}><div className="progress-bar-fill" style={{ width: `${((currentIndex + 1) / total) * 100}%` }} /></div>
+      {answered && (
+        <div className={`learn-feedback ${q.correct ? "feedback-correct" : "feedback-wrong"}`}>
+          {q.correct ? "✅ Chính xác!" : `❌ Đáp án đúng: ${q.card.definition}`}
+        </div>
+      )}
+      {answered && (
+        <div className="learn-actions">
+          <button className="primary-button" onClick={handleNext}>
+            {currentIndex + 1 >= total ? "Xem kết quả" : "Câu tiếp →"}
+          </button>
+        </div>
+      )}
+      <div className="progress-bar-track" role="progressbar" aria-valuenow={currentIndex + 1} aria-valuemax={total}>
+        <div className="progress-bar-fill" style={{ width: `${((currentIndex + 1) / total) * 100}%` }} />
+      </div>
       <p className="keyboard-hint" aria-hidden="true">Nhấn 1–{Math.min(q.choices.length, 4)} để chọn đáp án</p>
     </div>
   );

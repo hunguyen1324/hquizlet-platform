@@ -581,3 +581,41 @@
     display: none;
   }
 }
+
+/* ── Progress save status (P3) ─────────────────────────────────────────────── */
+.progress-save-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+.progress-save-status.saving {
+  color: #6b7280;
+  background: #f3f4f6;
+}
+
+.progress-save-status.saved {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.progress-save-status.error {
+  color: #92400e;
+  background: #fef3c7;
+  flex-wrap: wrap;
+}
+
+.retry-btn {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.flashcards-completion {
+  margin-top: 0.5rem;
+  text-align: center;
+}
