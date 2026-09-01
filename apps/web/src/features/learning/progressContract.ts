@@ -10,7 +10,7 @@
 //   - cardResults truncated to max 100 items
 //   - idempotencyKey prevents duplicate sessions on retry
 
-import { apiFetch } from "../../lib/api/client";
+import { ApiError, apiFetch } from "../../lib/api/client";
 import type { LearningMode, LearningProgress } from "../../lib/api/client";
 
 export type { LearningMode, LearningProgress };
@@ -22,7 +22,7 @@ export type { LearningMode, LearningProgress };
  * Max 100 items per contract. Truncation is done in saveProgress.
  */
 export type CardResult = {
-  cardId: number;
+  flashcardId: number;
   correct: boolean;
   /** Số lần thử — Learn mode retry. Clamped 1..100. */
   attempts: number;
@@ -61,18 +61,20 @@ export type ProgressSaveResponse = {
  * Response shape from GET /v1/study-sets/{studySetId}/progress
  */
 export type ProgressListResponse = {
-  items: LearningProgress[];
-  total: number;
+  studySetId: number;
+  totalSessions: number;
+  bestScore: number | null;
+  lastMode: LearningMode | null;
+  history: LearningProgress[];
   page: number;
-  pageSize: number;
+  perPage: number;
+  totalPages: number;
 };
 
 /**
  * Response shape from GET /v1/study-sets/{studySetId}/progress/latest
  */
-export type ProgressLatestResponse = {
-  byMode: Partial<Record<LearningMode, LearningProgress>>;
-};
+export type ProgressLatestResponse = LearningProgress[];
 
 // ── Error types ─────────────────────────────────────────────────────────────
 
@@ -122,23 +124,22 @@ export async function saveProgress(
  * Returns paginated history. Returns empty items on auth/fetch error
  * (progress history is non-critical UI — callers handle gracefully).
  */
-export async function fetchProgress(
+export async function fetchProgressSummary(
   token: string,
   studySetId: number,
   page = 1,
   pageSize = 20
+): Promise<ProgressListResponse> {
+  return apiFetch<ProgressListResponse>(
+    `/v1/study-sets/${studySetId}/progress`, token, {}, { page, per_page: pageSize }
+  );
+}
+
+export async function fetchProgress(
+  token: string, studySetId: number, page = 1, pageSize = 20
 ): Promise<LearningProgress[]> {
-  try {
-    const result = await apiFetch<ProgressListResponse>(
-      `/v1/study-sets/${studySetId}/progress`,
-      token,
-      {},
-      { page, pageSize }
-    );
-    return result.items ?? [];
-  } catch {
-    return [];
-  }
+  const result = await fetchProgressSummary(token, studySetId, page, pageSize);
+  return result.history ?? [];
 }
 
 /**
@@ -150,15 +151,10 @@ export async function fetchLatestProgress(
   token: string,
   studySetId: number
 ): Promise<Partial<Record<LearningMode, LearningProgress>>> {
-  try {
-    const result = await apiFetch<ProgressLatestResponse>(
-      `/v1/study-sets/${studySetId}/progress/latest`,
-      token
-    );
-    return result.byMode ?? {};
-  } catch {
-    return {};
-  }
+  const result = await apiFetch<ProgressLatestResponse>(
+    `/v1/study-sets/${studySetId}/progress/latest`, token
+  );
+  return Object.fromEntries(result.map((session) => [session.mode, session]));
 }
 
 // ── Idempotency key generation ───────────────────────────────────────────────
@@ -179,13 +175,14 @@ export function makeIdempotencyKey(
 // ── Internal ─────────────────────────────────────────────────────────────────
 
 function classifyError(err: unknown): ProgressSaveError {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return { kind: "unauthorized" };
+    if (err.status === 403) return { kind: "forbidden" };
+    if (err.status === 409) return { kind: "conflict", message: err.message };
+    if (err.status === 400 || err.status === 422)
+      return { kind: "validation", message: err.message };
+    if (err.status >= 500) return { kind: "server", message: err.message };
+  }
   if (!(err instanceof Error)) return { kind: "network" };
-  const msg = err.message ?? "";
-  if (msg.includes("401")) return { kind: "unauthorized" };
-  if (msg.includes("403")) return { kind: "forbidden" };
-  if (msg.includes("409")) return { kind: "conflict", message: msg };
-  if (msg.includes("422") || msg.includes("400"))
-    return { kind: "validation", message: msg };
-  if (msg.includes("5")) return { kind: "server", message: msg };
   return { kind: "network" };
 }

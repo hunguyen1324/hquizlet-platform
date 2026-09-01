@@ -108,6 +108,14 @@ func (s *ProgressService) GetLatestByMode(
 	return s.progress.GetLatestByMode(ctx, userID, studySetID, mode)
 }
 
+func (s *ProgressService) GetLatest(ctx context.Context, userID, studySetID int64) ([]model.LearningSession, error) {
+	if userID == 0 { return nil, ErrUnauthorized }
+	owned, err := s.sets.IsOwner(ctx, studySetID, userID)
+	if err != nil { return nil, err }
+	if !owned { return nil, ErrForbidden }
+	return s.progress.GetLatest(ctx, userID, studySetID)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -149,9 +157,16 @@ func validateSaveProgressInput(in model.SaveProgressInput) error {
 	}
 
 	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, "; "))
+		return ProgressValidationError{Message: strings.Join(errs, "; ")}
 	}
 	return nil
+}
+
+type ProgressValidationError struct { Message string }
+func (e ProgressValidationError) Error() string { return e.Message }
+func IsProgressValidationError(err error) bool {
+	var target ProgressValidationError
+	return errors.As(err, &target)
 }
 
 // verifyCardsInSet loads all flashcards for the study set and checks that every

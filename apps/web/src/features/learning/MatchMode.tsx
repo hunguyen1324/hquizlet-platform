@@ -27,11 +27,10 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 function buildItems(cards: Flashcard[]): MatchItem[] {
-  const subset = shuffleArray(cards).slice(0, MAX_CARDS);
-  const terms: MatchItem[] = subset.map((c) => ({
+  const terms: MatchItem[] = cards.map((c) => ({
     id: `card-${c.id}-term`, cardId: c.id, text: c.term, type: "term", matched: false, selected: false,
   }));
-  const defs: MatchItem[] = subset.map((c) => ({
+  const defs: MatchItem[] = cards.map((c) => ({
     id: `card-${c.id}-def`, cardId: c.id, text: c.definition, type: "definition", matched: false, selected: false,
   }));
   return shuffleArray([...terms, ...defs]);
@@ -62,9 +61,12 @@ function useTimer(active: boolean) {
 }
 
 export function MatchMode({ cards, studySetId }: Props) {
-  const [startedAt] = React.useState(() => new Date());
+  const [startedAt, setStartedAt] = React.useState(() => new Date());
+  const [subsetCards, setSubsetCards] = React.useState<Flashcard[]>(() =>
+    shuffleArray(cards).slice(0, MAX_CARDS)
+  );
   const [state, setState] = React.useState<MatchState>(() => ({
-    items: buildItems(cards),
+    items: buildItems(subsetCards),
     selectedId: null,
     matchedPairs: 0,
     totalPairs: Math.min(cards.length, MAX_CARDS),
@@ -73,10 +75,6 @@ export function MatchMode({ cards, studySetId }: Props) {
   }));
   const [wrongPair, setWrongPair] = React.useState<[string, string] | null>(null);
   const [wrongCount, setWrongCount] = React.useState(0);
-  // Track which cardIds were used in this round (subset of full deck).
-  const [subsetCards, setSubsetCards] = React.useState<Flashcard[]>(() =>
-    cards.slice(0, MAX_CARDS)
-  );
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -96,7 +94,7 @@ export function MatchMode({ cards, studySetId }: Props) {
     const score = state.totalPairs;
     const total = state.totalPairs;
     const cardResults: CardResult[] = subsetCards.slice(0, state.totalPairs).map((card) => ({
-      cardId: card.id,
+      flashcardId: card.id,
       correct: true,
       attempts: 1,
     }));
@@ -155,11 +153,12 @@ export function MatchMode({ cards, studySetId }: Props) {
 
   function handleRestart() {
     resetSave();
+    setStartedAt(new Date());
     finishTriggeredRef.current = false;
     const newSubset = shuffleArray(cards).slice(0, MAX_CARDS);
     setSubsetCards(newSubset);
     setState({
-      items: buildItems(cards),
+      items: buildItems(newSubset),
       selectedId: null,
       matchedPairs: 0,
       totalPairs: Math.min(cards.length, MAX_CARDS),
@@ -190,7 +189,7 @@ export function MatchMode({ cards, studySetId }: Props) {
         )}
         <ProgressSaveStatus status={saveStatus} onRetry={() => {
           const cardResults: CardResult[] = subsetCards.slice(0, state.totalPairs).map((c) => ({
-            cardId: c.id, correct: true, attempts: 1,
+            flashcardId: c.id, correct: true, attempts: 1,
           }));
           onSessionComplete({ score: state.totalPairs, total: state.totalPairs, cardResults, startedAt });
         }} />

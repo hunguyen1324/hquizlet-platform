@@ -33,7 +33,7 @@ function buildQuestions(cards: Flashcard[]): TestQuestion[] {
 }
 
 export function TestMode({ cards, studySetId }: Props) {
-  const [startedAt] = React.useState(() => new Date());
+  const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [state, setState] = React.useState<TestState>(() => ({
     questions: buildQuestions(cards), currentIndex: 0, submitted: false, score: 0,
   }));
@@ -89,7 +89,7 @@ export function TestMode({ cards, studySetId }: Props) {
       setState((s) => ({ ...s, submitted: true, score }));
       // Save progress with per-card results.
       const cardResults: CardResult[] = state.questions.map((item) => ({
-        cardId: item.card.id,
+        flashcardId: item.card.id,
         correct: item.correct ?? false,
         attempts: 1,
       }));
@@ -101,6 +101,7 @@ export function TestMode({ cards, studySetId }: Props) {
 
   function handleRestart() {
     resetSave();
+    setStartedAt(new Date());
     setState({ questions: buildQuestions(cards), currentIndex: 0, submitted: false, score: 0 });
   }
 
@@ -108,7 +109,7 @@ export function TestMode({ cards, studySetId }: Props) {
     const pct = Math.round((state.score / total) * 100);
     const grade = pct >= 90 ? "🎉 Xuất sắc!" : pct >= 70 ? "👍 Tốt!" : pct >= 50 ? "📖 Cần ôn thêm" : "💪 Hãy cố lên!";
     const cardResults: CardResult[] = state.questions.map((item) => ({
-      cardId: item.card.id,
+      flashcardId: item.card.id,
       correct: item.correct ?? false,
       attempts: 1,
     }));

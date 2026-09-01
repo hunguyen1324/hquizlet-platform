@@ -36,6 +36,9 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace
 
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -51,8 +54,13 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
+      - name: Web tests
+        working-directory: apps/web
+        run: npm test
+
       - name: Validate OpenAPI YAML
-        run: ruby -e 'require "yaml"; YAML.load_file("packages/api-contracts/openapi.yaml"); puts "OpenAPI YAML syntax: PASS"'
+        run: |
+          ruby -e 'require "yaml"; YAML.load_file("packages/api-contracts/openapi.yaml"); puts "OpenAPI YAML syntax: PASS"'
 
       - name: Lint OpenAPI contract
         run: npx --yes @redocly/cli@latest lint packages/api-contracts/openapi.yaml

@@ -186,14 +186,14 @@ components:
 
     ProgressSummary:
       type: object
-      required: [studySetId, totalSessions, latest]
+      required: [studySetId, totalSessions, history, page, perPage, totalPages]
       properties:
         studySetId: { type: integer, format: int64 }
         totalSessions: { type: integer, minimum: 0 }
-        latest:
-          type: object
+        bestScore: { type: integer, minimum: 0, nullable: true }
+        lastMode:
+          allOf: [{ $ref: '#/components/schemas/LearningMode' }]
           nullable: true
-          additionalProperties: true
         history:
           type: array
           items: { $ref: '#/components/schemas/LearningProgressSession' }

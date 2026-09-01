@@ -5,7 +5,6 @@ export {
   studySetApi,
   flashcardApi,
   folderApi,
-  learningApi,
   healthApi,
   fetchHealth,
   ApiError,

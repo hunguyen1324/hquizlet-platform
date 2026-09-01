@@ -192,6 +192,25 @@ func (r *LearningProgressRepository) GetLatestByMode(
 	return s, err
 }
 
+func (r *LearningProgressRepository) GetLatest(ctx context.Context, userID, studySetID int64) ([]model.LearningSession, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT DISTINCT ON (mode) id, user_id, study_set_id, mode, score, total,
+		       started_at, completed_at, idempotency_key, created_at
+		FROM learning_sessions
+		WHERE user_id = $1 AND study_set_id = $2
+		ORDER BY mode, created_at DESC`, userID, studySetID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	sessions := make([]model.LearningSession, 0, 4)
+	for rows.Next() {
+		var s model.LearningSession
+		if err := rows.Scan(&s.ID, &s.UserID, &s.StudySetID, &s.Mode, &s.Score, &s.Total,
+			&s.StartedAt, &s.CompletedAt, &s.IdempotencyKey, &s.CreatedAt); err != nil { return nil, err }
+		sessions = append(sessions, s)
+	}
+	return sessions, rows.Err()
+}
+
 // isDuplicateKeyError detects PostgreSQL unique constraint violations.
 // We match on SQLSTATE 23505 via the error string since lib/pq is not imported here.
 func isDuplicateKeyError(err error) bool {

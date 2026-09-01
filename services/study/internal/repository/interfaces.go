@@ -58,6 +58,7 @@ type LearningProgress interface {
 	GetSummary(ctx context.Context, userID, studySetID int64, f model.ProgressFilter) (model.ProgressSummary, error)
 	// GetLatestByMode returns the most-recent session for the given mode, or ErrNotFound.
 	GetLatestByMode(ctx context.Context, userID, studySetID int64, mode model.LearningMode) (model.LearningSession, error)
+	GetLatest(ctx context.Context, userID, studySetID int64) ([]model.LearningSession, error)
 }
 
 // ErrDuplicateIdempotencyKey is returned when a retry uses the same idempotency key.
