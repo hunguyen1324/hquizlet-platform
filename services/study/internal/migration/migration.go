@@ -125,4 +125,38 @@ var migrations = []string{
 
 	// 014 – full-text search index on study_sets title
 	`CREATE INDEX IF NOT EXISTS study_sets_title_trgm_idx ON study_sets USING gin(title gin_trgm_ops)`,
+
+	// 015 – learning_sessions: one row per completed (or in-progress) learning session.
+	// idempotency_key is unique per user to allow safe client retries.
+	`CREATE TABLE IF NOT EXISTS learning_sessions (
+		id              BIGSERIAL    PRIMARY KEY,
+		user_id         BIGINT       NOT NULL,
+		study_set_id    BIGINT       NOT NULL REFERENCES study_sets(id) ON DELETE CASCADE,
+		mode            TEXT         NOT NULL CHECK (mode IN ('flashcards','learn','test','match')),
+		score           INT          NOT NULL CHECK (score >= 0),
+		total           INT          NOT NULL CHECK (total >= 0 AND total <= 100),
+		started_at      TIMESTAMPTZ  NOT NULL,
+		completed_at    TIMESTAMPTZ,
+		idempotency_key TEXT         NOT NULL,
+		created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+		CONSTRAINT learning_sessions_score_lte_total CHECK (score <= total),
+		CONSTRAINT learning_sessions_idempotency_key_uq UNIQUE (user_id, idempotency_key)
+	)`,
+
+	// 016 – learning_card_results: per-card results within a session.
+	// flashcard_id must belong to the session's study_set – enforced at service layer.
+	`CREATE TABLE IF NOT EXISTS learning_card_results (
+		id               BIGSERIAL   PRIMARY KEY,
+		session_id       BIGINT      NOT NULL REFERENCES learning_sessions(id) ON DELETE CASCADE,
+		flashcard_id     BIGINT      NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+		correct          BOOLEAN     NOT NULL,
+		attempts         INT         NOT NULL CHECK (attempts BETWEEN 1 AND 100),
+		response_time_ms INT         CHECK (response_time_ms IS NULL OR response_time_ms >= 0)
+	)`,
+
+	// 017 – indexes for progress queries
+	`CREATE INDEX IF NOT EXISTS learning_sessions_user_set_created_idx
+		ON learning_sessions(user_id, study_set_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS learning_sessions_session_id_idx
+		ON learning_card_results(session_id)`,
 }
