@@ -1,0 +1,46 @@
+name: phase4-dev5-gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'infra/scripts/phase4-e2e.sh'
+      - 'docs/phase/hquizlet-phase-4-execution-plan-5-devs.md'
+  push:
+    branches: ['phase4/**']
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  phase4-script-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: bash -n infra/scripts/phase4-e2e.sh
+
+  docker-e2e:
+    if: ${{ vars.PHASE4_E2E_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run fresh-volume E2E
+        run: bash infra/scripts/phase4-e2e.sh

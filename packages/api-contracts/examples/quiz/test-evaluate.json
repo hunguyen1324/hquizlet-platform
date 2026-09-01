@@ -1,0 +1,29 @@
+{
+  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/evaluate — test mode",
+  "request": {
+    "method": "POST",
+    "path": "/v1/study-sets/101/quiz/evaluate",
+    "headers": { "Authorization": "Bearer <valid-token>" },
+    "body": {
+      "mode": "test", "seed": 42,
+      "answers": [
+        { "flashcardId": 3001, "selectedIndex": 1, "responseTimeMs": 2500 },
+        { "flashcardId": 3002, "selectedIndex": 0, "responseTimeMs": 3000 },
+        { "flashcardId": 3003, "selectedIndex": 2, "responseTimeMs": 1800 },
+        { "flashcardId": 3004, "selectedIndex": 0, "responseTimeMs": 2200 }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "mode": "test", "seed": 42, "score": 3, "total": 4, "contractVersion": "1.4.0",
+      "cardResults": [
+        { "flashcardId": 3001, "correct": true, "attempts": 1, "responseTimeMs": 2500 },
+        { "flashcardId": 3002, "correct": false, "attempts": 1, "responseTimeMs": 3000 },
+        { "flashcardId": 3003, "correct": true, "attempts": 1, "responseTimeMs": 1800 },
+        { "flashcardId": 3004, "correct": true, "attempts": 1, "responseTimeMs": 2200 }
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "_comment": "P4-CON-03 — Error envelope examples for quiz endpoints",
+  "validation_error": {
+    "description": "seed=0 or invalid mode",
+    "status": 422,
+    "body": { "code": "VALIDATION_ERROR", "message": "seed must be a positive integer", "requestId": "req-01", "details": { "field": "seed", "constraint": "minimum: 1" } }
+  },
+  "unauthorized": {
+    "description": "Missing or invalid bearer token",
+    "status": 401,
+    "body": { "code": "UNAUTHORIZED", "message": "authentication required", "requestId": "req-02", "details": {} }
+  },
+  "forbidden": {
+    "description": "User does not own the study set",
+    "status": 403,
+    "body": { "code": "FORBIDDEN", "message": "study set not owned by caller", "requestId": "req-03", "details": {} }
+  },
+  "not_found": {
+    "description": "Study set does not exist",
+    "status": 404,
+    "body": { "code": "NOT_FOUND", "message": "study set not found", "requestId": "req-04", "details": {} }
+  },
+  "bad_request": {
+    "description": "Empty answers array",
+    "status": 400,
+    "body": { "code": "VALIDATION_ERROR", "message": "answers array must not be empty", "requestId": "req-05", "details": { "field": "answers" } }
+  },
+  "upstream_unavailable": {
+    "description": "Quiz service cannot reach Study service",
+    "status": 503,
+    "body": { "code": "UPSTREAM_UNAVAILABLE", "message": "study service unavailable", "requestId": "req-06", "details": {} }
+  }
+}

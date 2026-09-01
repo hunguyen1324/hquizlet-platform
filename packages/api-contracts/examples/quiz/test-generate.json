@@ -1,0 +1,21 @@
+{
+  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/generate — test mode",
+  "request": {
+    "method": "POST",
+    "path": "/v1/study-sets/101/quiz/generate",
+    "headers": { "Authorization": "Bearer <valid-token>" },
+    "body": { "mode": "test", "seed": 42, "limit": 100, "options": { "distractors": 3 } }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "mode": "test", "seed": 42, "contractVersion": "1.4.0",
+      "items": [
+        { "flashcardId": 3001, "term": "HTTP Method for reading", "choices": ["PUT", "GET", "DELETE", "POST"], "correctIndex": 1, "starred": false, "position": 0 },
+        { "flashcardId": 3002, "term": "HTTP Method for creating", "choices": ["GET", "POST", "PATCH", "DELETE"], "correctIndex": 1, "starred": true, "position": 1 },
+        { "flashcardId": 3003, "term": "HTTP Method for replacing", "choices": ["DELETE", "PATCH", "PUT", "GET"], "correctIndex": 2, "starred": false, "position": 2 },
+        { "flashcardId": 3004, "term": "HTTP Method for partial update", "choices": ["PATCH", "POST", "DELETE", "GET"], "correctIndex": 0, "starred": false, "position": 3 }
+      ]
+    }
+  }
+}
