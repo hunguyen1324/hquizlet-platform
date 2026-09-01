@@ -58,4 +58,8 @@ var migrations = []string{
 	// 005 – indexes
 	`CREATE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions(token_hash)`,
 	`CREATE INDEX IF NOT EXISTS sessions_user_id_idx    ON sessions(user_id)`,
+
+	// 006 – Phase 3 revocation and account status. Append-only and upgrade-safe.
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN NOT NULL DEFAULT false`,
+	`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ`,
 }

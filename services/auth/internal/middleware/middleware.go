@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -21,14 +22,19 @@ func RequireAuth(svc *service.AuthService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := bearerToken(r)
-			u, err := svc.VerifyToken(r.Context(), token)
+			identity, err := svc.VerifyToken(r.Context(), token)
 			if err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"code":"unauthorized","message":"invalid or expired token"}`))
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"code": "UNAUTHORIZED", "message": "invalid or expired token",
+					"requestId": w.Header().Get("X-Request-ID"), "details": map[string]any{},
+				})
 				return
 			}
-			ctx := context.WithValue(r.Context(), UserKey, u)
+			ctx := context.WithValue(r.Context(), UserKey, model.User{
+				ID: identity.UserID, Email: identity.Email, Name: identity.Name, Role: identity.Role,
+			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

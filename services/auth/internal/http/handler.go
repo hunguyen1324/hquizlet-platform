@@ -117,18 +117,15 @@ func refreshHandler(svc *service.AuthService) http.HandlerFunc {
 // set by gateway after calling this endpoint, OR reads directly via this endpoint.
 func verifyHandler(svc *service.AuthService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		u, err := svc.VerifyToken(r.Context(), bearerToken(r))
+		identity, err := svc.VerifyToken(r.Context(), bearerToken(r))
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"authenticated": true,
-			"userId":        u.ID,
-			"email":         u.Email,
-			"name":          u.Name,
-			"role":          u.Role,
-		})
+		writeJSON(w, http.StatusOK, struct {
+			Authenticated bool `json:"authenticated"`
+			model.VerifiedIdentity
+		}{Authenticated: true, VerifiedIdentity: identity})
 	}
 }
 
@@ -182,26 +179,27 @@ func healthHandler(serviceName string, db *sql.DB) http.HandlerFunc {
 // Normal error:
 //   { "code": "<snake_case_code>", "message": "<human readable>" }
 //
-// Validation error (422 only) — superset of the normal envelope:
-//   { "code": "validation_error", "message": "<reason>", "field": "<field_name>" }
+// Validation error (422 only) stores field-level context under details.field.
 
 // apiError is the canonical error envelope for all Auth error responses.
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	RequestID string         `json:"requestId"`
+	Details   map[string]any `json:"details"`
 }
 
-// apiValidationError extends apiError with a field name for 422 responses.
-// It is a strict superset of apiError so clients that only read code/message still work.
+// apiValidationError uses the same envelope and places validation metadata in details.
 type apiValidationError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Field   string `json:"field"`
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	RequestID string         `json:"requestId"`
+	Details   map[string]any `json:"details"`
 }
 
 // writeError sends a structured JSON error using the canonical envelope.
 func writeError(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, apiError{Code: code, Message: msg})
+	writeJSON(w, status, apiError{Code: strings.ToUpper(code), Message: msg, RequestID: requestID(w), Details: map[string]any{}})
 }
 
 // writeServiceError maps service-layer errors to correct HTTP status + canonical code.
@@ -211,15 +209,17 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &ve):
 		writeJSON(w, http.StatusUnprocessableEntity, apiValidationError{
-			Code:    "validation_error",
-			Message: ve.Msg,
-			Field:   ve.Field,
+			Code: "VALIDATION_ERROR", Message: ve.Msg, RequestID: requestID(w),
+			Details: map[string]any{"field": ve.Field},
 		})
 	case errors.Is(err, service.ErrEmailTaken):
 		writeError(w, http.StatusConflict, "email_taken", "email already registered")
 	case errors.Is(err, service.ErrInvalidCredential):
 		writeError(w, http.StatusUnauthorized, "invalid_credential", "invalid email or password")
-	case errors.Is(err, service.ErrInvalidSession):
+	case errors.Is(err, service.ErrInvalidSession),
+		errors.Is(err, service.ErrExpiredSession),
+		errors.Is(err, service.ErrRevokedSession),
+		errors.Is(err, service.ErrDisabledUser):
 		writeError(w, http.StatusUnauthorized, "invalid_session", "invalid or expired session")
 	case errors.Is(err, service.ErrForbidden):
 		writeError(w, http.StatusForbidden, "forbidden", "access denied")
@@ -256,6 +256,10 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func requestID(w http.ResponseWriter) string {
+	return w.Header().Get("X-Request-ID")
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {

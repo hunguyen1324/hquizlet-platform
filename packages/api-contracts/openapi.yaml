@@ -29,12 +29,19 @@ components:
       type: object
       required: [code, message, requestId, details]
       properties:
-        code: { type: string, example: VALIDATION_ERROR }
-        message: { type: string, example: score must be between 0 and total }
-        requestId: { type: string, example: req-01HXYZ }
+        code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "score must be between 0 and total"
+        requestId:
+          type: string
+          example: "20260901143000.000000000"
         details:
           type: object
           additionalProperties: true
+          example: {}
 
     User:
       type: object

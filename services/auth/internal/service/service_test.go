@@ -13,8 +13,8 @@ import (
 // --- mock repository ---
 
 type mockRepo struct {
-	users    map[string]mockUser // keyed by email
-	sessions map[string]int64   // tokenHash -> userID
+	users    map[string]mockUser    // keyed by email
+	sessions map[string]mockSession // tokenHash -> session
 	nextID   int64
 }
 
@@ -23,10 +23,16 @@ type mockUser struct {
 	passwordHash string
 }
 
+type mockSession struct {
+	userID    int64
+	expiresAt time.Time
+	revokedAt *time.Time
+}
+
 func newMockRepo() *mockRepo {
 	return &mockRepo{
 		users:    make(map[string]mockUser),
-		sessions: make(map[string]int64),
+		sessions: make(map[string]mockSession),
 		nextID:   1,
 	}
 }
@@ -70,28 +76,35 @@ func (m *mockRepo) UpdateProfile(_ context.Context, id int64, name, image string
 	return model.User{}, errors.New("not found")
 }
 
-func (m *mockRepo) CreateSession(_ context.Context, userID int64, tokenHash string, _ time.Time) error {
-	m.sessions[tokenHash] = userID
+func (m *mockRepo) CreateSession(_ context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+	m.sessions[tokenHash] = mockSession{userID: userID, expiresAt: expiresAt}
 	return nil
 }
 
-func (m *mockRepo) GetUserByTokenHash(_ context.Context, tokenHash string) (model.User, error) {
-	uid, ok := m.sessions[tokenHash]
+func (m *mockRepo) GetSessionIdentity(_ context.Context, tokenHash string) (model.User, model.Session, error) {
+	s, ok := m.sessions[tokenHash]
 	if !ok {
-		return model.User{}, errors.New("not found")
+		return model.User{}, model.Session{}, errors.New("not found")
 	}
-	return m.GetUserByID(context.Background(), uid)
+	u, err := m.GetUserByID(context.Background(), s.userID)
+	return u, model.Session{UserID: s.userID, ExpiresAt: s.expiresAt, RevokedAt: s.revokedAt}, err
 }
 
 func (m *mockRepo) DeleteSession(_ context.Context, tokenHash string) error {
-	delete(m.sessions, tokenHash)
+	if s, ok := m.sessions[tokenHash]; ok {
+		now := time.Now().UTC()
+		s.revokedAt = &now
+		m.sessions[tokenHash] = s
+	}
 	return nil
 }
 
 func (m *mockRepo) DeleteAllSessions(_ context.Context, userID int64) error {
-	for hash, uid := range m.sessions {
-		if uid == userID {
-			delete(m.sessions, hash)
+	for hash, session := range m.sessions {
+		if session.userID == userID {
+			now := time.Now().UTC()
+			session.revokedAt = &now
+			m.sessions[hash] = session
 		}
 	}
 	return nil
@@ -305,5 +318,78 @@ func TestHashToken_Deterministic(t *testing.T) {
 	}
 	if service.HashToken("abc123") == service.HashToken("abc124") {
 		t.Error("different tokens should produce different hashes")
+	}
+}
+
+func TestVerifyTokenRejectsMissingInvalidExpiredRevokedAndDisabled(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*mockRepo, string)
+		token string
+		want  error
+	}{
+		{name: "missing", token: "", want: service.ErrInvalidSession},
+		{name: "invalid", token: "not-issued", want: service.ErrInvalidSession},
+		{name: "expired", token: "issued", setup: func(repo *mockRepo, hash string) {
+			s := repo.sessions[hash]
+			s.expiresAt = time.Now().UTC().Add(-time.Minute)
+			repo.sessions[hash] = s
+		}, want: service.ErrExpiredSession},
+		{name: "revoked", token: "issued", setup: func(repo *mockRepo, hash string) {
+			s := repo.sessions[hash]
+			now := time.Now().UTC()
+			s.revokedAt = &now
+			repo.sessions[hash] = s
+		}, want: service.ErrRevokedSession},
+		{name: "disabled", token: "issued", setup: func(repo *mockRepo, _ string) {
+			u := repo.users["verify@example.com"]
+			u.Disabled = true
+			repo.users["verify@example.com"] = u
+		}, want: service.ErrDisabledUser},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newMockRepo()
+			svc := service.NewForTest(repo, time.Hour)
+			resp, err := svc.Register(context.Background(), model.RegisterInput{
+				Name: "Verify", Email: "verify@example.com", Password: "password123",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.setup != nil {
+				tt.setup(repo, service.HashToken(resp.Token))
+			}
+			token := tt.token
+			if token == "issued" {
+				token = resp.Token
+			}
+			_, err = svc.VerifyToken(context.Background(), token)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("VerifyToken() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestVerifyTokenReturnsCanonicalIdentityAndExpiry(t *testing.T) {
+	repo := newMockRepo()
+	svc := service.NewForTest(repo, time.Hour)
+	resp, err := svc.Register(context.Background(), model.RegisterInput{
+		Name: "Canonical", Email: "canonical@example.com", Password: "password123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := svc.VerifyToken(context.Background(), resp.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.UserID != resp.User.ID || identity.Email != resp.User.Email {
+		t.Fatalf("unexpected identity: %+v", identity)
+	}
+	if identity.ExpiresAt.IsZero() || !identity.ExpiresAt.Equal(resp.ExpiresAt) {
+		t.Fatalf("expiry = %v, want %v", identity.ExpiresAt, resp.ExpiresAt)
 	}
 }
