@@ -71,6 +71,95 @@ type BulkSaveResult struct {
 	Deleted []int64     `json:"deleted"`
 }
 
+// ---------------------------------------------------------------------------
+// Learning Progress domain
+// ---------------------------------------------------------------------------
+
+// LearningMode is the set of valid study modes.
+type LearningMode string
+
+const (
+	ModFlashcards LearningMode = "flashcards"
+	ModLearn      LearningMode = "learn"
+	ModTest       LearningMode = "test"
+	ModMatch      LearningMode = "match"
+)
+
+// ValidMode returns true if m is one of the four supported modes.
+func (m LearningMode) Valid() bool {
+	switch m {
+	case ModFlashcards, ModLearn, ModTest, ModMatch:
+		return true
+	}
+	return false
+}
+
+// LearningSession is the aggregate root for a single learning attempt.
+type LearningSession struct {
+	ID             int64           `json:"id"`
+	UserID         int64           `json:"userId"`
+	StudySetID     int64           `json:"studySetId"`
+	Mode           LearningMode    `json:"mode"`
+	Score          int             `json:"score"`
+	Total          int             `json:"total"`
+	StartedAt      time.Time       `json:"startedAt"`
+	CompletedAt    *time.Time      `json:"completedAt"`
+	IdempotencyKey string          `json:"idempotencyKey"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	CardResults    []LearningCardResult `json:"cardResults,omitempty"`
+}
+
+// LearningCardResult records the outcome for a single flashcard within a session.
+type LearningCardResult struct {
+	ID             int64  `json:"id"`
+	SessionID      int64  `json:"sessionId"`
+	FlashcardID    int64  `json:"flashcardId"`
+	Correct        bool   `json:"correct"`
+	Attempts       int    `json:"attempts"`
+	ResponseTimeMs *int   `json:"responseTimeMs"`
+}
+
+// CardResultInput is the per-card payload submitted by the client.
+type CardResultInput struct {
+	FlashcardID    int64 `json:"flashcardId"`
+	Correct        bool  `json:"correct"`
+	Attempts       int   `json:"attempts"`
+	ResponseTimeMs *int  `json:"responseTimeMs"`
+}
+
+// SaveProgressInput is the validated payload for POST /v1/study-sets/{id}/progress.
+// userID is NOT accepted from the client – it is injected by the gateway.
+// studySetID comes from the URL path, not from this body.
+type SaveProgressInput struct {
+	Mode           LearningMode      `json:"mode"`
+	Score          int               `json:"score"`
+	Total          int               `json:"total"`
+	StartedAt      time.Time         `json:"startedAt"`
+	CompletedAt    *time.Time        `json:"completedAt"`
+	CardResults    []CardResultInput `json:"cardResults"`
+	IdempotencyKey string            `json:"idempotencyKey"`
+}
+
+// ProgressSummary is the aggregate view returned by GET /v1/study-sets/{id}/progress.
+type ProgressSummary struct {
+	StudySetID    int64              `json:"studySetId"`
+	TotalSessions int                `json:"totalSessions"`
+	BestScore     *int               `json:"bestScore"`
+	LastMode      *LearningMode      `json:"lastMode"`
+	History       []LearningSession  `json:"history"`
+	Page          int                `json:"page"`
+	PerPage       int                `json:"perPage"`
+	TotalPages    int                `json:"totalPages"`
+}
+
+// ProgressFilter holds pagination params for listing history.
+type ProgressFilter struct {
+	Page    int // 1-based
+	PerPage int // default 20, max 50
+}
+
+// ---------------------------------------------------------------------------
+
 // StudySetFilter holds optional search/filter/sort params for listing.
 type StudySetFilter struct {
 	Search  string // title substring search

@@ -33,15 +33,17 @@ func main() {
 	setRepo := repository.NewStudySetRepository(db)
 	cardRepo := repository.NewFlashcardRepository(db)
 	folderRepo := repository.NewFolderRepository(db)
+	progressRepo := repository.NewLearningProgressRepository(db)
 
 	// Services
 	setSvc := service.NewStudySetService(setRepo, cardRepo)
 	cardSvc := service.NewFlashcardService(setRepo, cardRepo)
 	folderSvc := service.NewFolderService(folderRepo, setRepo)
+	progressSvc := service.NewProgressService(progressRepo, setRepo, cardRepo)
 
 	// HTTP
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, folderSvc, db).Register(mux)
+	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, db).Register(mux)
 
 	// All /v1 study resources require a user identity. Health remains public.
 	handler := middleware.Chain(mux,

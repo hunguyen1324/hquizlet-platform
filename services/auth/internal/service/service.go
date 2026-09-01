@@ -20,6 +20,9 @@ var (
 	ErrEmailTaken        = errors.New("email already registered")  // 409
 	ErrInvalidCredential = errors.New("invalid email or password") // 401
 	ErrInvalidSession    = errors.New("invalid or expired session") // 401
+	ErrExpiredSession    = errors.New("expired session")            // 401
+	ErrRevokedSession    = errors.New("revoked session")            // 401
+	ErrDisabledUser      = errors.New("disabled user")               // 401
 	ErrForbidden         = errors.New("forbidden")                 // 403
 )
 
@@ -80,12 +83,9 @@ func (s *AuthService) Login(ctx context.Context, input model.LoginInput) (model.
 }
 
 func (s *AuthService) Me(ctx context.Context, token string) (model.User, error) {
-	if token == "" {
-		return model.User{}, ErrInvalidSession
-	}
-	u, err := s.repo.GetUserByTokenHash(ctx, HashToken(token))
+	_, u, err := s.verifiedIdentity(ctx, token)
 	if err != nil {
-		return model.User{}, ErrInvalidSession
+		return model.User{}, err
 	}
 	return u, nil
 }
@@ -118,8 +118,9 @@ func (s *AuthService) Refresh(ctx context.Context, token string) (model.SessionR
 
 // --- P2-AUTH-02: token verifier for gateway/study ---
 
-func (s *AuthService) VerifyToken(ctx context.Context, token string) (model.User, error) {
-	return s.Me(ctx, token)
+func (s *AuthService) VerifyToken(ctx context.Context, token string) (model.VerifiedIdentity, error) {
+	identity, _, err := s.verifiedIdentity(ctx, token)
+	return identity, err
 }
 
 // --- P2-AUTH-03: user profile ---
@@ -157,6 +158,28 @@ func (s *AuthService) newSession(ctx context.Context, u model.User) (model.Sessi
 		ExpiresAt:     expiresAt,
 		User:          u,
 	}, nil
+}
+
+func (s *AuthService) verifiedIdentity(ctx context.Context, token string) (model.VerifiedIdentity, model.User, error) {
+	if strings.TrimSpace(token) == "" {
+		return model.VerifiedIdentity{}, model.User{}, ErrInvalidSession
+	}
+	u, session, err := s.repo.GetSessionIdentity(ctx, HashToken(token))
+	if err != nil {
+		return model.VerifiedIdentity{}, model.User{}, ErrInvalidSession
+	}
+	if u.Disabled {
+		return model.VerifiedIdentity{}, model.User{}, ErrDisabledUser
+	}
+	if session.RevokedAt != nil {
+		return model.VerifiedIdentity{}, model.User{}, ErrRevokedSession
+	}
+	if !session.ExpiresAt.After(time.Now().UTC()) {
+		return model.VerifiedIdentity{}, model.User{}, ErrExpiredSession
+	}
+	return model.VerifiedIdentity{
+		UserID: u.ID, Email: u.Email, Name: u.Name, Role: u.Role, ExpiresAt: session.ExpiresAt,
+	}, u, nil
 }
 
 func HashToken(token string) string {

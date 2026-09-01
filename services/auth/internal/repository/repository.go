@@ -91,35 +91,38 @@ func (r *AuthRepository) CreateSession(ctx context.Context, userID int64, tokenH
 	return err
 }
 
-// GetUserByTokenHash looks up the live session and returns the user.
-func (r *AuthRepository) GetUserByTokenHash(ctx context.Context, tokenHash string) (model.User, error) {
+// GetSessionIdentity returns session state and its canonical user identity.
+func (r *AuthRepository) GetSessionIdentity(ctx context.Context, tokenHash string) (model.User, model.Session, error) {
 	var u model.User
+	var session model.Session
 	err := r.db.QueryRowContext(ctx,
-		`SELECT u.id, u.name, u.email, u.image, u.role, u.created_at
+		`SELECT u.id, u.name, u.email, u.image, u.role, u.disabled, u.created_at,
+		        s.id, s.user_id, s.expires_at, s.revoked_at, s.created_at
 		 FROM sessions s
 		 JOIN users u ON u.id = s.user_id
-		 WHERE s.token_hash = $1 AND s.expires_at > now()`,
+		 WHERE s.token_hash = $1`,
 		tokenHash,
-	).Scan(&u.ID, &u.Name, &u.Email, &u.Image, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Image, &u.Role, &u.Disabled, &u.CreatedAt,
+		&session.ID, &session.UserID, &session.ExpiresAt, &session.RevokedAt, &session.CreatedAt)
 	if err != nil {
-		return model.User{}, ErrNotFound
+		return model.User{}, model.Session{}, ErrNotFound
 	}
-	return u, nil
+	return u, session, nil
 }
 
-// DeleteSession removes one session (logout current device). P2-AUTH-01.
+// DeleteSession revokes one session (logout current device) while retaining an audit trail.
 func (r *AuthRepository) DeleteSession(ctx context.Context, tokenHash string) error {
 	_, err := r.db.ExecContext(ctx,
-		`DELETE FROM sessions WHERE token_hash = $1`,
+		`UPDATE sessions SET revoked_at = COALESCE(revoked_at, now()) WHERE token_hash = $1`,
 		tokenHash,
 	)
 	return err
 }
 
-// DeleteAllSessions removes ALL sessions for a user (logout all devices). P2-AUTH-01.
+// DeleteAllSessions revokes ALL sessions for a user (logout all devices). P2-AUTH-01.
 func (r *AuthRepository) DeleteAllSessions(ctx context.Context, userID int64) error {
 	_, err := r.db.ExecContext(ctx,
-		`DELETE FROM sessions WHERE user_id = $1`,
+		`UPDATE sessions SET revoked_at = COALESCE(revoked_at, now()) WHERE user_id = $1`,
 		userID,
 	)
 	return err

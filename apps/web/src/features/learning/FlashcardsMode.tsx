@@ -1,14 +1,17 @@
 // FlashcardsMode — Dev 4
-// P2-LEARN-01: Flip card, next/prev, shuffle, starred filter — data thật từ props
-// Phase 2: starred filter, keyboard nav đầy đủ, mobile responsive, empty state < 2 cards
+// P2-LEARN-01: Flip card, next/prev, shuffle, starred filter
+// P3-LEARN-01,02,03: Nối completion với saveProgress thật khi xem hết toàn bộ deck
 
 import React from "react";
 import type { Flashcard } from "./types";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
+import { useProgressSave } from "./useProgressSave";
+import { ProgressSaveStatus } from "./ProgressSaveStatus";
 import "./learning.css";
 
 type Props = {
   cards: Flashcard[];
+  studySetId: number;
 };
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -20,23 +23,60 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a;
 }
 
-export function FlashcardsMode({ cards }: Props) {
+export function FlashcardsMode({ cards, studySetId }: Props) {
+  const [startedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
   const [deck, setDeck] = React.useState<Flashcard[]>(cards);
   const [index, setIndex] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
+  // Track seen cards for completion detection.
+  const [seenCardIds, setSeenCardIds] = React.useState<Set<number>>(new Set());
 
-  // Recompute deck when filter/shuffle/cards change
+  const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
+    studySetId,
+    mode: "flashcards",
+  });
+
   React.useEffect(() => {
     const base = starredOnly ? cards.filter((c) => c.starred) : cards;
     setDeck(shuffled ? shuffleArray(base) : [...base]);
     setIndex(0);
     setFlipped(false);
+    setSeenCardIds(new Set());
+    resetSave();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, starredOnly, shuffled]);
 
   const current = deck[index];
   const total = deck.length;
+
+  // Mark current card as seen and check for completion.
+  React.useEffect(() => {
+    if (!current) return;
+    setSeenCardIds((prev) => {
+      if (prev.has(current.id)) return prev;
+      const next = new Set(prev);
+      next.add(current.id);
+      return next;
+    });
+  }, [current]);
+
+  // Trigger save when all cards in current deck have been seen.
+  const completionTriggered = React.useRef(false);
+  React.useEffect(() => {
+    if (completionTriggered.current || total === 0) return;
+    if (seenCardIds.size >= total) {
+      completionTriggered.current = true;
+      // Flashcards: no right/wrong — score = total (all seen = session complete).
+      onSessionComplete({
+        score: total,
+        total,
+        cardResults: deck.map((c) => ({ cardId: c.id, correct: true, attempts: 1 })),
+        startedAt,
+      });
+    }
+  }, [seenCardIds, total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePrev() {
     setFlipped(false);
@@ -49,14 +89,15 @@ export function FlashcardsMode({ cards }: Props) {
   }
 
   function handleRestart() {
+    completionTriggered.current = false;
+    resetSave();
     const base = starredOnly ? cards.filter((c) => c.starred) : cards;
     setDeck(shuffled ? shuffleArray(base) : [...base]);
     setIndex(0);
     setFlipped(false);
+    setSeenCardIds(new Set());
   }
 
-  // Keyboard: Space = flip, ArrowLeft = prev, ArrowRight = next
-  // Depend on both `total` and `index` so handlePrev/handleNext are never stale.
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLButtonElement) return;
@@ -66,16 +107,12 @@ export function FlashcardsMode({ cards }: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  // handlePrev/handleNext close over `total` and `index`; re-register when either changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total, index]);
 
   const starredCount = cards.filter((c) => c.starred).length;
 
-  if (cards.length === 0) {
-    return <LearningEmptyState />;
-  }
-
+  if (cards.length === 0) return <LearningEmptyState />;
   if (total === 0 && starredOnly) {
     return (
       <LearningEmptyState
@@ -85,12 +122,12 @@ export function FlashcardsMode({ cards }: Props) {
     );
   }
 
+  const allSeen = seenCardIds.size >= total && total > 0;
+
   return (
     <div className="flashcards-mode">
       <div className="flashcards-toolbar">
-        <span className="flashcards-counter">
-          {index + 1} / {total}
-        </span>
+        <span className="flashcards-counter">{index + 1} / {total}</span>
         <div className="toolbar-right">
           {starredCount > 0 && (
             <button
@@ -108,22 +145,16 @@ export function FlashcardsMode({ cards }: Props) {
           >
             {shuffled ? "🔀 Đang xáo" : "🔀 Xáo trộn"}
           </button>
-          <button className="ghost-button" onClick={handleRestart} title="Làm lại">
-            ↺ Làm lại
-          </button>
+          <button className="ghost-button" onClick={handleRestart} title="Làm lại">↺ Làm lại</button>
         </div>
       </div>
 
-      {/* Flip card */}
       <div
         className={`flip-card${flipped ? " flipped" : ""}`}
         onClick={() => setFlipped((f) => !f)}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === " " || e.key === "Enter") {
-            e.preventDefault();
-            setFlipped((f) => !f);
-          }
+          if (e.key === " " || e.key === "Enter") { e.preventDefault(); setFlipped((f) => !f); }
         }}
         role="button"
         aria-label={flipped ? `Định nghĩa: ${current.definition}` : `Thuật ngữ: ${current.term}. Nhấn Space hoặc click để lật.`}
@@ -143,35 +174,22 @@ export function FlashcardsMode({ cards }: Props) {
       </div>
 
       <div className="flashcards-nav">
-        <button
-          className="nav-btn"
-          onClick={handlePrev}
-          disabled={total <= 1}
-          aria-label="Thẻ trước (←)"
-        >
-          ← Trước
-        </button>
-        <button
-          className="nav-btn"
-          onClick={handleNext}
-          disabled={total <= 1}
-          aria-label="Thẻ tiếp (→)"
-        >
-          Tiếp →
-        </button>
+        <button className="nav-btn" onClick={handlePrev} disabled={total <= 1} aria-label="Thẻ trước (←)">← Trước</button>
+        <button className="nav-btn" onClick={handleNext} disabled={total <= 1} aria-label="Thẻ tiếp (→)">Tiếp →</button>
       </div>
 
-      {/* Progress bar */}
       <div className="progress-bar-track" role="progressbar" aria-valuenow={index + 1} aria-valuemax={total}>
-        <div
-          className="progress-bar-fill"
-          style={{ width: `${((index + 1) / total) * 100}%` }}
-        />
+        <div className="progress-bar-fill" style={{ width: `${((index + 1) / total) * 100}%` }} />
       </div>
 
-      <p className="keyboard-hint" aria-hidden="true">
-        ← → để điều hướng · Space để lật
-      </p>
+      {/* Show save status when all cards seen */}
+      {allSeen && (
+        <div className="flashcards-completion">
+          <ProgressSaveStatus status={saveStatus} />
+        </div>
+      )}
+
+      <p className="keyboard-hint" aria-hidden="true">← → để điều hướng · Space để lật</p>
     </div>
   );
 }

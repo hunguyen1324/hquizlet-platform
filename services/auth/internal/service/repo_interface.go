@@ -16,7 +16,7 @@ type Repository interface {
 	GetUserByID(ctx context.Context, id int64) (model.User, error)
 	UpdateProfile(ctx context.Context, id int64, name, image string) (model.User, error)
 	CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
-	GetUserByTokenHash(ctx context.Context, tokenHash string) (model.User, error)
+	GetSessionIdentity(ctx context.Context, tokenHash string) (model.User, model.Session, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteAllSessions(ctx context.Context, userID int64) error
 	PruneExpiredSessions(ctx context.Context) error

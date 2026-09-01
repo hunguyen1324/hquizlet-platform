@@ -1,5 +1,7 @@
-// LearningRouter - Dev4
-// Phase 2: production learning entrypoint. No mock fallback.
+// LearningRouter — Dev 4
+// P2: production learning entrypoint, no mock fallback.
+// P3-LEARN-01..03: Truyền studySetId xuống 4 modes để enable progress save.
+
 import React, { useEffect, useState } from "react";
 import type { LearningMode, StudySet, Flashcard } from "./types";
 import { FlashcardsMode } from "./FlashcardsMode";
@@ -69,10 +71,10 @@ export function LearningRouter({ studySet, initialMode = "flashcards", onBack }:
         />
       ) : (
         <div className="learning-content">
-          {mode === "flashcards" && <FlashcardsMode cards={cards} />}
-          {mode === "learn" && <LearnMode cards={cards} />}
-          {mode === "test" && <TestMode cards={cards} />}
-          {mode === "match" && <MatchMode cards={cards} />}
+          {mode === "flashcards" && <FlashcardsMode cards={cards} studySetId={studySet.id} />}
+          {mode === "learn" && <LearnMode cards={cards} studySetId={studySet.id} />}
+          {mode === "test" && <TestMode cards={cards} studySetId={studySet.id} />}
+          {mode === "match" && <MatchMode cards={cards} studySetId={studySet.id} />}
         </div>
       )}
     </div>
