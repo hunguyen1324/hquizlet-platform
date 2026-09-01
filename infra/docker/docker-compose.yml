@@ -7,16 +7,20 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/go-service.Dockerfile
-      args: { SERVICE: gateway }
+      args:
+        SERVICE: gateway
     environment:
       PORT: "8080"
-      AUTH_SERVICE_URL: http://auth:8081
-      STUDY_SERVICE_URL: http://study:8082
-      QUIZ_SERVICE_URL: http://quiz:8083
-    ports: ["8080:8080"]
+      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
+      QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http://quiz:8083}"
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
-      auth: { condition: service_healthy }
-      study: { condition: service_healthy }
+      auth:
+        condition: service_healthy
+      study:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
@@ -29,15 +33,18 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/go-service.Dockerfile
-      args: { SERVICE: auth }
-    ports: ["8081:8081"]
+      args:
+        SERVICE: auth
     environment:
       PORT: "8081"
-      DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
-      SESSION_TTL: "3600"
+      DATABASE_URL: "${DATABASE_URL}"
+      SESSION_TTL: "${SESSION_TTL:-1h}"
       JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-prod}"
+    ports:
+      - "${AUTH_PORT:-8081}:8081"
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
@@ -50,15 +57,19 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/go-service.Dockerfile
-      args: { SERVICE: study }
-    ports: ["8082:8082"]
+      args:
+        SERVICE: study
     environment:
       PORT: "8082"
-      DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
-      AUTH_SERVICE_URL: http://auth:8081
+      DATABASE_URL: "${DATABASE_URL}"
+      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+    ports:
+      - "${STUDY_PORT:-8082}:8082"
     depends_on:
-      postgres: { condition: service_healthy }
-      auth: { condition: service_healthy }
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
@@ -71,15 +82,19 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/go-service.Dockerfile
-      args: { SERVICE: quiz }
-    ports: ["8083:8083"]
+      args:
+        SERVICE: quiz
     environment:
       PORT: "8083"
-      DATABASE_URL: postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable
-      AUTH_SERVICE_URL: http://auth:8081
+      DATABASE_URL: "${DATABASE_URL}"
+      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+    ports:
+      - "${QUIZ_PORT:-8083}:8083"
     depends_on:
-      postgres: { condition: service_healthy }
-      auth: { condition: service_healthy }
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
@@ -93,13 +108,15 @@ services:
       context: ../..
       dockerfile: infra/docker/web.Dockerfile
     environment:
-      VITE_GATEWAY_URL: http://localhost:8080
-    ports: ["5173:5173"]
+      VITE_GATEWAY_URL: "${VITE_GATEWAY_URL:-http://localhost:8080}"
+    ports:
+      - "${WEB_PORT:-5173}:5173"
     volumes:
       - ../../apps/web:/app
       - web-node-modules:/app/node_modules
     depends_on:
-      gateway: { condition: service_healthy }
+      gateway:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5173"]
@@ -111,14 +128,19 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: hquizlet
-      POSTGRES_USER: hquizlet
-      POSTGRES_PASSWORD: hquizlet
-    ports: ["5432:5432"]
+      POSTGRES_DB: "${POSTGRES_DB:-hquizlet}"
+      POSTGRES_USER: "${POSTGRES_USER:-hquizlet}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-hquizlet}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hquizlet -d hquizlet"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-hquizlet} -d ${POSTGRES_DB:-hquizlet}"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -127,7 +149,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -137,7 +160,9 @@ services:
 
   nats:
     image: nats:2-alpine
-    ports: ["4222:4222", "8222:8222"]
+    ports:
+      - "${NATS_CLIENT_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
     restart: unless-stopped
 
 volumes:
