@@ -165,7 +165,7 @@ components:
         score: { type: integer, minimum: 0 }
         total: { type: integer, minimum: 0, maximum: 100 }
         startedAt: { type: string, format: date-time }
-        completedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
         cardResults: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/CardResult' } }
 
@@ -177,7 +177,7 @@ components:
         score: { type: integer, minimum: 0 }
         total: { type: integer, minimum: 0, maximum: 100 }
         startedAt: { type: string, format: date-time }
-        completedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: [string, 'null'], format: date-time }
         idempotencyKey: { type: string, minLength: 8, maxLength: 128 }
         cardResults:
           type: array
@@ -190,10 +190,11 @@ components:
       properties:
         studySetId: { type: integer, format: int64 }
         totalSessions: { type: integer, minimum: 0 }
-        bestScore: { type: integer, minimum: 0, nullable: true }
+        bestScore: { type: [integer, 'null'], minimum: 0 }
         lastMode:
-          allOf: [{ $ref: '#/components/schemas/LearningMode' }]
-          nullable: true
+          oneOf:
+            - { $ref: '#/components/schemas/LearningMode' }
+            - { type: 'null' }
         history:
           type: array
           items: { $ref: '#/components/schemas/LearningProgressSession' }
@@ -204,6 +205,7 @@ components:
 paths:
   /healthz:
     get:
+      security: []
       tags: [health]
       responses:
         '200':
@@ -218,6 +220,7 @@ paths:
 
   /healthz/services:
     get:
+      security: []
       tags: [health]
       responses:
         '200':
@@ -238,6 +241,7 @@ paths:
 
   /v1/auth/register:
     post:
+      security: []
       tags: [auth]
       requestBody:
         required: true
@@ -258,6 +262,7 @@ paths:
 
   /v1/auth/login:
     post:
+      security: []
       tags: [auth]
       requestBody:
         required: true
