@@ -27,6 +27,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [progress, setProgress] = React.useState<ProgressListResponse | null>(null);
   const [progressError, setProgressError] = React.useState("");
   const cards = set.flashcards ?? [];
+  const progressHistory = progress?.history ?? [];
+  const latestProgress = progressHistory[0] ?? null;
 
   const loadProgress = React.useCallback(async () => {
     setProgressStatus("loading");
@@ -96,12 +98,12 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             errorMessage={progressError}
             onRetry={loadProgress}
             summary={progress ? {
-              latestScore: progress.history[0]?.score ?? null,
-              latestTotal: progress.history[0]?.total ?? null,
+              latestScore: latestProgress?.score ?? null,
+              latestTotal: latestProgress?.total ?? null,
               attemptCount: progress.totalSessions,
               latestMode: progress.lastMode,
             } : null}
-            history={(progress?.history ?? []).map((item) => ({
+            history={progressHistory.map((item) => ({
               id: item.id, mode: item.mode, score: item.score,
               total: item.total, completedAt: item.completedAt,
             }))}

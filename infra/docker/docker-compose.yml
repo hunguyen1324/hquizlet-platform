@@ -37,7 +37,7 @@ services:
         SERVICE: auth
     environment:
       PORT: "8081"
-      DATABASE_URL: "${DATABASE_URL}"
+      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       SESSION_TTL: "${SESSION_TTL:-1h}"
       JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-prod}"
     ports:
@@ -61,7 +61,7 @@ services:
         SERVICE: study
     environment:
       PORT: "8082"
-      DATABASE_URL: "${DATABASE_URL}"
+      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
     ports:
       - "${STUDY_PORT:-8082}:8082"
@@ -86,8 +86,9 @@ services:
         SERVICE: quiz
     environment:
       PORT: "8083"
-      DATABASE_URL: "${DATABASE_URL}"
+      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
     ports:
       - "${QUIZ_PORT:-8083}:8083"
     depends_on:

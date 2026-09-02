@@ -65,7 +65,7 @@ export type ProgressListResponse = {
   totalSessions: number;
   bestScore: number | null;
   lastMode: LearningMode | null;
-  history: LearningProgress[];
+  history: LearningProgress[] | null;
   page: number;
   perPage: number;
   totalPages: number;
@@ -130,9 +130,10 @@ export async function fetchProgressSummary(
   page = 1,
   pageSize = 20
 ): Promise<ProgressListResponse> {
-  return apiFetch<ProgressListResponse>(
+  const result = await apiFetch<ProgressListResponse>(
     `/v1/study-sets/${studySetId}/progress`, token, {}, { page, per_page: pageSize }
   );
+  return { ...result, history: result.history ?? [] };
 }
 
 export async function fetchProgress(
