@@ -13,11 +13,11 @@ import { useQuizGeneration } from "./useQuizGeneration";
 import "./learning.css";
 
 type Props = { cards: Flashcard[]; studySetId: number };
-type AnswerState = { answer: string; attempts: number; responseTimeMs: number };
+type AnswerState = { answer: string; selectedIndex: number; attempts: number; responseTimeMs: number };
 
 export function TestMode({ cards, studySetId }: Props) {
   const { token } = useAuth();
-  const generation = useQuizGeneration(studySetId, "test", cards.length);
+  const generation = useQuizGeneration(studySetId, "test", Math.min(cards.length, 100));
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "test" });
   const [index, setIndex] = React.useState(0);
   const [answers, setAnswers] = React.useState<Record<number, AnswerState>>({});
@@ -47,11 +47,12 @@ export function TestMode({ cards, studySetId }: Props) {
     }
     setSubmitted(true);
     setError(null);
-    const payload: QuizAnswer[] = questions.map((item) => ({ flashcardId: item.flashcardId, answer: nextAnswers[item.flashcardId]?.answer ?? "", attempts: nextAnswers[item.flashcardId]?.attempts ?? 1, responseTimeMs: nextAnswers[item.flashcardId]?.responseTimeMs ?? 0 }));
+    const payload: QuizAnswer[] = questions.map((item) => ({ flashcardId: item.flashcardId, selectedIndex: nextAnswers[item.flashcardId]?.selectedIndex, attempts: nextAnswers[item.flashcardId]?.attempts ?? 1, responseTimeMs: nextAnswers[item.flashcardId]?.responseTimeMs ?? 0 }));
     try {
       const evaluated = await quizApi.evaluate(token, studySetId, {
         mode: "test",
         seed,
+        limit: questions.length,
         answers: payload,
       });
       const cardResults = evaluated.cardResults as CardResult[];
@@ -63,9 +64,9 @@ export function TestMode({ cards, studySetId }: Props) {
     }
   }
 
-  function choose(choice: string) {
+  function choose(choice: string, selectedIndex: number) {
     if (answers[q.flashcardId] || submitted) return;
-    setAnswers((current) => ({ ...current, [q.flashcardId]: { answer: choice, attempts: 1, responseTimeMs: Date.now() - questionStartedAt } }));
+    setAnswers((current) => ({ ...current, [q.flashcardId]: { answer: choice, selectedIndex, attempts: 1, responseTimeMs: Date.now() - questionStartedAt } }));
   }
 
   function restart() {
@@ -82,7 +83,7 @@ export function TestMode({ cards, studySetId }: Props) {
     <div className="learn-header"><span className="flashcards-counter">{index + 1} / {questions.length}</span><span>Seed: {seed}</span></div>
     <div className="test-question"><p className="test-question-label">Chọn định nghĩa đúng:</p><p className="test-term">{q.term}</p></div>
     <div className="test-choices">
-      {q.choices.map((choice, i) => <button key={`${choice}-${i}`} className={`test-choice${selected?.answer === choice ? " selected" : ""}`} onClick={() => choose(choice)} disabled={Boolean(selected) || submitted} aria-label={`Đáp án ${String.fromCharCode(65 + i)}: ${choice}`}><span className="choice-letter">{String.fromCharCode(65 + i)}</span>{choice}</button>)}
+      {q.choices.map((choice, i) => <button key={`${choice}-${i}`} className={`test-choice${selected?.selectedIndex === i ? " selected" : ""}`} onClick={() => choose(choice, i)} disabled={Boolean(selected) || submitted} aria-label={`Đáp án ${String.fromCharCode(65 + i)}: ${choice}`}><span className="choice-letter">{String.fromCharCode(65 + i)}</span>{choice}</button>)}
     </div>
     {selected && <div className="learn-actions"><button className="primary-button" onClick={submitCurrent} disabled={submitted}>{index + 1 >= questions.length ? "Nộp bài" : "Câu tiếp →"}</button></div>}
     {error && <div className="learn-error" role="alert">{error}</div>}

@@ -1,24 +1,27 @@
 {
-  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/generate — match mode",
+  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/generate — match mode. Items are a flat array of term+definition pairs.",
   "request": {
     "method": "POST",
     "path": "/v1/study-sets/101/quiz/generate",
     "headers": { "Authorization": "Bearer <valid-token>" },
-    "body": { "mode": "match", "seed": 42, "limit": 100 }
+    "body": { "mode": "match", "seed": 42, "limit": 4 }
   },
   "response": {
     "status": 200,
     "body": {
-      "mode": "match", "seed": 42, "contractVersion": "1.4.0",
-      "items": {
-        "subset": 4,
-        "pairs": [
-          { "pairId": "card-4001", "flashcardId": 4001, "term": "JavaScript runtime", "definition": "Node.js" },
-          { "pairId": "card-4002", "flashcardId": 4002, "term": "Package manager", "definition": "npm" },
-          { "pairId": "card-4003", "flashcardId": 4003, "term": "Type system", "definition": "TypeScript" },
-          { "pairId": "card-4004", "flashcardId": 4004, "term": "Build tool", "definition": "Vite" }
-        ]
-      }
+      "mode": "match",
+      "seed": 42,
+      "contractVersion": "1.4.0",
+      "items": [
+        { "id": "card-4001-term", "flashcardId": 4001, "kind": "term", "text": "JavaScript runtime", "pairId": "card-4001", "position": 0 },
+        { "id": "card-4001-definition", "flashcardId": 4001, "kind": "definition", "text": "Node.js", "pairId": "card-4001", "position": 0 },
+        { "id": "card-4002-term", "flashcardId": 4002, "kind": "term", "text": "Package manager", "pairId": "card-4002", "position": 1 },
+        { "id": "card-4002-definition", "flashcardId": 4002, "kind": "definition", "text": "npm", "pairId": "card-4002", "position": 1 },
+        { "id": "card-4003-term", "flashcardId": 4003, "kind": "term", "text": "Type system", "pairId": "card-4003", "position": 2 },
+        { "id": "card-4003-definition", "flashcardId": 4003, "kind": "definition", "text": "TypeScript", "pairId": "card-4003", "position": 2 },
+        { "id": "card-4004-term", "flashcardId": 4004, "kind": "term", "text": "Build tool", "pairId": "card-4004", "position": 3 },
+        { "id": "card-4004-definition", "flashcardId": 4004, "kind": "definition", "text": "Vite", "pairId": "card-4004", "position": 3 }
+      ]
     }
   }
 }

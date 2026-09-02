@@ -5,7 +5,7 @@
     "path": "/v1/study-sets/101/quiz/evaluate",
     "headers": { "Authorization": "Bearer <valid-token>" },
     "body": {
-      "mode": "learn", "seed": 7,
+      "mode": "learn", "seed": 7, "limit": 3,
       "answers": [
         { "flashcardId": 2001, "submitted": "GET", "attempts": 1, "responseTimeMs": 3200 },
         { "flashcardId": 2002, "submitted": "get", "attempts": 2, "responseTimeMs": 5100 },

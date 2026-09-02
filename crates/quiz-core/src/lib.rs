@@ -11,6 +11,8 @@
 //!
 //! Golden test vectors are pinned in `tests/golden.rs`.
 
+pub mod golden;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /// A flashcard as understood by quiz-core.
@@ -278,7 +280,8 @@ mod tests {
     #[test]
     fn seeded_shuffle_empty() {
         let empty: Vec<u32> = vec![];
-        assert_eq!(seeded_shuffle(&empty, 1), vec![]);
+        let empty_out: Vec<u32> = seeded_shuffle(&empty, 1);
+        assert_eq!(empty_out, Vec::<u32>::new());
     }
 
     #[test]

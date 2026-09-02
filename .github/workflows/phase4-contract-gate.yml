@@ -82,10 +82,7 @@ jobs:
           cargo test --package quiz-core -- --nocapture golden
           echo ""
           echo "=== Go golden vector check ==="
-          # Dev 3 will add a Go test binary that reads the same inputs
-          # and verifies the same outputs as the Rust golden tests.
-          # For now, verify the contract examples are self-consistent.
-          node packages/api-contracts/examples/quiz/validate-examples.js
+          go test ./services/quiz/internal/engine -run Golden -count=1
           echo "Cross-language golden vectors: PASS"
 
       # ── Phase 4: Benchmark smoke ───────────────────────────────────────
@@ -94,7 +91,9 @@ jobs:
       - name: Benchmark compile check
         run: |
           echo "=== Rust benchmark compile check ==="
-          cargo test --package quiz-core --no-run 2>&1 | tail -5
+          cargo bench --package quiz-core --no-run
+          echo "=== Go benchmark compile check ==="
+          go test ./services/quiz/internal/engine -run '^$' -bench . -benchtime=1x
           echo "Benchmark compile check: PASS"
 
       # ── Phase 4: OpenAPI drift check ──────────────────────────────────

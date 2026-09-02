@@ -7,6 +7,7 @@ import type { Flashcard } from "./types";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
 import { ProgressSaveStatus } from "./ProgressSaveStatus";
+import { useQuizGeneration } from "./useQuizGeneration";
 import "./learning.css";
 
 type Props = {
@@ -14,16 +15,8 @@ type Props = {
   studySetId: number;
 };
 
-function shuffleArray<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 export function FlashcardsMode({ cards, studySetId }: Props) {
+  const generation = useQuizGeneration(studySetId, "flashcards", Math.min(cards.length, 100));
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
@@ -32,6 +25,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   const [flipped, setFlipped] = React.useState(false);
   // Track seen cards for completion detection.
   const [seenCardIds, setSeenCardIds] = React.useState<Set<number>>(new Set());
+  const completionTriggered = React.useRef(false);
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -39,14 +33,17 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   });
 
   React.useEffect(() => {
-    const base = starredOnly ? cards.filter((c) => c.starred) : cards;
-    setDeck(shuffled ? shuffleArray(base) : [...base]);
+    if (generation.state.state !== "ready") return;
+    const generated = generation.state.data.items.map((item) => ({ id: item.flashcardId, studySetId, term: item.term ?? "", definition: item.definition ?? "", starred: item.starred ?? false }));
+    const base = starredOnly ? generated.filter((c) => c.starred) : generated;
+    setDeck(base);
     setIndex(0);
     setFlipped(false);
     setSeenCardIds(new Set());
+    completionTriggered.current = false;
     resetSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards, starredOnly, shuffled]);
+  }, [generation.state, starredOnly, studySetId, resetSave]);
 
   const current = deck[index];
   const total = deck.length;
@@ -63,7 +60,6 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   }, [current]);
 
   // Trigger save when all cards in current deck have been seen.
-  const completionTriggered = React.useRef(false);
   React.useEffect(() => {
     if (completionTriggered.current || total === 0) return;
     if (seenCardIds.size >= total) {
@@ -92,11 +88,10 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     completionTriggered.current = false;
     resetSave();
     setStartedAt(new Date());
-    const base = starredOnly ? cards.filter((c) => c.starred) : cards;
-    setDeck(shuffled ? shuffleArray(base) : [...base]);
     setIndex(0);
     setFlipped(false);
     setSeenCardIds(new Set());
+    generation.regenerate();
   }
 
   React.useEffect(() => {
@@ -114,6 +109,8 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   const starredCount = cards.filter((c) => c.starred).length;
 
   if (cards.length === 0) return <LearningEmptyState />;
+  if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bộ flashcards…</div>;
+  if (generation.state.state === "error") return <div className="learn-error" role="alert">Không thể tạo Flashcards: {generation.state.error.message}<button className="secondary-button" onClick={generation.regenerate}>Thử lại</button></div>;
   if (total === 0 && starredOnly) {
     return (
       <LearningEmptyState
@@ -141,10 +138,10 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
           )}
           <button
             className={`ghost-button${shuffled ? " active" : ""}`}
-            onClick={() => setShuffled((s) => !s)}
+            onClick={() => { setShuffled(true); generation.regenerate(); }}
             title="Xáo trộn"
           >
-            {shuffled ? "🔀 Đang xáo" : "🔀 Xáo trộn"}
+            {shuffled ? "🔀 Xáo lại" : "🔀 Xáo trộn"}
           </button>
           <button className="ghost-button" onClick={handleRestart} title="Làm lại">↺ Làm lại</button>
         </div>

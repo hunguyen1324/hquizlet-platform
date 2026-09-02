@@ -5,7 +5,7 @@ describe("Phase 4 quiz contract", () => {
   it("uses flashcard identity rather than client-provided correct answers", () => {
     const answer: QuizAnswer = {
       flashcardId: 42,
-      answer: "user response",
+      submitted: "user response",
       attempts: 1,
       responseTimeMs: 250,
     };

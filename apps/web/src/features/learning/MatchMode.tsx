@@ -23,7 +23,8 @@ export function MatchMode({ cards, studySetId }: Props) {
   const [matched, setMatched] = React.useState<Set<number>>(new Set());
   const [wrongCount, setWrongCount] = React.useState(0);
   const [answers, setAnswers] = React.useState<QuizAnswer[]>([]);
-  const [evaluated, setEvaluated] = React.useState<Set<number>>(new Set());
+  const [attemptsByCard, setAttemptsByCard] = React.useState<Record<number, number>>({});
+  const [result, setResult] = React.useState<{ score: number; total: number; cardResults: CardResult[] } | null>(null);
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [elapsed, setElapsed] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
@@ -40,20 +41,20 @@ export function MatchMode({ cards, studySetId }: Props) {
   }, [finished, startedAt]);
 
   React.useEffect(() => {
-    if (!finished || !data || evaluated.size > 0) return;
+    if (!finished || !data || result) return;
     const payload = answers.map((a) => ({ ...a, attempts: Math.max(1, a.attempts) }));
     if (payload.length !== totalPairs) return;
     let cancelled = false;
-    quizApi.evaluate(token, studySetId, { mode: "match", seed: data.seed, answers: payload })
+    quizApi.evaluate(token, studySetId, { mode: "match", seed: data.seed, limit: totalPairs, answers: payload })
       .then((result) => {
         if (cancelled) return;
-        const next = new Set(result.cardResults.filter((r) => r.correct).map((r) => r.flashcardId));
-        setEvaluated(next);
-        onSessionComplete({ score: result.score, total: result.total, cardResults: result.cardResults as CardResult[], startedAt });
+        const cardResults = result.cardResults as CardResult[];
+        setResult({ score: result.score, total: result.total, cardResults });
+        onSessionComplete({ score: result.score, total: result.total, cardResults, startedAt });
       })
       .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : "Không thể chấm kết quả"); });
     return () => { cancelled = true; };
-  }, [finished, data, answers, evaluated.size, token, studySetId, totalPairs, startedAt, onSessionComplete]);
+  }, [finished, data, answers, result, token, studySetId, totalPairs, startedAt, onSessionComplete]);
 
   if (cards.length < 2) return <LearningEmptyState message="Cần ít nhất 2 thẻ để chơi ghép cặp." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
   if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
@@ -66,26 +67,35 @@ export function MatchMode({ cards, studySetId }: Props) {
     const first = tiles.find((x) => x.id === selectedId);
     if (!first || first.id === tile.id) return;
     const isCorrect = first.cardId === tile.cardId && first.type !== tile.type;
-    const attempts = (answers.find((x) => x.flashcardId === tile.cardId)?.attempts ?? 0) + 1;
-    setAnswers((current) => [...current.filter((x) => x.flashcardId !== tile.cardId), {
-      flashcardId: tile.cardId,
-      pairId: tile.pairId,
-      matchedFlashcardId: tile.cardId,
-      attempts,
-    }]);
-    if (isCorrect) setMatched((current) => new Set(current).add(tile.cardId));
-    else setWrongCount((n) => n + 1);
+    const involved = new Set([first.cardId, tile.cardId]);
+    const correctAttempts = (attemptsByCard[tile.cardId] ?? 0) + 1;
+    setAttemptsByCard((current) => {
+      const next = { ...current };
+      for (const cardId of involved) next[cardId] = (next[cardId] ?? 0) + 1;
+      return next;
+    });
+    if (isCorrect) {
+      setAnswers((current) => [...current.filter((x) => x.flashcardId !== tile.cardId), {
+        flashcardId: tile.cardId,
+        pairId: tile.pairId,
+        matchedFlashcardId: tile.cardId,
+        attempts: correctAttempts,
+      }]);
+      setMatched((current) => new Set(current).add(tile.cardId));
+    } else {
+      setWrongCount((n) => n + 1);
+    }
     setSelectedId(null);
   }
 
   function restart() {
     resetSave(); setStartedAt(new Date()); setElapsed(0); setSelectedId(null); setMatched(new Set());
-    setWrongCount(0); setAnswers([]); setEvaluated(new Set()); setError(null); generation.regenerate();
+    setWrongCount(0); setAnswers([]); setAttemptsByCard({}); setResult(null); setError(null); generation.regenerate();
   }
 
-  if (finished && evaluated.size > 0) {
-    const pct = totalPairs ? Math.round((evaluated.size / totalPairs) * 100) : 0;
-    return <div className="learn-done"><h2>🎉 Ghép xong!</h2><p className="learn-score"><strong>{evaluated.size}</strong> / {totalPairs} ({pct}%)</p><p>Thời gian: {Math.floor(elapsed / 1000)}s · Lần sai: {wrongCount}</p>{error && <p className="learn-error">{error}</p>}<ProgressSaveStatus status={saveStatus} onRetry={() => undefined} /><button className="primary-button" onClick={restart}>Chơi lại</button></div>;
+  if (finished && result) {
+    const pct = result.total ? Math.round((result.score / result.total) * 100) : 0;
+    return <div className="learn-done"><h2>🎉 Ghép xong!</h2><p className="learn-score"><strong>{result.score}</strong> / {result.total} ({pct}%)</p><p>Thời gian: {Math.floor(elapsed / 1000)}s · Lần sai: {wrongCount}</p>{error && <p className="learn-error">{error}</p>}<ProgressSaveStatus status={saveStatus} onRetry={() => onSessionComplete({ score: result.score, total: result.total, cardResults: result.cardResults, startedAt })} /><button className="primary-button" onClick={restart}>Chơi lại</button></div>;
   }
 
   return <div className="match-mode">

@@ -1,225 +1,85 @@
-// LearnMode — Dev 4
-// P2-LEARN-02: Hỏi đáp, scoring local, retry wrong answers
-// P3-LEARN-01,02,03: Nối completion với saveProgress thật; per-card results; chống double-submit
-//
-// Phase 3 changes:
-//   - useProgressSave hook injected via props (studySetId required)
-//   - onSessionComplete gọi khi phase="done", truyền per-card CardResult[]
-//   - ProgressSaveStatus hiển thị ở màn done
-//   - Restart reset cả save status
-
 import React from "react";
-import type { Flashcard, LearnState } from "./types";
+import { useAuth } from "../auth/AuthContext";
+import { quizApi, type QuizGeneratedItem } from "../../lib/api/client";
+import type { Flashcard } from "./types";
 import type { CardResult } from "./progressContract";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
 import { ProgressSaveStatus } from "./ProgressSaveStatus";
-import "././learning.css";
+import { useQuizGeneration } from "./useQuizGeneration";
+import "./learning.css";
 
-type Props = {
-  cards: Flashcard[];
-  studySetId: number;
-};
-
-type Phase = "quiz" | "retry" | "done";
-
-function buildQueue(cards: Flashcard[]): Flashcard[] { return [...cards]; }
+type Props = { cards: Flashcard[]; studySetId: number };
+type LearnItem = Pick<QuizGeneratedItem, "flashcardId" | "term" | "definition">;
+type AnswerState = { submitted: string; correct: boolean; attempts: number; responseTimeMs: number };
 
 export function LearnMode({ cards, studySetId }: Props) {
-  const [startedAt, setStartedAt] = React.useState(() => new Date());
-  const [state, setState] = React.useState<LearnState>(() => ({
-    queue: buildQueue(cards), currentIndex: 0, answers: {}, done: false,
-  }));
+  const { token } = useAuth();
+  const generation = useQuizGeneration(studySetId, "learn", Math.min(cards.length, 100));
+  const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "learn" });
+  const [queue, setQueue] = React.useState<number[]>([]);
+  const [answers, setAnswers] = React.useState<Record<number, AnswerState>>({});
   const [input, setInput] = React.useState("");
-  const [submitted, setSubmitted] = React.useState(false);
-  const [correct, setCorrect] = React.useState<boolean | null>(null);
-  const [phase, setPhase] = React.useState<Phase>("quiz");
-  const [retryQueue, setRetryQueue] = React.useState<Flashcard[]>([]);
-  const [retryIndex, setRetryIndex] = React.useState(0);
+  const [feedback, setFeedback] = React.useState<boolean | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [startedAt, setStartedAt] = React.useState(() => new Date());
+  const [questionStartedAt, setQuestionStartedAt] = React.useState(() => Date.now());
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const data = generation.state.state === "ready" ? generation.state.data : null;
+  const items = React.useMemo(() => (data?.items ?? []).filter((x) => x.term !== undefined) as LearnItem[], [data]);
 
-  const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
-    studySetId,
-    mode: "learn",
-  });
+  React.useEffect(() => { if (items.length && queue.length === 0 && !done) setQueue(items.map((_, i) => i)); }, [items, queue.length, done]);
+  const currentIndex = queue[0];
+  const current = currentIndex === undefined ? undefined : items[currentIndex];
 
-  const current = phase === "retry" ? retryQueue[retryIndex] : state.queue[state.currentIndex];
-  const total = phase === "retry" ? retryQueue.length : state.queue.length;
-  const currentIdx = phase === "retry" ? retryIndex : state.currentIndex;
-
-  function normalize(s: string) { return s.trim().toLowerCase().replace(/\s+/g, " "); }
-
-  function handleSubmit() {
-    if (!current || !input.trim() || submitted) return;
-    const isCorrect = normalize(input) === normalize(current.definition);
-    setCorrect(isCorrect);
-    setSubmitted(true);
-    setState((s) => ({
-      ...s,
-      answers: {
-        ...s.answers,
-        [current.id]: { card: current, userAnswer: input, submitted: true, correct: isCorrect },
-      },
-    }));
+  async function submit() {
+    if (!current || !input.trim() || submitting || feedback !== null || !data) return;
+    setSubmitting(true); setError(null);
+    const previous = answers[current.flashcardId];
+    const attempts = (previous?.attempts ?? 0) + 1;
+    try {
+      const result = await quizApi.evaluate(token, studySetId, { mode: "learn", seed: data.seed, limit: items.length, answers: [{ flashcardId: current.flashcardId, submitted: input, attempts, responseTimeMs: Date.now() - questionStartedAt }] });
+      const cardResult = result.cardResults[0];
+      if (!cardResult) throw new Error("Backend không trả kết quả cho thẻ này");
+      setAnswers((old) => ({ ...old, [current.flashcardId]: { submitted: input, correct: cardResult.correct, attempts, responseTimeMs: cardResult.responseTimeMs ?? 0 } }));
+      setFeedback(cardResult.correct);
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Không thể chấm câu trả lời"); }
+    finally { setSubmitting(false); }
   }
 
-  function handleNext() {
-    const nextIdx = currentIdx + 1;
-    if (phase === "quiz") {
-      if (nextIdx >= total) {
-        const finalAnswers = {
-          ...state.answers,
-          [current.id]: { card: current, userAnswer: input, submitted: true, correct: correct ?? false },
-        };
-        const wrongs = state.queue.filter((card) => !finalAnswers[card.id]?.correct);
-        if (wrongs.length > 0) {
-          setRetryQueue(wrongs); setRetryIndex(0); setPhase("retry");
-          setState((s) => ({ ...s, answers: finalAnswers }));
-        } else {
-          setState((s) => ({ ...s, answers: finalAnswers, done: true }));
-          setPhase("done");
-          // Build CardResult list for all cards.
-          const cardResults: CardResult[] = state.queue.map((card) => {
-            const ans = finalAnswers[card.id];
-            return {
-              flashcardId: card.id,
-              correct: ans?.correct ?? false,
-              attempts: 1,
-            };
-          });
-          const correctCount = cardResults.filter((r) => r.correct).length;
-          onSessionComplete({
-            score: correctCount,
-            total: state.queue.length,
-            cardResults,
-            startedAt,
-          });
-        }
-      } else {
-        setState((s) => ({ ...s, currentIndex: nextIdx }));
-      }
-    } else if (nextIdx >= total) {
-      const finalAnswers = {
-        ...state.answers,
-        [current.id]: { card: current, userAnswer: input, submitted: true, correct: correct ?? false },
-      };
-      setPhase("done");
-      setState((s) => ({ ...s, answers: finalAnswers, done: true }));
-      // Build per-card results including retry-corrected cards.
-      const cardResults: CardResult[] = state.queue.map((card) => {
-        const ans = finalAnswers[card.id];
-        return {
-          flashcardId: card.id,
-          correct: ans?.correct ?? false,
-          attempts: retryQueue.some((r) => r.id === card.id) ? 2 : 1,
-        };
-      });
-      const correctCount = cardResults.filter((r) => r.correct).length;
-      onSessionComplete({
-        score: correctCount,
-        total: state.queue.length,
-        cardResults,
-        startedAt,
-      });
-    } else {
-      setRetryIndex(nextIdx);
-    }
-    setInput(""); setSubmitted(false); setCorrect(null);
-    setTimeout(() => inputRef.current?.focus(), 50);
+  function next() {
+    if (!current || feedback === null) return;
+    const nextQueue = feedback ? queue.slice(1) : [...queue.slice(1), currentIndex];
+    setQueue(nextQueue); setInput(""); setFeedback(null); setQuestionStartedAt(Date.now());
+    if (nextQueue.length === 0) finish(); else window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  function handleRestart() {
-    resetSave();
-    setStartedAt(new Date());
-    setState({ queue: buildQueue(cards), currentIndex: 0, answers: {}, done: false });
-    setRetryQueue([]); setRetryIndex(0); setPhase("quiz"); setInput(""); setSubmitted(false); setCorrect(null);
-    setTimeout(() => inputRef.current?.focus(), 50);
+  function finish() {
+    const cardResults: CardResult[] = items.map((item) => { const answer = answers[item.flashcardId]; return { flashcardId: item.flashcardId, correct: answer?.correct ?? true, attempts: answer?.attempts ?? 1, responseTimeMs: answer?.responseTimeMs }; });
+    setDone(true); onSessionComplete({ score: cardResults.filter((x) => x.correct).length, total: cardResults.length, cardResults, startedAt });
   }
 
-  if (cards.length < 2) {
-    return <LearningEmptyState message="Cần ít nhất 2 thẻ để học." hint="Thêm thẻ trong phần 'Sửa thẻ' trước khi học." />;
-  }
+  function restart() { resetSave(); setQueue([]); setAnswers({}); setInput(""); setFeedback(null); setDone(false); setError(null); setStartedAt(new Date()); setQuestionStartedAt(Date.now()); generation.regenerate(); }
 
-  if (phase === "done") {
-    const correctCount = Object.values(state.answers).filter((a) => a.correct).length;
-    return (
-      <div className="learn-done">
-        <h2>🎉 Hoàn thành!</h2>
-        <p className="learn-score">
-          Đúng <strong>{correctCount}</strong> / {state.queue.length} câu
-          {retryQueue.length > 0 && <span className="retry-note"> (đã ôn {retryQueue.length} câu sai)</span>}
-        </p>
-        <ProgressSaveStatus status={saveStatus} onRetry={() => {
-          const cardResults: CardResult[] = state.queue.map((card) => ({
-            flashcardId: card.id,
-            correct: state.answers[card.id]?.correct ?? false,
-            attempts: 1,
-          }));
-          onSessionComplete({ score: correctCount, total: state.queue.length, cardResults, startedAt });
-        }} />
-        <div className="learn-review">
-          <div className="review-header"><span>Thuật ngữ</span><span>Câu trả lời</span><span>Đáp án đúng</span></div>
-          {state.queue.map((card) => {
-            const ans = state.answers[card.id];
-            return (
-              <div key={card.id} className={`review-row ${ans?.correct ? "correct" : "wrong"}`}>
-                <span className="review-term">{card.term}</span>
-                <span className="review-answer">{ans?.userAnswer || "—"}</span>
-                <span className="review-correct">{card.definition}</span>
-              </div>
-            );
-          })}
-        </div>
-        <button className="primary-button" onClick={handleRestart}>Học lại</button>
-      </div>
-    );
+  if (cards.length < 2) return <LearningEmptyState message="Cần ít nhất 2 thẻ để học." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
+  if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bài học…</div>;
+  if (generation.state.state === "error") return <div className="learn-error" role="alert">Không thể tạo Learn: {generation.state.error.message}<button className="secondary-button" onClick={generation.regenerate}>Thử lại</button></div>;
+  if (!items.length) return <LearningEmptyState message="Backend không trả về câu hỏi hợp lệ." />;
+  if (done) {
+    const cardResults: CardResult[] = items.map((item) => ({ flashcardId: item.flashcardId, correct: answers[item.flashcardId]?.correct ?? true, attempts: answers[item.flashcardId]?.attempts ?? 1, responseTimeMs: answers[item.flashcardId]?.responseTimeMs }));
+    return <div className="learn-done"><h2>🎉 Hoàn thành!</h2><p className="learn-score">Đúng <strong>{cardResults.filter((x) => x.correct).length}</strong> / {items.length} câu</p><ProgressSaveStatus status={saveStatus} onRetry={() => onSessionComplete({ score: cardResults.filter((x) => x.correct).length, total: items.length, cardResults, startedAt })} /><button className="primary-button" onClick={restart}>Học lại</button></div>;
   }
+  if (!current) return <div className="learn-loading" role="status">Đang chuẩn bị câu hỏi…</div>;
 
-  const isRetry = phase === "retry";
-  return (
-    <div className="learn-mode">
-      <div className="learn-header">
-        <span className="flashcards-counter">
-          {currentIdx + 1} / {total}
-          {isRetry && <span className="retry-badge"> Ôn lại</span>}
-        </span>
-        {isRetry && <span className="retry-label">Đang ôn lại {retryQueue.length} câu sai</span>}
-      </div>
-      <div className="learn-card">
-        <p className="learn-prompt-label">Thuật ngữ</p>
-        <p className="learn-prompt">{current.term}</p>
-      </div>
-      <div className="learn-input-area">
-        <label className="learn-input-label" htmlFor="learn-answer">Nhập định nghĩa</label>
-        <input
-          id="learn-answer"
-          ref={inputRef}
-          className={`learn-input${submitted ? (correct ? " input-correct" : " input-wrong") : ""}`}
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submitted ? handleNext() : handleSubmit(); }}
-          placeholder="Nhập câu trả lời..."
-          disabled={submitted}
-          autoFocus
-          autoComplete="off"
-        />
-        {submitted && (
-          <div className={`learn-feedback ${correct ? "feedback-correct" : "feedback-wrong"}`}>
-            {correct ? <span>✅ Chính xác!</span> : <span>❌ Đáp án đúng: <strong>{current.definition}</strong></span>}
-          </div>
-        )}
-      </div>
-      <div className="learn-actions">
-        {!submitted
-          ? <button className="primary-button" onClick={handleSubmit} disabled={!input.trim()}>Kiểm tra</button>
-          : <button className="primary-button" onClick={handleNext}>Tiếp theo →</button>
-        }
-      </div>
-      <div className="progress-bar-track" role="progressbar" aria-valuenow={currentIdx + 1} aria-valuemax={total}>
-        <div className="progress-bar-fill" style={{ width: `${((currentIdx + 1) / total) * 100}%` }} />
-      </div>
-      <p className="keyboard-hint" aria-hidden="true">Enter để kiểm tra / chuyển câu</p>
+  return <div className="learn-mode">
+    <div className="learn-header"><span className="flashcards-counter">Còn {queue.length} thẻ</span><span>Seed: {data?.seed}</span></div>
+    <div className="learn-card"><p className="learn-prompt-label">Thuật ngữ</p><p className="learn-prompt">{current.term}</p></div>
+    <div className="learn-input-area"><label className="learn-input-label" htmlFor="learn-answer">Nhập định nghĩa</label><input id="learn-answer" ref={inputRef} className={`learn-input${feedback === null ? "" : feedback ? " input-correct" : " input-wrong"}`} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") feedback === null ? void submit() : next(); }} disabled={submitting || feedback !== null} autoFocus autoComplete="off" />
+      {feedback !== null && <div className={`learn-feedback ${feedback ? "feedback-correct" : "feedback-wrong"}`}>{feedback ? "✅ Chính xác!" : <>❌ Chưa đúng. Đáp án: <strong>{current.definition}</strong></>}</div>}
+      {error && <div className="learn-error" role="alert">{error}</div>}
     </div>
-  );
+    <div className="learn-actions">{feedback === null ? <button className="primary-button" onClick={() => void submit()} disabled={!input.trim() || submitting}>{submitting ? "Đang chấm…" : "Kiểm tra"}</button> : <button className="primary-button" onClick={next}>Tiếp theo →</button>}</div>
+  </div>;
 }

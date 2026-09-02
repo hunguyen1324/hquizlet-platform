@@ -1,28 +1,34 @@
 {
-  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/evaluate — match mode",
+  "_comment": "P4-CON-03 — Golden example: POST /v1/study-sets/101/quiz/evaluate — match mode. Answers use pairId + matchedFlashcardId identity.",
   "request": {
     "method": "POST",
     "path": "/v1/study-sets/101/quiz/evaluate",
     "headers": { "Authorization": "Bearer <valid-token>" },
     "body": {
-      "mode": "match", "seed": 42,
+      "mode": "match",
+      "seed": 42,
+      "limit": 4,
       "answers": [
-        { "pairId": "card-4001", "termIndex": 0, "definitionIndex": 2 },
-        { "pairId": "card-4002", "termIndex": 1, "definitionIndex": 1 },
-        { "pairId": "card-4003", "termIndex": 2, "definitionIndex": 3 },
-        { "pairId": "card-4004", "termIndex": 3, "definitionIndex": 0 }
+        { "flashcardId": 4001, "pairId": "card-4001", "matchedFlashcardId": 4001, "attempts": 1, "responseTimeMs": 2000 },
+        { "flashcardId": 4002, "pairId": "card-4002", "matchedFlashcardId": 4002, "attempts": 3, "responseTimeMs": 4500 },
+        { "flashcardId": 4003, "pairId": "card-4003", "matchedFlashcardId": 4003, "attempts": 1, "responseTimeMs": 1800 },
+        { "flashcardId": 4004, "pairId": "card-4004", "matchedFlashcardId": 4004, "attempts": 2, "responseTimeMs": 3200 }
       ]
     }
   },
   "response": {
     "status": 200,
     "body": {
-      "mode": "match", "seed": 42, "score": 2, "total": 4, "contractVersion": "1.4.0",
+      "mode": "match",
+      "seed": 42,
+      "score": 4,
+      "total": 4,
+      "contractVersion": "1.4.0",
       "cardResults": [
-        { "flashcardId": 4001, "correct": false, "attempts": 1 },
-        { "flashcardId": 4002, "correct": true, "attempts": 1 },
-        { "flashcardId": 4003, "correct": false, "attempts": 1 },
-        { "flashcardId": 4004, "correct": true, "attempts": 1 }
+        { "flashcardId": 4001, "correct": true, "attempts": 1, "responseTimeMs": 2000 },
+        { "flashcardId": 4002, "correct": true, "attempts": 3, "responseTimeMs": 4500 },
+        { "flashcardId": 4003, "correct": true, "attempts": 1, "responseTimeMs": 1800 },
+        { "flashcardId": 4004, "correct": true, "attempts": 2, "responseTimeMs": 3200 }
       ]
     }
   }
