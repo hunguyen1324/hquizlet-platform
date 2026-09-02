@@ -24,6 +24,9 @@ func NewFlashcardService(sets repository.StudySets, cards repository.Flashcards)
 func (s *FlashcardService) Create(ctx context.Context, studySetID, userID int64, in model.CreateFlashcardInput) (model.Flashcard, error) {
 	in.Term = strings.TrimSpace(in.Term)
 	in.Definition = strings.TrimSpace(in.Definition)
+	in.ExampleSentence = strings.TrimSpace(in.ExampleSentence)
+	in.HintExplanation = strings.TrimSpace(in.HintExplanation)
+	in.Synonyms = strings.TrimSpace(in.Synonyms)
 	if in.Term == "" || in.Definition == "" {
 		return model.Flashcard{}, errors.New("term and definition are required")
 	}
@@ -37,6 +40,9 @@ func (s *FlashcardService) Create(ctx context.Context, studySetID, userID int64,
 func (s *FlashcardService) Update(ctx context.Context, cardID, userID int64, in model.UpdateFlashcardInput) (model.Flashcard, error) {
 	in.Term = strings.TrimSpace(in.Term)
 	in.Definition = strings.TrimSpace(in.Definition)
+	in.ExampleSentence = strings.TrimSpace(in.ExampleSentence)
+	in.HintExplanation = strings.TrimSpace(in.HintExplanation)
+	in.Synonyms = strings.TrimSpace(in.Synonyms)
 	if in.Term == "" || in.Definition == "" {
 		return model.Flashcard{}, errors.New("term and definition are required")
 	}
@@ -79,11 +85,16 @@ func (s *FlashcardService) BulkSave(ctx context.Context, studySetID, userID int6
 	if err := s.checkSetOwner(ctx, studySetID, userID); err != nil {
 		return model.BulkSaveResult{}, err
 	}
-	for _, item := range in.Cards {
-		if item.Delete {
+	for i := range in.Cards {
+		in.Cards[i].Term = strings.TrimSpace(in.Cards[i].Term)
+		in.Cards[i].Definition = strings.TrimSpace(in.Cards[i].Definition)
+		in.Cards[i].ExampleSentence = strings.TrimSpace(in.Cards[i].ExampleSentence)
+		in.Cards[i].HintExplanation = strings.TrimSpace(in.Cards[i].HintExplanation)
+		in.Cards[i].Synonyms = strings.TrimSpace(in.Cards[i].Synonyms)
+		if in.Cards[i].Delete {
 			continue
 		}
-		if strings.TrimSpace(item.Term) == "" || strings.TrimSpace(item.Definition) == "" {
+		if in.Cards[i].Term == "" || in.Cards[i].Definition == "" {
 			return model.BulkSaveResult{}, errors.New("each card must have term and definition")
 		}
 	}

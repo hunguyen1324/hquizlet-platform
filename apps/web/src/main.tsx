@@ -7,7 +7,6 @@ import "./styles.css";
 
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { AuthScreen } from "./features/auth/AuthScreen";
-import { Dashboard } from "./features/dashboard/Dashboard";
 import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
 import { Folders } from "./features/folders/Folders";
@@ -20,14 +19,16 @@ import { JoinClass } from "./features/classes/JoinClass";
 import { ActivityFeed } from "./features/activity/ActivityFeed";
 import { WalletPage } from "./features/wallet/WalletPage";
 import { DepositPage } from "./features/payment/DepositPage";
-import { StudySetPaywall } from "./features/payment/StudySetPaywall";
 import { AdminPayments } from "./features/admin/AdminPayments";
 import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
 
-function AppShell() {
+import { AppShell } from "./components/layout/AppShell";
+import { HomePage } from "./components/home/HomePage";
+
+function RootApp() {
   const { user, logout, token } = useAuth();
-  const [view, setView] = useState<AppView>("dashboard");
+  const [view, setView] = useState<AppView>("home");
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassDetailType | null>(null);
   const [loadingSet, setLoadingSet] = useState(false);
@@ -87,46 +88,29 @@ function AppShell() {
     setView("study");
   }
 
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <button
-          className="ghost-button"
-          onClick={() => {
-            setView("dashboard");
-            setSelectedSet(null);
-          }}
-        >
-          HQuizlet
-        </button>
-        <div className="user-menu">
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("classes"); }}>Lớp học</button>
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("wallet"); }}>Ví</button>
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("activity"); }}>Hoạt động</button>
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("folders"); }}>Thư mục</button>
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("live"); }}>Live Quiz</button>
-          {user.role === "admin" && (
-            <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("admin-payments"); }}>Admin 💰</button>
-          )}
-          <span>{user.name}</span>
-          <button onClick={() => void logout()}>Logout</button>
-        </div>
-      </header>
+  // Navigation handler for AppShell sidebar/navbar
+  function handleNavigate(viewName: string) {
+    setSelectedSet(null);
+    setSelectedClass(null);
+    setView(viewName as AppView);
+  }
 
+  return (
+    <AppShell
+      currentView={view}
+      onNavigate={handleNavigate}
+    >
       {loadingSet && (
         <div className="loading-overlay" aria-busy="true">
           <span>Đang tải học phần...</span>
         </div>
       )}
 
-      {!loadingSet && view === "dashboard" && (
-        <Dashboard
-          healthStatus={healthStatus}
-          onOpen={(id) => void handleOpenSet(id)}
-          onCreate={() => {
-            setSelectedSet(null);
-            setView("editor");
-          }}
+      {/* NEW: HomePage — shown for home & dashboard views */}
+      {(view === "home" || view === "dashboard") && !loadingSet && (
+        <HomePage
+          onOpenSet={(id) => void handleOpenSet(id)}
+          onNavigate={handleNavigate}
         />
       )}
 
@@ -247,14 +231,14 @@ function AppShell() {
       {!loadingSet && view === "admin-payments" && (
         <AdminPayments onBack={() => setView("dashboard")} />
       )}
-    </main>
+    </AppShell>
   );
 }
 
 function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <RootApp />
     </AuthProvider>
   );
 }

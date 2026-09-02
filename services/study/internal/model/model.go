@@ -17,15 +17,18 @@ type StudySet struct {
 
 // Flashcard is a single term/definition card inside a StudySet.
 type Flashcard struct {
-	ID         int64     `json:"id"`
-	StudySetID int64     `json:"studySetId"`
-	Term       string    `json:"term"`
-	Definition string    `json:"definition"`
-	ImageURL   *string   `json:"imageUrl,omitempty"`
-	Starred    bool      `json:"starred"`
-	Position   int       `json:"position"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID              int64     `json:"id"`
+	StudySetID      int64     `json:"studySetId"`
+	Term            string    `json:"term"`
+	Definition      string    `json:"definition"`
+	ExampleSentence string    `json:"exampleSentence"`
+	HintExplanation string    `json:"hintExplanation"`
+	Synonyms        string    `json:"synonyms"`
+	ImageURL        *string   `json:"imageUrl,omitempty"`
+	Starred         bool      `json:"starred"`
+	Position        int       `json:"position"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 // CreateStudySetInput is the validated payload for creating a study set.
@@ -36,32 +39,43 @@ type CreateStudySetInput struct {
 
 // UpdateStudySetInput is the validated payload for updating a study set.
 type UpdateStudySetInput struct {
-	Title         string  `json:"title"`
-	Description   string  `json:"description"`
-	ThumbnailURL  *string `json:"thumbnailUrl,omitempty"`
+	Title        string  `json:"title"`
+	Description  string  `json:"description"`
+	ThumbnailURL *string `json:"thumbnailUrl,omitempty"`
 }
 
 // CreateFlashcardInput is the validated payload for creating a flashcard.
 type CreateFlashcardInput struct {
-	Term       string `json:"term"`
-	Definition string `json:"definition"`
+	Term            string  `json:"term"`
+	Definition      string  `json:"definition"`
+	ExampleSentence string  `json:"exampleSentence"`
+	HintExplanation string  `json:"hintExplanation"`
+	Synonyms        string  `json:"synonyms"`
+	ImageURL        *string `json:"imageUrl,omitempty"`
 }
 
 // UpdateFlashcardInput is the validated payload for updating a flashcard.
 type UpdateFlashcardInput struct {
-	Term       string  `json:"term"`
-	Definition string  `json:"definition"`
-	ImageURL   *string `json:"imageUrl,omitempty"`
+	Term            string  `json:"term"`
+	Definition      string  `json:"definition"`
+	ExampleSentence string  `json:"exampleSentence"`
+	HintExplanation string  `json:"hintExplanation"`
+	Synonyms        string  `json:"synonyms"`
+	ImageURL        *string `json:"imageUrl,omitempty"`
 }
 
 // BulkFlashcardItem represents one card in a bulk save operation.
 // ID == 0 means create; ID > 0 means update; Delete == true means delete.
 type BulkFlashcardItem struct {
-	ID         int64  `json:"id"`
-	Term       string `json:"term"`
-	Definition string `json:"definition"`
-	Position   int    `json:"position"`
-	Delete     bool   `json:"delete"`
+	ID              int64   `json:"id"`
+	Term            string  `json:"term"`
+	Definition      string  `json:"definition"`
+	ExampleSentence string  `json:"exampleSentence"`
+	HintExplanation string  `json:"hintExplanation"`
+	Synonyms        string  `json:"synonyms"`
+	ImageURL        *string `json:"imageUrl,omitempty"`
+	Position        int     `json:"position"`
+	Delete          bool    `json:"delete"`
 }
 
 // BulkSaveFlashcardsInput is the payload for bulk create/update/delete.

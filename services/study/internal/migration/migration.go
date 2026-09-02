@@ -177,5 +177,11 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS learning_sessions_user_set_created_idx
 		ON learning_sessions(user_id, study_set_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS learning_sessions_session_id_idx
-		ON learning_card_results(session_id)`,
+			ON learning_card_results(session_id)`,
+
+	// 018 – optional flashcard learning metadata
+	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS image_url TEXT`,
+	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS example_sentence TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS hint_explanation TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS synonyms TEXT NOT NULL DEFAULT ''`,
 }

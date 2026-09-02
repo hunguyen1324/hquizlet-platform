@@ -3,7 +3,7 @@
 
 export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
-export type AppView = "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments";
+export type AppView = "home" | "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments";
 
 export type User = {
   id: number;
@@ -39,6 +39,9 @@ export type Flashcard = {
   studySetId: number;
   term: string;
   definition: string;
+  exampleSentence?: string;
+  hintExplanation?: string;
+  synonyms?: string;
   imageUrl?: string | null;
   starred: boolean;
 };
@@ -48,6 +51,10 @@ export type DraftCard = {
   id?: number;
   term: string;
   definition: string;
+  exampleSentence?: string;
+  hintExplanation?: string;
+  synonyms?: string;
+  imageUrl?: string | null;
   starred?: boolean;
 };
 

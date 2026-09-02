@@ -38,9 +38,9 @@ export const studySetApi = {
   delete: (token: string, id: number): Promise<void> => apiFetch(`/v1/study-sets/${id}`, token, { method: "DELETE" }),
 };
 
-export type CreateFlashcardPayload = { term: string; definition: string };
-export type UpdateFlashcardPayload = { term?: string; definition?: string; imageUrl?: string | null };
-export type BulkFlashcardItem = { id?: number; term: string; definition: string; position?: number; delete?: boolean };
+export type CreateFlashcardPayload = { term: string; definition: string; exampleSentence?: string; hintExplanation?: string; synonyms?: string; imageUrl?: string | null };
+export type UpdateFlashcardPayload = { term?: string; definition?: string; exampleSentence?: string; hintExplanation?: string; synonyms?: string; imageUrl?: string | null };
+export type BulkFlashcardItem = { id?: number; term: string; definition: string; exampleSentence?: string; hintExplanation?: string; synonyms?: string; imageUrl?: string | null; position?: number; delete?: boolean };
 export type BulkSaveResult = { created: Flashcard[]; updated: Flashcard[]; deleted: number[] };
 export const flashcardApi = {
   create: (token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> => apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, { method: "POST", body: JSON.stringify(payload) }),

@@ -23,11 +23,11 @@ func scanCard(s interface {
 	Scan(...any) error
 }) (model.Flashcard, error) {
 	var c model.Flashcard
-	err := s.Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.ImageURL, &c.Starred, &c.Position, &c.CreatedAt, &c.UpdatedAt)
+	err := s.Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.ExampleSentence, &c.HintExplanation, &c.Synonyms, &c.ImageURL, &c.Starred, &c.Position, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
-const selectCols = `id, study_set_id, term, definition, image_url, starred, position, created_at, updated_at`
+const selectCols = `id, study_set_id, term, definition, example_sentence, hint_explanation, synonyms, image_url, starred, position, created_at, updated_at`
 
 // ListByStudySet returns all flashcards for a study set ordered by position then id.
 func (r *FlashcardRepository) ListByStudySet(ctx context.Context, studySetID int64) ([]model.Flashcard, error) {
@@ -66,10 +66,10 @@ func (r *FlashcardRepository) Get(ctx context.Context, id int64) (model.Flashcar
 // Create inserts a new flashcard into a study set.
 func (r *FlashcardRepository) Create(ctx context.Context, studySetID int64, in model.CreateFlashcardInput) (model.Flashcard, error) {
 	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO flashcards (study_set_id, term, definition, position)
-		VALUES ($1, $2, $3, COALESCE((SELECT MAX(position)+1 FROM flashcards WHERE study_set_id = $1), 0))
+		INSERT INTO flashcards (study_set_id, term, definition, example_sentence, hint_explanation, synonyms, image_url, position)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE((SELECT MAX(position)+1 FROM flashcards WHERE study_set_id = $1), 0))
 		RETURNING `+selectCols,
-		studySetID, in.Term, in.Definition)
+		studySetID, in.Term, in.Definition, in.ExampleSentence, in.HintExplanation, in.Synonyms, in.ImageURL)
 	c, err := scanCard(row)
 	return c, err
 }
@@ -78,10 +78,10 @@ func (r *FlashcardRepository) Create(ctx context.Context, studySetID int64, in m
 func (r *FlashcardRepository) Update(ctx context.Context, id int64, in model.UpdateFlashcardInput) (model.Flashcard, error) {
 	row := r.db.QueryRowContext(ctx, `
 		UPDATE flashcards
-		SET term = $1, definition = $2, image_url = $4, updated_at = now()
-		WHERE id = $3
+		SET term = $1, definition = $2, example_sentence = $3, hint_explanation = $4, synonyms = $5, image_url = $6, updated_at = now()
+		WHERE id = $7
 		RETURNING `+selectCols,
-		in.Term, in.Definition, id, in.ImageURL)
+		in.Term, in.Definition, in.ExampleSentence, in.HintExplanation, in.Synonyms, in.ImageURL, id)
 	c, err := scanCard(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Flashcard{}, ErrNotFound
@@ -148,10 +148,10 @@ func (r *FlashcardRepository) BulkSave(ctx context.Context, studySetID int64, it
 		if item.ID == 0 {
 			// Create new card
 			row := tx.QueryRowContext(ctx, `
-				INSERT INTO flashcards (study_set_id, term, definition, position)
-				VALUES ($1, $2, $3, $4)
+				INSERT INTO flashcards (study_set_id, term, definition, example_sentence, hint_explanation, synonyms, image_url, position)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 				RETURNING `+selectCols,
-				studySetID, item.Term, item.Definition, item.Position)
+				studySetID, item.Term, item.Definition, item.ExampleSentence, item.HintExplanation, item.Synonyms, item.ImageURL, item.Position)
 			c, err := scanCard(row)
 			if err != nil {
 				return model.BulkSaveResult{}, err
@@ -165,10 +165,10 @@ func (r *FlashcardRepository) BulkSave(ctx context.Context, studySetID int64, it
 				continue
 			}
 			row := tx.QueryRowContext(ctx, `
-				UPDATE flashcards SET term = $1, definition = $2, position = $3, updated_at = now()
-				WHERE id = $4
+				UPDATE flashcards SET term = $1, definition = $2, example_sentence = $3, hint_explanation = $4, synonyms = $5, image_url = $6, position = $7, updated_at = now()
+				WHERE id = $8
 				RETURNING `+selectCols,
-				item.Term, item.Definition, item.Position, item.ID)
+				item.Term, item.Definition, item.ExampleSentence, item.HintExplanation, item.Synonyms, item.ImageURL, item.Position, item.ID)
 			c, err := scanCard(row)
 			if err != nil {
 				return model.BulkSaveResult{}, err

@@ -13,7 +13,15 @@ type Props = {
 };
 
 function newDraftCard(): DraftCard {
-  return { key: crypto.randomUUID(), term: "", definition: "" };
+  return {
+    key: crypto.randomUUID(),
+    term: "",
+    definition: "",
+    exampleSentence: "",
+    hintExplanation: "",
+    synonyms: "",
+    imageUrl: "",
+  };
 }
 
 function emptyDraftCards(): DraftCard[] {
@@ -27,6 +35,10 @@ function toDraftCards(cards: StudySet["flashcards"]): DraftCard[] {
     id: c.id,
     term: c.term,
     definition: c.definition,
+    exampleSentence: c.exampleSentence ?? "",
+    hintExplanation: c.hintExplanation ?? "",
+    synonyms: c.synonyms ?? "",
+    imageUrl: c.imageUrl ?? "",
     starred: c.starred,
   }));
 }
@@ -42,7 +54,11 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function updateCard(key: string, field: "term" | "definition", value: string) {
+  function updateCard(
+    key: string,
+    field: "term" | "definition" | "exampleSentence" | "hintExplanation" | "synonyms" | "imageUrl",
+    value: string
+  ) {
     setDraftCards((prev) =>
       prev.map((c) => (c.key === key ? { ...c, [field]: value } : c))
     );
@@ -61,7 +77,15 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
     setError("");
 
     const cleanCards = draftCards
-      .map((c) => ({ ...c, term: c.term.trim(), definition: c.definition.trim() }))
+      .map((c) => ({
+        ...c,
+        term: c.term.trim(),
+        definition: c.definition.trim(),
+        exampleSentence: c.exampleSentence?.trim() ?? "",
+        hintExplanation: c.hintExplanation?.trim() ?? "",
+        synonyms: c.synonyms?.trim() ?? "",
+        imageUrl: c.imageUrl?.trim() || null,
+      }))
       .filter((c) => c.term || c.definition);
 
     if (!title.trim()) {
@@ -93,6 +117,10 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
         ...(card.id ? { id: card.id } : {}),
         term: card.term,
         definition: card.definition,
+        exampleSentence: card.exampleSentence,
+        hintExplanation: card.hintExplanation,
+        synonyms: card.synonyms,
+        imageUrl: card.imageUrl,
         position,
       }));
 
@@ -178,31 +206,75 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
         {draftCards.map((card, index) => (
           <article className="draft-card" key={card.key}>
-            <div className="draft-index">{index + 1}</div>
-            <label>
-              Thuật ngữ
+            <div className="draft-card-header">
+              <div className="draft-title">
+                <span className="draft-number">{index + 1}</span>
+                <strong>Flashcard</strong>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => removeCard(card.key)}
+                aria-label="Xóa thẻ"
+              >
+                ×
+              </button>
+            </div>
+            <div className="draft-main-fields">
+              <label>
+                Term
+                <input
+                  placeholder="2+2"
+                  value={card.term}
+                  onChange={(e) => updateCard(card.key, "term", e.target.value)}
+                />
+              </label>
+              <label>
+                Definition
+                <input
+                  placeholder="4"
+                  value={card.definition}
+                  onChange={(e) => updateCard(card.key, "definition", e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="draft-extra-fields">
+              <label>
+                Example sentence
+                <textarea
+                  placeholder="I ____ to school every day."
+                  value={card.exampleSentence ?? ""}
+                  onChange={(e) => updateCard(card.key, "exampleSentence", e.target.value)}
+                />
+                <span>Use a blank in the sentence for Learn mode.</span>
+              </label>
+              <label>
+                Hint / explanation
+                <textarea
+                  placeholder="Giải thích ngắn bằng tiếng Việt..."
+                  value={card.hintExplanation ?? ""}
+                  onChange={(e) => updateCard(card.key, "hintExplanation", e.target.value)}
+                />
+                <span>Optional explanation for the card.</span>
+              </label>
+              <label>
+                Từ đồng nghĩa (Synonyms)
+                <textarea
+                  placeholder="VD: happy -> joyful, cheerful, glad"
+                  value={card.synonyms ?? ""}
+                  onChange={(e) => updateCard(card.key, "synonyms", e.target.value)}
+                />
+                <span>Từ đồng nghĩa hoặc cách diễn đạt tương đương.</span>
+              </label>
+            </div>
+            <label className="draft-image-field">
+              Image (Optional)
               <input
-                placeholder="apple"
-                value={card.term}
-                onChange={(e) => updateCard(card.key, "term", e.target.value)}
+                placeholder="/api/storage/flashcards/... or external URL"
+                value={card.imageUrl ?? ""}
+                onChange={(e) => updateCard(card.key, "imageUrl", e.target.value)}
               />
             </label>
-            <label>
-              Định nghĩa
-              <input
-                placeholder="quả táo"
-                value={card.definition}
-                onChange={(e) => updateCard(card.key, "definition", e.target.value)}
-              />
-            </label>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => removeCard(card.key)}
-              aria-label="Xóa thẻ"
-            >
-              ×
-            </button>
           </article>
         ))}
 
