@@ -469,10 +469,9 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
 
       {error && <p className="message message--error">{error}</p>}
 
-      {existingSetId && (
-        <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
+      <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Nhập quiz từ Excel</strong>
+            <strong>📥 Nhập quiz từ Excel (.xlsx)</strong>
             <button className="secondary-button" type="button" onClick={() => setShowImport(!showImport)}>
               {showImport ? "Đóng" : "Mở"}
             </button>
@@ -487,10 +486,10 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
                 <button
                   className="primary-button"
                   style={{ marginTop: 8 }}
-                  disabled={importLoading}
+                  disabled={importLoading || !existingSetId}
                   type="button"
                   onClick={async () => {
-                    if (!importFile) return;
+                    if (!importFile || !existingSetId) return;
                     setImportLoading(true);
                     setImportResult(null);
                     try {
@@ -506,6 +505,11 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
                 >
                   {importLoading ? "Đang nhập..." : "Nhập dữ liệu"}
                 </button>
+              )}
+              {!existingSetId && (
+                <p style={{ marginTop: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
+                  💡 Lưu quiz trước, sau đó quay lại để nhập dữ liệu từ Excel.
+                </p>
               )}
               {importResult && (
                 <div style={{ marginTop: 8 }}>
@@ -525,7 +529,6 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
             </div>
           )}
         </section>
-      )}
 
       <section className="cards-editor">
         <div className="cards-editor-heading">

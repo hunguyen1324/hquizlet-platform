@@ -1,7 +1,7 @@
 # Go service builder – hỗ trợ cả root main.go (gateway/quiz) và cmd/server/main.go (auth/study)
 # Dev5 – fix build path sau khi Dev1/Dev2 refactor sang cmd/internal structure
 
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 
 ARG SERVICE
 WORKDIR /src/services/${SERVICE}

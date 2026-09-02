@@ -262,10 +262,9 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
       {error && <p className="message message--error">{error}</p>}
 
-      {isEditing && (
-        <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
+      <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>Nhập từ Excel</strong>
+            <strong>📥 Nhập từ Excel (.xlsx)</strong>
             <button className="secondary-button" type="button" onClick={() => setShowImport(!showImport)}>
               {showImport ? "Đóng" : "Mở"}
             </button>
@@ -280,7 +279,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                 <button
                   className="primary-button"
                   style={{ marginTop: 8 }}
-                  disabled={importLoading}
+                  disabled={importLoading || !existingSet}
                   type="button"
                   onClick={async () => {
                     if (!importFile || !existingSet) return;
@@ -303,6 +302,11 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   {importLoading ? "Đang nhập..." : "Nhập dữ liệu"}
                 </button>
               )}
+              {!existingSet && (
+                <p style={{ marginTop: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
+                  💡 Lưu bộ thẻ trước, sau đó quay lại để nhập dữ liệu từ Excel.
+                </p>
+              )}
               {importResult && (
                 <div style={{ marginTop: 8 }}>
                   <p>Đã nhập: {importResult.imported} thẻ</p>
@@ -321,7 +325,6 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             </div>
           )}
         </section>
-      )}
 
       <section className="cards-editor">
         <div className="cards-editor-heading">
