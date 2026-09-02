@@ -138,6 +138,7 @@ function RootApp() {
 
       {view === "quiz-editor" && (
         <QuizSetEditor
+          existingSetId={selectedSet?.id}
           onSave={() => setView("dashboard")}
           onCancel={() => setView("create-type")}
         />

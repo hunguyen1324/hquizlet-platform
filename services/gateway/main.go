@@ -77,6 +77,16 @@ func main() {
 	mux.HandleFunc("/v1/files/", authenticatedProxy(authURL, fileURL))
 	mux.HandleFunc("GET /v1/files", authenticatedProxy(authURL, fileURL))
 
+	// Phase 10: TTS & Language routes → Auth service
+	mux.HandleFunc("GET /v1/tts", authenticatedProxy(authURL, authURL))
+	mux.HandleFunc("GET /v1/languages", authenticatedProxy(authURL, authURL))
+
+	// Phase 10: Import routes → Study service (authenticated)
+	// Import routes are matched via /v1/study-sets/ wildcard above, no extra route needed
+
+	// Phase 10: Template download → Study service (no auth required)
+	mux.HandleFunc("GET /v1/templates/", reverseProxy(studyURL))
+
 	// Phase 8: Payment, Wallet, and Entitlement routes [P8-GW-01]
 	// Webhook: forwarded raw (NO authenticatedProxy), SePay verifies via Apikey header
 	mux.HandleFunc("POST /v1/payments/webhooks/sepay", reverseProxy(paymentURL))

@@ -1,18 +1,26 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // StudySet represents a collection of flashcards owned by a user.
 type StudySet struct {
-	ID             int64       `json:"id"`
-	UserID         int64       `json:"userId"`
-	Title          string      `json:"title"`
-	Description    string      `json:"description"`
-	ThumbnailURL   *string     `json:"thumbnailUrl,omitempty"`
-	CreatedAt      time.Time   `json:"createdAt"`
-	UpdatedAt      time.Time   `json:"updatedAt"`
-	FlashcardCount int         `json:"flashcardCount,omitempty"`
-	Flashcards     []Flashcard `json:"flashcards,omitempty"`
+	ID                 int64             `json:"id"`
+	UserID             int64             `json:"userId"`
+	Title              string            `json:"title"`
+	Description        string            `json:"description"`
+	ThumbnailURL       *string           `json:"thumbnailUrl,omitempty"`
+	ContentType        string            `json:"contentType"`
+	TermLanguage       string            `json:"termLanguage"`
+	DefinitionLanguage string            `json:"definitionLanguage"`
+	Visibility         string            `json:"visibility"`
+	CreatedAt          time.Time         `json:"createdAt"`
+	UpdatedAt          time.Time         `json:"updatedAt"`
+	FlashcardCount     int               `json:"flashcardCount,omitempty"`
+	Flashcards         []Flashcard       `json:"flashcards,omitempty"`
+	QuizQuestions      []QuizQuestion    `json:"quizQuestions,omitempty"`
 }
 
 // Flashcard is a single term/definition card inside a StudySet.
@@ -33,15 +41,22 @@ type Flashcard struct {
 
 // CreateStudySetInput is the validated payload for creating a study set.
 type CreateStudySetInput struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title              string `json:"title"`
+	Description        string `json:"description"`
+	ContentType        string `json:"contentType"`
+	TermLanguage       string `json:"termLanguage"`
+	DefinitionLanguage string `json:"definitionLanguage"`
+	Visibility         string `json:"visibility"`
 }
 
 // UpdateStudySetInput is the validated payload for updating a study set.
 type UpdateStudySetInput struct {
-	Title        string  `json:"title"`
-	Description  string  `json:"description"`
-	ThumbnailURL *string `json:"thumbnailUrl,omitempty"`
+	Title              string  `json:"title"`
+	Description        string  `json:"description"`
+	ThumbnailURL       *string `json:"thumbnailUrl,omitempty"`
+	TermLanguage       string  `json:"termLanguage"`
+	DefinitionLanguage string  `json:"definitionLanguage"`
+	Visibility         string  `json:"visibility"`
 }
 
 // CreateFlashcardInput is the validated payload for creating a flashcard.
@@ -88,6 +103,74 @@ type BulkSaveResult struct {
 	Created []Flashcard `json:"created"`
 	Updated []Flashcard `json:"updated"`
 	Deleted []int64     `json:"deleted"`
+}
+
+// ---------------------------------------------------------------------------
+// Quiz Question domain (Phase 10)
+// ---------------------------------------------------------------------------
+
+// QuizQuestionType is the set of valid quiz question types.
+type QuizQuestionType string
+
+const (
+	QTypeMultipleChoice QuizQuestionType = "multiple_choice"
+	QTypeTrueFalse      QuizQuestionType = "true_false"
+	QTypeWritten        QuizQuestionType = "written"
+	QTypeParagraph      QuizQuestionType = "paragraph"
+	QTypeSorting        QuizQuestionType = "sorting"
+)
+
+// QuizQuestion represents a single quiz question within a study set.
+type QuizQuestion struct {
+	ID                int64               `json:"id"`
+	StudySetID        int64               `json:"studySetId"`
+	Position          int                 `json:"position"`
+	QuestionText      string              `json:"questionText"`
+	QuestionType      string              `json:"questionType"`
+	CorrectAnswer     *string             `json:"correctAnswer,omitempty"`
+	TimeInSeconds     *int                `json:"timeInSeconds,omitempty"`
+	AudioURL          *string             `json:"audioUrl,omitempty"`
+	AnswerExplanation *string             `json:"answerExplanation,omitempty"`
+	ParagraphText     *string             `json:"paragraphText,omitempty"`
+	SubQuestions      json.RawMessage     `json:"subQuestions,omitempty"`
+	Tags              []string            `json:"tags,omitempty"`
+	Options           []QuizQuestionOption `json:"options,omitempty"`
+}
+
+// QuizQuestionOption represents an answer option for a quiz question.
+type QuizQuestionOption struct {
+	ID        int64  `json:"id"`
+	QuestionID int64 `json:"questionId"`
+	Text      string `json:"text"`
+	Position  int    `json:"position"`
+	IsCorrect bool   `json:"isCorrect"`
+}
+
+// CreateQuizQuestionInput is the payload for creating a quiz question.
+type CreateQuizQuestionInput struct {
+	Position          int                    `json:"position"`
+	QuestionText      string                 `json:"questionText"`
+	QuestionType      string                 `json:"questionType"`
+	CorrectAnswer     *string                `json:"correctAnswer,omitempty"`
+	TimeInSeconds     *int                   `json:"timeInSeconds,omitempty"`
+	AudioURL          *string                `json:"audioUrl,omitempty"`
+	AnswerExplanation *string                `json:"answerExplanation,omitempty"`
+	ParagraphText     *string                `json:"paragraphText,omitempty"`
+	SubQuestions      json.RawMessage        `json:"subQuestions,omitempty"`
+	Tags              []string               `json:"tags,omitempty"`
+	Options           []CreateOptionInput    `json:"options,omitempty"`
+}
+
+// CreateOptionInput is the payload for a quiz question option.
+type CreateOptionInput struct {
+	Text      string `json:"text"`
+	Position  int    `json:"position"`
+	IsCorrect bool   `json:"isCorrect"`
+}
+
+// BulkSaveQuizQuestionsInput replaces all quiz questions for a study set.
+type BulkSaveQuizQuestionsInput struct {
+	Questions []CreateQuizQuestionInput `json:"questions"`
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +261,51 @@ type ProgressFilter struct {
 }
 
 // ---------------------------------------------------------------------------
+
+// ImportFlashcardRow represents one row from an Excel import.
+type ImportFlashcardRow struct {
+	Row             int    `json:"row"`
+	Term            string `json:"term"`
+	Definition      string `json:"definition"`
+	ExampleSentence string `json:"exampleSentence,omitempty"`
+	HintExplanation string `json:"hintExplanation,omitempty"`
+	Synonyms        string `json:"synonyms,omitempty"`
+	ImageURL        string `json:"imageUrl,omitempty"`
+}
+
+// ImportQuizRow represents one row from a quiz Excel import.
+type ImportQuizRow struct {
+	Row                int    `json:"row"`
+	Question           string `json:"question"`
+	Type               string `json:"type"`
+	OptionA            string `json:"optionA,omitempty"`
+	OptionB            string `json:"optionB,omitempty"`
+	OptionC            string `json:"optionC,omitempty"`
+	OptionD            string `json:"optionD,omitempty"`
+	CorrectAnswer      string `json:"correctAnswer"`
+	TimeSeconds        int    `json:"timeSeconds,omitempty"`
+	AudioURL           string `json:"audioUrl,omitempty"`
+	AnswerExplanation  string `json:"answerExplanation,omitempty"`
+}
+
+// ImportError describes a validation error in a specific row/field.
+type ImportError struct {
+	Row    int    `json:"row"`
+	Field  string `json:"field"`
+	Reason string `json:"reason"`
+}
+
+// ImportFlashcardResult summarises a flashcard import operation.
+type ImportFlashcardResult struct {
+	Imported int           `json:"imported"`
+	Errors   []ImportError `json:"errors"`
+}
+
+// ImportQuizResult summarises a quiz import operation.
+type ImportQuizResult struct {
+	Imported int           `json:"imported"`
+	Errors   []ImportError `json:"errors"`
+}
 
 // StudySetFilter holds optional search/filter/sort params for listing.
 type StudySetFilter struct {

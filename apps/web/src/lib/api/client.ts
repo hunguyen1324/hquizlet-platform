@@ -26,8 +26,8 @@ export const authApi = {
   updateProfile: (token: string, payload: { name?: string; image?: string }): Promise<User> => apiFetch("/v1/auth/profile", token, { method: "PATCH", body: JSON.stringify(payload) }),
 };
 
-export type CreateStudySetPayload = { title: string; description?: string };
-export type UpdateStudySetPayload = { title?: string; description?: string; thumbnailUrl?: string | null };
+export type CreateStudySetPayload = { title: string; description?: string; contentType?: string; termLanguage?: string; definitionLanguage?: string; visibility?: string };
+export type UpdateStudySetPayload = { title?: string; description?: string; thumbnailUrl?: string | null; termLanguage?: string; definitionLanguage?: string; visibility?: string };
 export type StudySetListParams = { search?: string; sort?: "updated" | "created" | "title"; page?: number; per_page?: number };
 export type StudySetListResult = { items: StudySet[]; total: number; page: number; perPage: number; totalPages: number };
 export const studySetApi = {
@@ -202,6 +202,80 @@ export const grammarApi = {
     apiFetch(`/v1/study-sets/${id}`, token),
   update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
     apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
+};
+
+// Phase 10: Quiz Question API
+import type { QuizQuestion } from "../../types";
+
+export type QuizQuestionPayload = {
+  position: number;
+  questionText: string;
+  questionType: string;
+  correctAnswer?: string;
+  timeInSeconds?: number;
+  audioUrl?: string;
+  answerExplanation?: string;
+  paragraphText?: string;
+  subQuestions?: unknown;
+  tags?: string[];
+  options: Array<{ text: string; position: number; isCorrect: boolean }>;
+};
+
+export const quizQuestionApi = {
+  list: (token: string, studySetId: number): Promise<QuizQuestion[]> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token),
+  bulkSave: (token: string, studySetId: number, questions: QuizQuestionPayload[]): Promise<{ ok: boolean }> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "POST", body: JSON.stringify({ questions }) }),
+  delete: (token: string, studySetId: number): Promise<{ ok: boolean }> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "DELETE" }),
+};
+
+// Phase 10: TTS API
+export const ttsApi = {
+  getAudio: (token: string, text: string, lang: string): Promise<Blob> =>
+    fetch(`${gatewayUrl}/v1/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(lang)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.blob()),
+};
+
+// Phase 10: Languages API
+export type Language = { code: string; name: string; flag: string };
+export const languageApi = {
+  list: (token: string): Promise<Language[]> => apiFetch("/v1/languages", token),
+};
+
+// Phase 10: Import API
+export type ImportResult = { imported: number; errors: Array<{ row: number; field: string; reason: string }> };
+
+export const importApi = {
+  flashcards: async (token: string, studySetId: number, file: File): Promise<ImportResult> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${gatewayUrl}/v1/study-sets/${studySetId}/import/flashcards`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || body.reason || `Import failed ${res.status}`);
+    }
+    return res.json();
+  },
+  quiz: async (token: string, studySetId: number, file: File): Promise<ImportResult> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${gatewayUrl}/v1/study-sets/${studySetId}/import/quiz`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || body.reason || `Import failed ${res.status}`);
+    }
+    return res.json();
+  },
 };
 
 export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };

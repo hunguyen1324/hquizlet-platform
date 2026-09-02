@@ -25,7 +25,9 @@ func NewStudySetRepository(db *sql.DB) *StudySetRepository {
 // List returns all study sets for a user ordered by last updated.
 func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, user_id, title, description, thumbnail_url, created_at, updated_at
+		SELECT id, user_id, title, description, thumbnail_url,
+		       content_type, term_language, definition_language, visibility,
+		       created_at, updated_at
 		FROM study_sets
 		WHERE user_id = $1
 		ORDER BY updated_at DESC, id DESC
@@ -38,7 +40,9 @@ func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.St
 	sets := []model.StudySet{}
 	for rows.Next() {
 		var s model.StudySet
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+			&s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sets = append(sets, s)
@@ -50,7 +54,9 @@ func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.St
 // Authenticated Study API operations must always be user-scoped.
 func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, user_id, title, description, thumbnail_url, created_at, updated_at
+		SELECT id, user_id, title, description, thumbnail_url,
+		       content_type, term_language, definition_language, visibility,
+		       created_at, updated_at
 		FROM study_sets
 		ORDER BY updated_at DESC, id DESC
 	`)
@@ -62,7 +68,9 @@ func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, err
 	sets := []model.StudySet{}
 	for rows.Next() {
 		var s model.StudySet
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+			&s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sets = append(sets, s)
@@ -109,7 +117,9 @@ func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f
 	args = append(args, perPage, offset)
 	limitN := itoa(len(args) - 1)
 	offsetN := itoa(len(args))
-	q := `SELECT id, user_id, title, description, thumbnail_url, created_at, updated_at
+	q := `SELECT id, user_id, title, description, thumbnail_url,
+		       content_type, term_language, definition_language, visibility,
+		       created_at, updated_at
 		FROM study_sets
 		WHERE user_id = $1` + whereExtra +
 		` ORDER BY ` + orderCol + ` DESC, id DESC
@@ -124,7 +134,9 @@ func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f
 	sets := []model.StudySet{}
 	for rows.Next() {
 		var s model.StudySet
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+			&s.CreatedAt, &s.UpdatedAt); err != nil {
 			return model.StudySetListResult{}, err
 		}
 		sets = append(sets, s)
@@ -155,9 +167,13 @@ func itoa(n int) string {
 func (r *StudySetRepository) Get(ctx context.Context, id int64) (model.StudySet, error) {
 	var s model.StudySet
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, user_id, title, description, thumbnail_url, created_at, updated_at
+		SELECT id, user_id, title, description, thumbnail_url,
+		       content_type, term_language, definition_language, visibility,
+		       created_at, updated_at
 		FROM study_sets WHERE id = $1
-	`, id).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt)
+	`, id).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+		&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+		&s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.StudySet{}, ErrNotFound
 	}
@@ -169,10 +185,14 @@ func (r *StudySetRepository) Get(ctx context.Context, id int64) (model.StudySet,
 func (r *StudySetRepository) GetOwned(ctx context.Context, id, userID int64) (model.StudySet, error) {
 	var s model.StudySet
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, user_id, title, description, thumbnail_url, created_at, updated_at
+		SELECT id, user_id, title, description, thumbnail_url,
+		       content_type, term_language, definition_language, visibility,
+		       created_at, updated_at
 		FROM study_sets
 		WHERE id = $1 AND user_id = $2
-	`, id, userID).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt)
+	`, id, userID).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+		&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+		&s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.StudySet{}, ErrNotFound
 	}
@@ -181,13 +201,33 @@ func (r *StudySetRepository) GetOwned(ctx context.Context, id, userID int64) (mo
 
 // Create inserts a new study set and returns the persisted record.
 func (r *StudySetRepository) Create(ctx context.Context, userID int64, in model.CreateStudySetInput) (model.StudySet, error) {
+	ct := in.ContentType
+	if ct == "" {
+		ct = "flashcard"
+	}
+	tl := in.TermLanguage
+	if tl == "" {
+		tl = "en-US"
+	}
+	dl := in.DefinitionLanguage
+	if dl == "" {
+		dl = "en-US"
+	}
+	vis := in.Visibility
+	if vis == "" {
+		vis = "public"
+	}
 	var s model.StudySet
 	err := r.db.QueryRowContext(ctx, `
-		INSERT INTO study_sets (user_id, title, description)
-		VALUES ($1, $2, $3)
-		RETURNING id, user_id, title, description, thumbnail_url, created_at, updated_at
-	`, userID, in.Title, in.Description).
-		Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt)
+		INSERT INTO study_sets (user_id, title, description, content_type, term_language, definition_language, visibility)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, user_id, title, description, thumbnail_url,
+		          content_type, term_language, definition_language, visibility,
+		          created_at, updated_at
+	`, userID, in.Title, in.Description, ct, tl, dl, vis).
+		Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+			&s.CreatedAt, &s.UpdatedAt)
 	return s, err
 }
 
@@ -196,11 +236,18 @@ func (r *StudySetRepository) Update(ctx context.Context, id int64, in model.Upda
 	var s model.StudySet
 	err := r.db.QueryRowContext(ctx, `
 		UPDATE study_sets
-		SET title = $1, description = $2, thumbnail_url = $4, updated_at = now()
-		WHERE id = $3
-		RETURNING id, user_id, title, description, thumbnail_url, created_at, updated_at
-	`, in.Title, in.Description, id, in.ThumbnailURL).
-		Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL, &s.CreatedAt, &s.UpdatedAt)
+		SET title = $1, description = $2, thumbnail_url = $3,
+		    term_language = $4, definition_language = $5, visibility = $6,
+		    updated_at = now()
+		WHERE id = $7
+		RETURNING id, user_id, title, description, thumbnail_url,
+		          content_type, term_language, definition_language, visibility,
+		          created_at, updated_at
+	`, in.Title, in.Description, in.ThumbnailURL,
+		in.TermLanguage, in.DefinitionLanguage, in.Visibility, id).
+		Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
+			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
+			&s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.StudySet{}, ErrNotFound
 	}

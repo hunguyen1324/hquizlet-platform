@@ -37,15 +37,18 @@ func (s *StudySetService) ListWithFilter(ctx context.Context, userID int64, f mo
 }
 
 // GetWithCards returns a study set along with its flashcards.
-// The study set must belong to userID; ownership is enforced by the repository query
-// (GetOwned scopes the SQL lookup itself, so there is no separate app-level bypass window).
+// Visibility enforcement: private sets return 403 to non-owners.
 func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (model.StudySet, error) {
-	if err := requireUserID(userID); err != nil {
-		return model.StudySet{}, err
-	}
-	set, err := s.sets.GetOwned(ctx, id, userID)
+	set, err := s.sets.Get(ctx, id)
 	if err != nil {
 		return model.StudySet{}, err
+	}
+	// Ownership or visibility check
+	if userID == 0 {
+		return model.StudySet{}, ErrUnauthorized
+	}
+	if set.UserID != userID && set.Visibility == "private" {
+		return model.StudySet{}, ErrForbidden
 	}
 	cards, err := s.cards.ListByStudySet(ctx, id)
 	if err != nil {
@@ -64,6 +67,24 @@ func (s *StudySetService) Create(ctx context.Context, userID int64, in model.Cre
 	if in.Title == "" {
 		return model.StudySet{}, errors.New("title is required")
 	}
+	// Validate content_type
+	switch in.ContentType {
+	case "flashcard", "quiz", "grammar":
+		// valid
+	case "":
+		in.ContentType = "flashcard"
+	default:
+		return model.StudySet{}, errors.New("contentType must be flashcard, quiz, or grammar")
+	}
+	// Validate visibility
+	switch in.Visibility {
+	case "public", "private":
+		// valid
+	case "":
+		in.Visibility = "public"
+	default:
+		return model.StudySet{}, errors.New("visibility must be public or private")
+	}
 	return s.sets.Create(ctx, userID, in)
 }
 
@@ -72,6 +93,15 @@ func (s *StudySetService) Update(ctx context.Context, id, userID int64, in model
 	in.Description = strings.TrimSpace(in.Description)
 	if in.Title == "" {
 		return model.StudySet{}, errors.New("title is required")
+	}
+	// Validate visibility
+	switch in.Visibility {
+	case "public", "private":
+		// valid
+	case "":
+		in.Visibility = "public"
+	default:
+		return model.StudySet{}, errors.New("visibility must be public or private")
 	}
 	if err := s.checkOwner(ctx, id, userID); err != nil {
 		return model.StudySet{}, err

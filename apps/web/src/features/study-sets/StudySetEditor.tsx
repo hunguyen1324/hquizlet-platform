@@ -1,10 +1,25 @@
 // StudySetEditor — Dev 3 [P2-WEB-02]
 // Tạo/sửa study set và flashcards qua studySetApi + transactional bulkSave.
+// Phase 10: Thêm language selector, visibility toggle, import Excel.
 
 import React, { useState } from "react";
 import type { StudySet, DraftCard } from "../../types";
 import { useAuth } from "../auth/AuthContext";
-import { studySetApi, flashcardApi } from "../../lib/api";
+import { studySetApi, flashcardApi, importApi, ttsApi } from "../../lib/api";
+
+const LANGUAGES = [
+  { code: "en-US", name: "English (US)", flag: "🇺🇸" },
+  { code: "vi-VN", name: "Tiếng Việt", flag: "🇻🇳" },
+  { code: "ja-JP", name: "日本語", flag: "🇯🇵" },
+  { code: "ko-KR", name: "한국어", flag: "🇰🇷" },
+  { code: "zh-CN", name: "中文 (简体)", flag: "🇨🇳" },
+  { code: "zh-TW", name: "中文 (繁體)", flag: "🇹🇼" },
+  { code: "fr-FR", name: "Français", flag: "🇫🇷" },
+  { code: "de-DE", name: "Deutsch", flag: "🇩🇪" },
+  { code: "es-ES", name: "Español", flag: "🇪🇸" },
+  { code: "th-TH", name: "ไทย", flag: "🇹🇭" },
+  { code: "id-ID", name: "Bahasa Indonesia", flag: "🇮🇩" },
+];
 
 type Props = {
   existingSet?: StudySet;
@@ -22,6 +37,21 @@ function newDraftCard(): DraftCard {
     synonyms: "",
     imageUrl: "",
   };
+}
+
+async function playTTS(token: string, text: string, lang: string) {
+  try {
+    const blob = await ttsApi.getAudio(token, text, lang);
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.play();
+    audio.onended = () => URL.revokeObjectURL(url);
+  } catch {
+    // Fallback: use browser TTS
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    window.speechSynthesis.speak(u);
+  }
 }
 
 function emptyDraftCards(): DraftCard[] {
@@ -53,6 +83,13 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [termLanguage, setTermLanguage] = useState(existingSet?.termLanguage ?? "en-US");
+  const [definitionLanguage, setDefinitionLanguage] = useState(existingSet?.definitionLanguage ?? "en-US");
+  const [visibility, setVisibility] = useState<string>(existingSet?.visibility ?? "public");
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: Array<{ row: number; field: string; reason: string }> } | null>(null);
 
   function updateCard(
     key: string,
@@ -107,10 +144,17 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
         ? await studySetApi.update(token, existingSet.id, {
             title: title.trim(),
             description: description.trim(),
+            termLanguage,
+            definitionLanguage,
+            visibility,
           })
         : await studySetApi.create(token, {
             title: title.trim(),
             description: description.trim(),
+            contentType: "flashcard",
+            termLanguage,
+            definitionLanguage,
+            visibility,
           });
 
       const keepItems = cleanCards.map((card, position) => ({
@@ -189,9 +233,95 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             onChange={(e) => setDescription(e.target.value)}
           />
         </label>
+        <div style={{ display: "flex", gap: 16 }}>
+          <label style={{ flex: 1 }}>
+            Ngôn ngữ thuật ngữ
+            <select value={termLanguage} onChange={(e) => setTermLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ flex: 1 }}>
+            Ngôn ngữ định nghĩa
+            <select value={definitionLanguage} onChange={(e) => setDefinitionLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label>
+          Chế độ hiển thị
+          <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+            <option value="public">Công khai</option>
+            <option value="private">Riêng tư</option>
+          </select>
+        </label>
       </section>
 
       {error && <p className="message message--error">{error}</p>}
+
+      {isEditing && (
+        <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <strong>Nhập từ Excel</strong>
+            <button className="secondary-button" type="button" onClick={() => setShowImport(!showImport)}>
+              {showImport ? "Đóng" : "Mở"}
+            </button>
+          </div>
+          {showImport && (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ fontSize: 14, color: "var(--muted-foreground)" }}>
+                Chọn file .xlsx với cột: Term, Definition (bắt buộc), Example, Hint, Synonyms, Image URL (tùy chọn)
+              </p>
+              <input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
+              {importFile && (
+                <button
+                  className="primary-button"
+                  style={{ marginTop: 8 }}
+                  disabled={importLoading}
+                  type="button"
+                  onClick={async () => {
+                    if (!importFile || !existingSet) return;
+                    setImportLoading(true);
+                    setImportResult(null);
+                    try {
+                      const result = await importApi.flashcards(token, existingSet.id, importFile);
+                      setImportResult(result);
+                      if (result.errors.length === 0) {
+                        const updated = await studySetApi.get(token, existingSet.id);
+                        onSave(updated);
+                      }
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Import failed");
+                    } finally {
+                      setImportLoading(false);
+                    }
+                  }}
+                >
+                  {importLoading ? "Đang nhập..." : "Nhập dữ liệu"}
+                </button>
+              )}
+              {importResult && (
+                <div style={{ marginTop: 8 }}>
+                  <p>Đã nhập: {importResult.imported} thẻ</p>
+                  {importResult.errors.length > 0 && (
+                    <div style={{ color: "var(--destructive)" }}>
+                      <p>Lỗi:</p>
+                      <ul>
+                        {importResult.errors.map((e, i) => (
+                          <li key={i}>Dòng {e.row}: [{e.field}] {e.reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="cards-editor">
         <div className="cards-editor-heading">
@@ -237,6 +367,24 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   onChange={(e) => updateCard(card.key, "definition", e.target.value)}
                 />
               </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ fontSize: 12 }}
+                onClick={() => playTTS(token, card.term, termLanguage)}
+              >
+                🔊 Term
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ fontSize: 12 }}
+                onClick={() => playTTS(token, card.definition, definitionLanguage)}
+              >
+                🔊 Definition
+              </button>
             </div>
             <div className="draft-extra-fields">
               <label>

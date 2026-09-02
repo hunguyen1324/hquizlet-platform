@@ -184,4 +184,50 @@ var migrations = []string{
 	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS example_sentence TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS hint_explanation TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS synonyms TEXT NOT NULL DEFAULT ''`,
+
+	// ── Phase 10 Migrations ──────────────────────────────────────────────────────
+
+	// 019 – content_type, term_language, definition_language, visibility on study_sets
+	`ALTER TABLE study_sets ADD COLUMN IF NOT EXISTS content_type TEXT NOT NULL DEFAULT 'flashcard'`,
+	`ALTER TABLE study_sets ADD COLUMN IF NOT EXISTS term_language TEXT NOT NULL DEFAULT 'en-US'`,
+	`ALTER TABLE study_sets ADD COLUMN IF NOT EXISTS definition_language TEXT NOT NULL DEFAULT 'en-US'`,
+	`ALTER TABLE study_sets ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'public'`,
+	`DO $$ BEGIN
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'study_sets_content_type_check') THEN
+			ALTER TABLE study_sets ADD CONSTRAINT study_sets_content_type_check CHECK (content_type IN ('flashcard','quiz','grammar'));
+		END IF;
+	END $$`,
+	`DO $$ BEGIN
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'study_sets_visibility_check') THEN
+			ALTER TABLE study_sets ADD CONSTRAINT study_sets_visibility_check CHECK (visibility IN ('public','private'));
+		END IF;
+	END $$`,
+
+	// 020 – quiz_question table
+	`CREATE TABLE IF NOT EXISTS quiz_question (
+		id                BIGSERIAL PRIMARY KEY,
+		study_set_id      BIGINT NOT NULL REFERENCES study_sets(id) ON DELETE CASCADE,
+		position          INT NOT NULL DEFAULT 0,
+		question_text     TEXT NOT NULL DEFAULT '',
+		question_type     TEXT NOT NULL DEFAULT 'multiple_choice'
+			CHECK (question_type IN ('multiple_choice','true_false','written','paragraph','sorting')),
+		correct_answer    TEXT,
+		time_in_seconds   INT,
+		audio_url         TEXT,
+		answer_explanation TEXT,
+		paragraph_text    TEXT,
+		sub_questions     JSONB,
+		tags              TEXT[] NOT NULL DEFAULT '{}'
+	)`,
+	`CREATE INDEX IF NOT EXISTS quiz_question_study_set_id_idx ON quiz_question(study_set_id)`,
+
+	// 021 – quiz_question_option table
+	`CREATE TABLE IF NOT EXISTS quiz_question_option (
+		id          BIGSERIAL PRIMARY KEY,
+		question_id BIGINT NOT NULL REFERENCES quiz_question(id) ON DELETE CASCADE,
+		text        TEXT NOT NULL DEFAULT '',
+		position    INT NOT NULL DEFAULT 0,
+		is_correct  BOOLEAN NOT NULL DEFAULT false
+	)`,
+	`CREATE INDEX IF NOT EXISTS quiz_question_option_question_id_idx ON quiz_question_option(question_id)`,
 }

@@ -17,7 +17,7 @@ const TYPES = [
         <path d="M2 10h20" />
       </svg>
     ),
-    title: "Flashcards",
+    title: "Thẻ học",
     description: "Tạo thẻ từ vựng truyền thống với thuật ngữ và định nghĩa để ghi nhớ.",
   },
   {

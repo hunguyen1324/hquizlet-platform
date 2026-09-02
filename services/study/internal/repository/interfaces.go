@@ -61,6 +61,13 @@ type LearningProgress interface {
 	GetLatest(ctx context.Context, userID, studySetID int64) ([]model.LearningSession, error)
 }
 
+// QuizQuestions is the interface for quiz question data access.
+type QuizQuestions interface {
+	ListByStudySet(ctx context.Context, studySetID int64) ([]model.QuizQuestion, error)
+	BulkSave(ctx context.Context, studySetID int64, questions []model.CreateQuizQuestionInput) error
+	DeleteByStudySet(ctx context.Context, studySetID int64) error
+}
+
 // ErrDuplicateIdempotencyKey is returned when a retry uses the same idempotency key.
 var ErrDuplicateIdempotencyKey = errors.New("duplicate idempotency key")
 
@@ -70,4 +77,5 @@ var (
 	_ Flashcards      = (*FlashcardRepository)(nil)
 	_ Folders         = (*FolderRepository)(nil)
 	_ LearningProgress = (*LearningProgressRepository)(nil)
+	_ QuizQuestions   = (*QuizQuestionRepository)(nil)
 )

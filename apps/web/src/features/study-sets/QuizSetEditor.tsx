@@ -3,9 +3,21 @@
 
 import React, { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { quizApi } from "../../lib/api";
+import { quizApi, importApi } from "../../lib/api";
 
-type QuestionType = "multiple_choice" | "true_false" | "written";
+const LANGUAGES = [
+  { code: "en-US", name: "English (US)", flag: "🇺🇸" },
+  { code: "vi-VN", name: "Tiếng Việt", flag: "🇻🇳" },
+  { code: "ja-JP", name: "日本語", flag: "🇯🇵" },
+  { code: "ko-KR", name: "한국어", flag: "🇰🇷" },
+  { code: "zh-CN", name: "中文 (简体)", flag: "🇨🇳" },
+  { code: "zh-TW", name: "中文 (繁體)", flag: "🇹🇼" },
+  { code: "fr-FR", name: "Français", flag: "🇫🇷" },
+  { code: "de-DE", name: "Deutsch", flag: "🇩🇪" },
+  { code: "es-ES", name: "Español", flag: "🇪🇸" },
+];
+
+type QuestionType = "multiple_choice" | "true_false" | "written" | "paragraph" | "sorting";
 
 interface QuizOption {
   text: string;
@@ -18,11 +30,14 @@ interface QuizQuestion {
   questionType: QuestionType;
   correctAnswer: string;
   answerExplanation: string;
+  paragraphText: string;
+  audioUrl: string;
   options: QuizOption[];
   position: number;
 }
 
 type Props = {
+  existingSetId?: number;
   onSave: () => void;
   onCancel: () => void;
 };
@@ -34,6 +49,8 @@ function newQuestion(position: number): QuizQuestion {
     questionType: "multiple_choice",
     correctAnswer: "",
     answerExplanation: "",
+    paragraphText: "",
+    audioUrl: "",
     options: [
       { text: "", position: 0 },
       { text: "", position: 1 },
@@ -137,6 +154,8 @@ function QuestionCard({
               <option value="multiple_choice">Trắc nghiệm</option>
               <option value="true_false">Đúng / Sai</option>
               <option value="written">Tự luận</option>
+              <option value="paragraph">Đoạn văn</option>
+              <option value="sorting">Sắp xếp</option>
             </select>
           </label>
         </div>
@@ -209,6 +228,86 @@ function QuestionCard({
           </label>
         )}
 
+        {/* Paragraph */}
+        {question.questionType === "paragraph" && (
+          <>
+            <label>
+              Đoạn văn
+              <textarea
+                rows={4}
+                placeholder="Nhập đoạn văn..."
+                value={question.paragraphText ?? ""}
+                onChange={(e) => setField("paragraphText", e.target.value)}
+                disabled={disabled}
+              />
+            </label>
+            <label>
+              Đáp án đúng <span className="required">*</span>
+              <input
+                type="text"
+                placeholder="Nhập đáp án cho câu hỏi con..."
+                value={question.correctAnswer}
+                onChange={(e) => setField("correctAnswer", e.target.value)}
+                disabled={disabled}
+              />
+            </label>
+          </>
+        )}
+
+        {/* Sorting */}
+        {question.questionType === "sorting" && (
+          <>
+            <p className="quiz-options-label">Các phần tử (nhập theo thứ tự đúng)</p>
+            {question.options.map((opt, optIdx) => (
+              <div key={optIdx} className="quiz-option-row">
+                <span style={{ width: 24, textAlign: "center", color: "var(--muted-foreground)" }}>{optIdx + 1}.</span>
+                <input
+                  type="text"
+                  placeholder={`Phần tử ${optIdx + 1}`}
+                  value={opt.text}
+                  onChange={(e) => setOptionText(optIdx, e.target.value)}
+                  disabled={disabled}
+                  className="quiz-option-input"
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => removeOption(optIdx)}
+                  disabled={disabled || question.options.length <= 2}
+                  aria-label="Xóa phần tử"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button type="button" className="secondary-button" onClick={addOption} disabled={disabled}>
+              + Thêm phần tử
+            </button>
+            <label style={{ marginTop: 8 }}>
+              Thứ tự đúng (cách nhau bằng dấu phẩy)
+              <input
+                type="text"
+                placeholder="VD: B,A,D,C"
+                value={question.correctAnswer}
+                onChange={(e) => setField("correctAnswer", e.target.value)}
+                disabled={disabled}
+              />
+            </label>
+          </>
+        )}
+
+        {/* Audio URL */}
+        <label>
+          URL âm thanh (tùy chọn)
+          <input
+            type="url"
+            placeholder="https://...mp3"
+            value={question.audioUrl}
+            onChange={(e) => setField("audioUrl", e.target.value)}
+            disabled={disabled}
+          />
+        </label>
+
         {/* Explanation */}
         <label>
           Giải thích (tùy chọn)
@@ -225,13 +324,20 @@ function QuestionCard({
   );
 }
 
-export function QuizSetEditor({ onSave, onCancel }: Props) {
+export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   const { token } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([newQuestion(0)]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [termLanguage, setTermLanguage] = useState("en-US");
+  const [definitionLanguage, setDefinitionLanguage] = useState("en-US");
+  const [visibility, setVisibility] = useState("public");
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: Array<{ row: number; field: string; reason: string }> } | null>(null);
 
   function updateQuestion(key: string, updated: QuizQuestion) {
     setQuestions((prev) => prev.map((q) => (q.key === key ? updated : q)));
@@ -271,14 +377,18 @@ export function QuizSetEditor({ onSave, onCancel }: Props) {
         title: title.trim(),
         description: description.trim(),
         contentType: "quiz" as const,
+        termLanguage,
+        definitionLanguage,
+        visibility,
         questions: questions.map((q, i) => ({
           questionText: q.questionText.trim(),
           questionType: q.questionType,
           correctAnswer: q.correctAnswer,
           answerExplanation: q.answerExplanation.trim() || undefined,
+          paragraphText: q.paragraphText?.trim() || undefined,
           position: i,
           options:
-            q.questionType === "multiple_choice"
+            q.questionType === "multiple_choice" || q.questionType === "sorting"
               ? q.options
                   .filter((o) => o.text.trim())
                   .map((o, idx) => ({ text: o.text.trim(), position: idx }))
@@ -309,9 +419,7 @@ export function QuizSetEditor({ onSave, onCancel }: Props) {
             {loading ? "Đang lưu..." : "Tạo Quiz"}
           </button>
         </div>
-      </section>
-
-      <section className="create-meta">
+      </section>        <section className="create-meta">
         <label>
           Tiêu đề <span className="required">*</span>
           <input
@@ -332,9 +440,92 @@ export function QuizSetEditor({ onSave, onCancel }: Props) {
             rows={2}
           />
         </label>
+        <div style={{ display: "flex", gap: 16 }}>
+          <label style={{ flex: 1 }}>
+            Ngôn ngữ thuật ngữ
+            <select value={termLanguage} onChange={(e) => setTermLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ flex: 1 }}>
+            Ngôn ngữ đáp án
+            <select value={definitionLanguage} onChange={(e) => setDefinitionLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label>
+          Chế độ hiển thị
+          <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+            <option value="public">Công khai</option>
+            <option value="private">Riêng tư</option>
+          </select>
+        </label>
       </section>
 
       {error && <p className="message message--error">{error}</p>}
+
+      {existingSetId && (
+        <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <strong>Nhập quiz từ Excel</strong>
+            <button className="secondary-button" type="button" onClick={() => setShowImport(!showImport)}>
+              {showImport ? "Đóng" : "Mở"}
+            </button>
+          </div>
+          {showImport && (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ fontSize: 14, color: "var(--muted-foreground)" }}>
+                Chọn file .xlsx với cột: Question, Type, Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation
+              </p>
+              <input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
+              {importFile && (
+                <button
+                  className="primary-button"
+                  style={{ marginTop: 8 }}
+                  disabled={importLoading}
+                  type="button"
+                  onClick={async () => {
+                    if (!importFile) return;
+                    setImportLoading(true);
+                    setImportResult(null);
+                    try {
+                      const result = await importApi.quiz(token, existingSetId, importFile);
+                      setImportResult(result);
+                      if (result.errors.length === 0) onSave();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Import failed");
+                    } finally {
+                      setImportLoading(false);
+                    }
+                  }}
+                >
+                  {importLoading ? "Đang nhập..." : "Nhập dữ liệu"}
+                </button>
+              )}
+              {importResult && (
+                <div style={{ marginTop: 8 }}>
+                  <p>Đã nhập: {importResult.imported} câu hỏi</p>
+                  {importResult.errors.length > 0 && (
+                    <div style={{ color: "var(--destructive)" }}>
+                      <p>Lỗi:</p>
+                      <ul>
+                        {importResult.errors.map((e, i) => (
+                          <li key={i}>Dòng {e.row}: [{e.field}] {e.reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="cards-editor">
         <div className="cards-editor-heading">

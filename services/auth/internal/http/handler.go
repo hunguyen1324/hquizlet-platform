@@ -36,6 +36,11 @@ func NewRouter(svc *service.AuthService, db *sql.DB) http.Handler {
 	mux.HandleFunc("PATCH /v1/auth/profile", profilePatchHandler(svc))
 	mux.HandleFunc("PUT /v1/auth/profile", profilePatchHandler(svc))
 
+	// Phase 10: TTS & Languages
+	ttsSvc := service.NewTTSService()
+	mux.HandleFunc("GET /v1/tts", ttsHandler(ttsSvc))
+	mux.HandleFunc("GET /v1/languages", languagesHandler())
+
 	return loggingMiddleware(requestIDMiddleware(mux))
 }
 
@@ -227,6 +232,37 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	default:
 		log.Printf("[auth] unexpected error: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+	}
+}
+
+// --- Phase 10: TTS & Languages handlers ---
+
+func ttsHandler(ttsSvc *service.TTSService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		text := r.URL.Query().Get("text")
+		lang := r.URL.Query().Get("lang")
+		if text == "" {
+			writeError(w, http.StatusUnprocessableEntity, "validation_error", "text is required")
+			return
+		}
+		if lang == "" {
+			lang = "en-US"
+		}
+		audio, err := ttsSvc.GetAudio(text, lang)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "TTS_UNAVAILABLE", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(audio)
+	}
+}
+
+func languagesHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, service.Languages)
 	}
 }
 

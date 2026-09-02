@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,18 +13,21 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/templates"
 )
 
 type Handler struct {
-	sets     *service.StudySetService
-	cards    *service.FlashcardService
-	folders  *service.FolderService
-	progress *service.ProgressService
-	db       *sql.DB
+	sets          *service.StudySetService
+	cards         *service.FlashcardService
+	folders       *service.FolderService
+	progress      *service.ProgressService
+	quizQuestions *service.QuizQuestionService
+	importSvc     *service.ImportService
+	db            *sql.DB
 }
 
-func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, db *sql.DB) *Handler {
-	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, db: db}
+func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, quizQuestions *service.QuizQuestionService, importSvc *service.ImportService, db *sql.DB) *Handler {
+	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, quizQuestions: quizQuestions, importSvc: importSvc, db: db}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -35,6 +39,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/folders", h.listFolders)
 	mux.HandleFunc("POST /v1/folders", h.createFolder)
 	mux.HandleFunc("/v1/folders/", h.folderRouter)
+	// Phase 10: Template download (no auth required)
+	mux.HandleFunc("GET /v1/templates/", h.templateRouter)
 	// Progress routes – handled within studySetRouter via path inspection.
 	// Phase 4 internal API: Quiz service fetches flashcards by ownership.
 	mux.HandleFunc("/internal/study-sets/", h.internalRouter)
@@ -107,6 +113,38 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 3 && parts[1] == "flashcards" && parts[2] == "bulk" {
 		if r.Method == http.MethodPost {
 			h.bulkSaveFlashcards(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+
+	// Phase 10: Quiz question routes
+	if len(parts) == 2 && parts[1] == "quiz-questions" {
+		if r.Method == http.MethodGet {
+			h.listQuizQuestions(w, r, setID)
+		} else if r.Method == http.MethodPost {
+			h.bulkSaveQuizQuestions(w, r, setID)
+		} else if r.Method == http.MethodDelete {
+			h.deleteQuizQuestions(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+
+	// Phase 10: Import routes
+	if len(parts) == 3 && parts[1] == "import" && parts[2] == "flashcards" {
+		if r.Method == http.MethodPost {
+			h.importFlashcards(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+	if len(parts) == 3 && parts[1] == "import" && parts[2] == "quiz" {
+		if r.Method == http.MethodPost {
+			h.importQuiz(w, r, setID)
 		} else {
 			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -422,6 +460,94 @@ func (h *Handler) getLatestProgress(w http.ResponseWriter, r *http.Request, stud
 }
 
 // ---------------------------------------------------------------------------
+// Phase 10: Quiz Question handlers
+
+func (h *Handler) listQuizQuestions(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	questions, err := h.quizQuestions.ListByStudySet(r.Context(), studySetID, userIDFromHeader(r))
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, questions)
+}
+
+func (h *Handler) bulkSaveQuizQuestions(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	var in model.BulkSaveQuizQuestionsInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := h.quizQuestions.BulkSave(r.Context(), studySetID, userIDFromHeader(r), in); err != nil {
+		if isValidationError(err) {
+			WriteError(w, http.StatusBadRequest, err.Error())
+		} else {
+			WriteServiceError(w, err)
+		}
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) deleteQuizQuestions(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	if err := h.quizQuestions.DeleteByStudySet(r.Context(), studySetID, userIDFromHeader(r)); err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10: Import handlers
+
+func (h *Handler) importFlashcards(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	result, err := h.importSvc.ImportFlashcards(r.Context(), studySetID, userIDFromHeader(r), file)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	if len(result.Errors) > 0 {
+		WriteJSON(w, http.StatusUnprocessableEntity, result)
+		return
+	}
+	WriteJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) importQuiz(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	result, err := h.importSvc.ImportQuiz(r.Context(), studySetID, userIDFromHeader(r), file)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	if len(result.Errors) > 0 {
+		WriteJSON(w, http.StatusUnprocessableEntity, result)
+		return
+	}
+	WriteJSON(w, http.StatusOK, result)
+}
+
+// ---------------------------------------------------------------------------
 // Phase 4: Internal API for Quiz service
 
 // internalRouter handles /internal/study-sets/{id}/* routes.
@@ -456,6 +582,31 @@ func (h *Handler) getFlashcardsInternal(w http.ResponseWriter, r *http.Request, 
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Phase 10: Template download handler
+
+func (h *Handler) templateRouter(w http.ResponseWriter, r *http.Request) {
+	parts := PathParts(r.URL.Path, "/v1/templates/")
+	if len(parts) == 0 {
+		WriteError(w, http.StatusNotFound, "template not found")
+		return
+	}
+	name := parts[0]
+	if name != "flashcard_template.xlsx" && name != "quiz_template.xlsx" {
+		WriteError(w, http.StatusNotFound, "template not found")
+		return
+	}
+	data, err := templates.GetTemplate(name)
+	if err != nil {
+		WriteError(w, http.StatusNotFound, "template not found")
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, data)
+}
 
 func userIDFromHeader(r *http.Request) int64 {
 	raw := r.Header.Get("X-User-ID")

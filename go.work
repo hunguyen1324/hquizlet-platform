@@ -1,12 +1,11 @@
-go 1.23.0
+go 1.25.0
 
 use (
-	./services/gateway
 	./services/auth
-	./services/study
-	./services/quiz
-	./services/payment
-	./services/file
 	./services/class
+	./services/file
+	./services/gateway
+	./services/payment
+	./services/quiz
+	./services/study
 )
-

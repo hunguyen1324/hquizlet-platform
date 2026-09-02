@@ -25,12 +25,20 @@ export type ServiceHealth = {
   status: string;
 };
 
+export type ContentType = "flashcard" | "quiz" | "grammar";
+export type Visibility = "public" | "private";
+
 export type StudySet = {
   id: number;
   title: string;
   description: string;
   thumbnailUrl?: string | null;
+  contentType: ContentType;
+  termLanguage: string;
+  definitionLanguage: string;
+  visibility: Visibility;
   flashcards?: Flashcard[];
+  quizQuestions?: QuizQuestion[];
   flashcardCount?: number;
 };
 
@@ -56,6 +64,31 @@ export type DraftCard = {
   synonyms?: string;
   imageUrl?: string | null;
   starred?: boolean;
+};
+
+export type QuizOption = {
+  id?: number;
+  text: string;
+  position: number;
+  isCorrect: boolean;
+};
+
+export type QuizQuestionType = "multiple_choice" | "true_false" | "written" | "paragraph" | "sorting";
+
+export type QuizQuestion = {
+  id?: number;
+  studySetId?: number;
+  questionText: string;
+  questionType: QuizQuestionType;
+  correctAnswer?: string;
+  timeInSeconds?: number;
+  audioUrl?: string;
+  answerExplanation?: string;
+  paragraphText?: string;
+  subQuestions?: unknown;
+  tags?: string[];
+  options: QuizOption[];
+  position: number;
 };
 
 // --- Phase 7: Class & Activity Types ---

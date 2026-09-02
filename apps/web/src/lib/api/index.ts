@@ -25,6 +25,10 @@ export {
   listFiles,
   uploadToStorage,
   validateFile,
+  quizQuestionApi,
+  ttsApi,
+  languageApi,
+  importApi,
 } from "./client";
 export type {
   User,
@@ -71,4 +75,7 @@ export type {
   FileMetadata,
   QuotaInfo,
   FileListResponse,
+  QuizQuestionPayload,
+  ImportResult,
+  Language,
 } from "./client";

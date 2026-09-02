@@ -52,7 +52,10 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
       <section className="page-heading">
         <div>
           <button className="ghost-button back-btn" onClick={onBack}>← Quay lại</button>
-          <p className="eyebrow">Học phần</p>
+          <p className="eyebrow">
+            {set.visibility === "private" && <span>🔒 Riêng tư · </span>}
+            {set.contentType === "quiz" ? "Quiz" : set.contentType === "grammar" ? "Ngữ pháp" : "Thẻ học"}
+          </p>
           <h1>{set.title}</h1>
           <p>{set.description || "Chưa có mô tả"}</p>
         </div>
@@ -78,7 +81,9 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
         {/* Overview tab - card list */}
         {studyMode === "dashboard" && (
           <><div className="card-list">
-            {cards.length === 0 && <p className="empty">Chưa có flashcard nào.</p>}
+            {cards.length === 0 && (set.contentType === "flashcard" || !set.contentType) && (
+              <p className="empty">Chưa có thẻ học nào.</p>
+            )}
             {cards.map((card) => (
               <article className="mini-card" key={card.id}>
                 <div>
@@ -92,6 +97,28 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                 )}
               </article>
             ))}
+            {set.quizQuestions && set.quizQuestions.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h3>Câu hỏi Quiz ({set.quizQuestions.length})</h3>
+                {set.quizQuestions.map((q, i) => (
+                  <article className="mini-card" key={q.id ?? i}>
+                    <div>
+                      <strong>{i + 1}. {q.questionText}</strong>
+                      <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                        {q.questionType === "multiple_choice" ? "Trắc nghiệm" :
+                         q.questionType === "true_false" ? "Đúng/Sai" :
+                         q.questionType === "written" ? "Tự luận" :
+                         q.questionType === "paragraph" ? "Đoạn văn" : "Sắp xếp"}
+                        {q.audioUrl && " · 🔊"}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+            {cards.length === 0 && (!set.quizQuestions || set.quizQuestions.length === 0) && (
+              <p className="empty">Chưa có nội dung nào.</p>
+            )}
           </div>
           <ProgressPanel
             status={progressStatus}

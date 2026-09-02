@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 1.7.0
+  version: 1.8.0
   description: |
     HQuizlet Platform API contract. All public application routes are exposed
     through the gateway at localhost:8080.
-    Phase 9 adds File Upload: presigned URL upload flow for avatars, flashcard
-    images, and study set thumbnails.
+    Phase 10 adds: content types (study/quiz/grammar), TTS audio, language selectors,
+    visibility enforcement, 5 quiz question types, Excel import for flashcards and quizzes.
 servers:
   - url: http://localhost:8080
     description: Local gateway
@@ -28,6 +28,10 @@ tags:
   - name: class-study-sets
   - name: activity
   - name: files
+  - name: tts
+  - name: languages
+  - name: quiz-questions
+  - name: import
 
 components:
   securitySchemes:
@@ -80,18 +84,25 @@ components:
 
     StudySet:
       type: object
-      required: [id, userId, title, description, createdAt, updatedAt]
+      required: [id, userId, title, description, contentType, termLanguage, definitionLanguage, visibility, createdAt, updatedAt]
       properties:
         id: { type: integer, format: int64 }
         userId: { type: integer, format: int64 }
         title: { type: string }
         description: { type: string }
+        contentType: { type: string, enum: [flashcard, quiz, grammar], description: 'Content type of this study set' }
+        termLanguage: { type: string, description: 'BCP-47 language code for terms, e.g. en-US, vi-VN' }
+        definitionLanguage: { type: string, description: 'BCP-47 language code for definitions' }
+        visibility: { type: string, enum: [public, private], description: 'Public or private visibility' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         thumbnailUrl: { type: [string, 'null'], description: 'Optional study set thumbnail image URL' }
         flashcards:
           type: array
           items: { $ref: '#/components/schemas/Flashcard' }
+        quizQuestions:
+          type: array
+          items: { $ref: '#/components/schemas/QuizQuestion' }
 
     Flashcard:
       type: object
@@ -620,6 +631,108 @@ components:
         quota: { $ref: '#/components/schemas/QuotaInfo' }
 
     # ---- End Phase 9 Schemas ----
+
+    # ---- Phase 10: Quiz Questions, Import, TTS, Languages ----
+
+    QuizQuestion:
+      type: object
+      required: [id, studySetId, position, questionText, questionType]
+      properties:
+        id: { type: integer, format: int64 }
+        studySetId: { type: integer, format: int64 }
+        position: { type: integer }
+        questionText: { type: string }
+        questionType: { type: string, enum: [multiple_choice, true_false, written, paragraph, sorting] }
+        correctAnswer: { type: [string, 'null'] }
+        timeInSeconds: { type: [integer, 'null'] }
+        audioUrl: { type: [string, 'null'], description: 'Audio URL to auto-play when question starts' }
+        answerExplanation: { type: [string, 'null'] }
+        paragraphText: { type: [string, 'null'], description: 'Full paragraph text for paragraph-type questions' }
+        subQuestions: { type: [object, 'null'], description: 'JSON sub-questions for paragraph type' }
+        tags: { type: array, items: { type: string } }
+        options: { type: array, items: { $ref: '#/components/schemas/QuizQuestionOption' } }
+
+    QuizQuestionOption:
+      type: object
+      required: [id, questionId, text, position, isCorrect]
+      properties:
+        id: { type: integer, format: int64 }
+        questionId: { type: integer, format: int64 }
+        text: { type: string }
+        position: { type: integer }
+        isCorrect: { type: boolean }
+
+    CreateQuizQuestionRequest:
+      type: object
+      required: [questionText, questionType, position]
+      properties:
+        position: { type: integer }
+        questionText: { type: string }
+        questionType: { type: string, enum: [multiple_choice, true_false, written, paragraph, sorting] }
+        correctAnswer: { type: string }
+        timeInSeconds: { type: integer }
+        audioUrl: { type: string }
+        answerExplanation: { type: string }
+        paragraphText: { type: string }
+        subQuestions: { type: object }
+        tags: { type: array, items: { type: string } }
+        options:
+          type: array
+          items:
+            type: object
+            required: [text, position]
+            properties:
+              text: { type: string }
+              position: { type: integer }
+              isCorrect: { type: boolean }
+
+    BulkSaveQuizQuestionsRequest:
+      type: object
+      required: [questions]
+      properties:
+        questions:
+          type: array
+          items: { $ref: '#/components/schemas/CreateQuizQuestionRequest' }
+
+    ImportFlashcardResult:
+      type: object
+      required: [imported, errors]
+      properties:
+        imported: { type: integer, minimum: 0 }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, field, reason]
+            properties:
+              row: { type: integer }
+              field: { type: string }
+              reason: { type: string }
+
+    ImportQuizResult:
+      type: object
+      required: [imported, errors]
+      properties:
+        imported: { type: integer, minimum: 0 }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [row, field, reason]
+            properties:
+              row: { type: integer }
+              field: { type: string }
+              reason: { type: string }
+
+    Language:
+      type: object
+      required: [code, name, flag]
+      properties:
+        code: { type: string, description: 'BCP-47 language code' }
+        name: { type: string, description: 'Language display name' }
+        flag: { type: string, description: 'Emoji flag' }
+
+    # ---- End Phase 10 Schemas ----
 
     # ---- End Phase 7 Schemas ----
 
@@ -1579,3 +1692,168 @@ paths:
         '200': { description: Latest progress, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LearningProgressSession' } } } } }
         '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Study set not owned by caller, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ---- Phase 10: Quiz Question Endpoints ----
+
+  /v1/study-sets/{studySetId}/quiz-questions:
+    parameters:
+      - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    get:
+      tags: [quiz-questions]
+      summary: List quiz questions for a study set
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Quiz questions with options
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/QuizQuestion' }
+        '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Study set is private and not owned by caller, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Study set not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      tags: [quiz-questions]
+      summary: Bulk save quiz questions (replaces all existing)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkSaveQuizQuestionsRequest' }
+      responses:
+        '200': { description: Saved }
+        '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [quiz-questions]
+      summary: Delete all quiz questions for a study set
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Deleted }
+        '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  # ---- Phase 10: Import Endpoints ----
+
+  /v1/study-sets/{studySetId}/import/flashcards:
+    parameters:
+      - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    post:
+      tags: [import]
+      summary: Import flashcards from Excel file (.xlsx)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 'Excel file with columns: Term, Definition (required), Example, Hint, Synonyms, Image URL (optional)'
+      responses:
+        '200':
+          description: Import summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportFlashcardResult' }
+        '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422':
+          description: Validation errors
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportFlashcardResult' }
+
+  /v1/study-sets/{studySetId}/import/quiz:
+    parameters:
+      - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    post:
+      tags: [import]
+      summary: Import quiz questions from Excel file (.xlsx)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 'Excel file with columns: Question, Type (MC/TF/WR/PG/SO), Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation'
+      responses:
+        '200':
+          description: Import summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportQuizResult' }
+        '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422':
+          description: Validation errors
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportQuizResult' }
+
+  # ---- Phase 10: TTS & Language Endpoints ----
+
+  /v1/tts:
+    get:
+      tags: [tts]
+      summary: Text-to-speech audio stream
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { in: query, name: text, required: true, schema: { type: string }, description: 'Text to synthesize' }
+        - { in: query, name: lang, required: true, schema: { type: string }, description: 'BCP-47 language code, e.g. en-US, vi-VN' }
+      responses:
+        '200':
+          description: MP3 audio stream
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '401': { description: Authentication required }
+        '422': { description: Invalid parameters }
+        '503': { description: TTS service unavailable (no API key configured) }
+
+  /v1/languages:
+    get:
+      tags: [languages]
+      summary: List supported TTS languages
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Language list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Language' }
+
+  # ---- Phase 10: Template Download Endpoints ----
+
+  /v1/templates/{templateName}:
+    parameters:
+      - { in: path, name: templateName, required: true, schema: { type: string }, description: 'Template file name' }
+    get:
+      tags: [import]
+      summary: Download an Excel template file (no auth required)
+      responses:
+        '200':
+          description: Template file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '404': { description: Template not found }

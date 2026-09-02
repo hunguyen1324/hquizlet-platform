@@ -159,9 +159,13 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
         {sets.map((set) => (
           <button className="set-card" key={set.id} onClick={() => onOpen(set.id)}>
             <span>{set.description || "Chưa có mô tả"}</span>
-            <strong>{set.title}</strong>
+            <strong>
+              {set.visibility === "private" && <span title="Riêng tư">🔒 </span>}
+              {set.title}
+            </strong>
             <small>
-              {set.flashcards?.length ?? 0} thẻ · Mở học phần
+              {set.contentType === "quiz" ? "Quiz" : set.contentType === "grammar" ? "Ngữ pháp" : "Thẻ học"}
+              {' · '}{set.flashcards?.length ?? 0} thẻ · Mở học phần
             </small>
           </button>
         ))}

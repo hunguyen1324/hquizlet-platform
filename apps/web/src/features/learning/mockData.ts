@@ -12,6 +12,10 @@ export const MOCK_STUDY_SET: StudySet = {
   id: 0,
   title: "[Dev Mode] Mock Study Set",
   description: "Chỉ dùng khi chạy LearningRouter standalone, không phải trong main app",
+  contentType: "flashcard",
+  termLanguage: "en-US",
+  definitionLanguage: "vi-VN",
+  visibility: "public",
   flashcards: [
     { id: 1, studySetId: 0, term: "Apple", definition: "Quả táo", starred: false },
     { id: 2, studySetId: 0, term: "Book", definition: "Quyển sách", starred: true },
