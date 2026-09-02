@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
@@ -45,6 +45,7 @@ func (s *FolderService) GetWithStudySets(ctx context.Context, id, userID int64) 
 		return model.Folder{}, err
 	}
 	folder.StudySets = sets
+	folder.StudySetCount = len(sets)
 	return folder, nil
 }
 
@@ -53,20 +54,20 @@ func (s *FolderService) Create(ctx context.Context, userID int64, in model.Creat
 	if err := requireUserID(userID); err != nil {
 		return model.Folder{}, err
 	}
-	in.Name = strings.TrimSpace(in.Name)
+	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
-	if in.Name == "" {
-		return model.Folder{}, errors.New("folder name is required")
+	if in.Title == "" {
+		return model.Folder{}, fmt.Errorf("%w: title is required", ErrValidation)
 	}
 	return s.folders.Create(ctx, userID, in)
 }
 
 // Update validates and updates a folder, checking ownership.
 func (s *FolderService) Update(ctx context.Context, id, userID int64, in model.UpdateFolderInput) (model.Folder, error) {
-	in.Name = strings.TrimSpace(in.Name)
+	in.Title = strings.TrimSpace(in.Title)
 	in.Description = strings.TrimSpace(in.Description)
-	if in.Name == "" {
-		return model.Folder{}, errors.New("folder name is required")
+	if in.Title == "" {
+		return model.Folder{}, fmt.Errorf("%w: title is required", ErrValidation)
 	}
 	if err := s.checkOwner(ctx, id, userID); err != nil {
 		return model.Folder{}, err

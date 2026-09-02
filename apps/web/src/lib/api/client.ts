@@ -51,16 +51,18 @@ export const flashcardApi = {
   toggleStar: (token: string, id: number): Promise<Flashcard> => apiFetch(`/v1/flashcards/${id}/star`, token, { method: "POST" }),
 };
 
-export type Folder = { id: number; userId: number; name: string; description: string; createdAt: string; updatedAt: string };
-export type FolderDetail = Folder & { studySets: StudySet[] };
+export type FolderSummary = { id: number; title: string; description: string; studySetCount: number; createdAt: string; updatedAt: string };
+export type FolderDetail = FolderSummary & { studySets: StudySet[] };
+export type CreateFolderInput = { title: string; description?: string };
+export type UpdateFolderInput = CreateFolderInput;
 export const folderApi = {
-  list: (token: string): Promise<Folder[]> => apiFetch("/v1/folders", token),
-  create: (token: string, payload: { name: string; description?: string }): Promise<Folder> => apiFetch("/v1/folders", token, { method: "POST", body: JSON.stringify(payload) }),
-  get: (token: string, id: number): Promise<FolderDetail> => apiFetch(`/v1/folders/${id}`, token),
-  update: (token: string, id: number, payload: { name?: string; description?: string }): Promise<Folder> => apiFetch(`/v1/folders/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
-  delete: (token: string, id: number): Promise<void> => apiFetch(`/v1/folders/${id}`, token, { method: "DELETE" }),
-  addStudySet: (token: string, folderId: number, studySetId: number): Promise<void> => apiFetch(`/v1/folders/${folderId}/study-sets`, token, { method: "POST", body: JSON.stringify({ studySetId }) }),
-  removeStudySet: (token: string, folderId: number, studySetId: number): Promise<void> => apiFetch(`/v1/folders/${folderId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
+  listFolders: (token: string): Promise<FolderSummary[]> => apiFetch("/v1/folders", token),
+  createFolder: (token: string, payload: CreateFolderInput): Promise<FolderSummary> => apiFetch("/v1/folders", token, { method: "POST", body: JSON.stringify(payload) }),
+  getFolder: (token: string, id: number): Promise<FolderDetail> => apiFetch(`/v1/folders/${id}`, token),
+  updateFolder: (token: string, id: number, payload: UpdateFolderInput): Promise<FolderSummary> => apiFetch(`/v1/folders/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteFolder: (token: string, id: number): Promise<void> => apiFetch(`/v1/folders/${id}`, token, { method: "DELETE" }),
+  addStudySetToFolder: (token: string, folderId: number, studySetId: number): Promise<void> => apiFetch(`/v1/folders/${folderId}/study-sets`, token, { method: "POST", body: JSON.stringify({ studySetId }) }),
+  removeStudySetFromFolder: (token: string, folderId: number, studySetId: number): Promise<void> => apiFetch(`/v1/folders/${folderId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
 };
 
 export type LearningMode = "flashcards" | "learn" | "test" | "match";

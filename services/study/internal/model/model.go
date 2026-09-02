@@ -4,13 +4,14 @@ import "time"
 
 // StudySet represents a collection of flashcards owned by a user.
 type StudySet struct {
-	ID          int64       `json:"id"`
-	UserID      int64       `json:"userId"`
-	Title       string      `json:"title"`
-	Description string      `json:"description"`
-	CreatedAt   time.Time   `json:"createdAt"`
-	UpdatedAt   time.Time   `json:"updatedAt"`
-	Flashcards  []Flashcard `json:"flashcards,omitempty"`
+	ID             int64       `json:"id"`
+	UserID         int64       `json:"userId"`
+	Title          string      `json:"title"`
+	Description    string      `json:"description"`
+	CreatedAt      time.Time   `json:"createdAt"`
+	UpdatedAt      time.Time   `json:"updatedAt"`
+	FlashcardCount int         `json:"flashcardCount,omitempty"`
+	Flashcards     []Flashcard `json:"flashcards,omitempty"`
 }
 
 // Flashcard is a single term/definition card inside a StudySet.
@@ -96,27 +97,27 @@ func (m LearningMode) Valid() bool {
 
 // LearningSession is the aggregate root for a single learning attempt.
 type LearningSession struct {
-	ID             int64           `json:"id"`
-	UserID         int64           `json:"userId"`
-	StudySetID     int64           `json:"studySetId"`
-	Mode           LearningMode    `json:"mode"`
-	Score          int             `json:"score"`
-	Total          int             `json:"total"`
-	StartedAt      time.Time       `json:"startedAt"`
-	CompletedAt    *time.Time      `json:"completedAt"`
-	IdempotencyKey string          `json:"idempotencyKey"`
-	CreatedAt      time.Time       `json:"createdAt"`
+	ID             int64                `json:"id"`
+	UserID         int64                `json:"userId"`
+	StudySetID     int64                `json:"studySetId"`
+	Mode           LearningMode         `json:"mode"`
+	Score          int                  `json:"score"`
+	Total          int                  `json:"total"`
+	StartedAt      time.Time            `json:"startedAt"`
+	CompletedAt    *time.Time           `json:"completedAt"`
+	IdempotencyKey string               `json:"idempotencyKey"`
+	CreatedAt      time.Time            `json:"createdAt"`
 	CardResults    []LearningCardResult `json:"cardResults,omitempty"`
 }
 
 // LearningCardResult records the outcome for a single flashcard within a session.
 type LearningCardResult struct {
-	ID             int64  `json:"id"`
-	SessionID      int64  `json:"sessionId"`
-	FlashcardID    int64  `json:"flashcardId"`
-	Correct        bool   `json:"correct"`
-	Attempts       int    `json:"attempts"`
-	ResponseTimeMs *int   `json:"responseTimeMs"`
+	ID             int64 `json:"id"`
+	SessionID      int64 `json:"sessionId"`
+	FlashcardID    int64 `json:"flashcardId"`
+	Correct        bool  `json:"correct"`
+	Attempts       int   `json:"attempts"`
+	ResponseTimeMs *int  `json:"responseTimeMs"`
 }
 
 // CardResultInput is the per-card payload submitted by the client.
@@ -142,14 +143,14 @@ type SaveProgressInput struct {
 
 // ProgressSummary is the aggregate view returned by GET /v1/study-sets/{id}/progress.
 type ProgressSummary struct {
-	StudySetID    int64              `json:"studySetId"`
-	TotalSessions int                `json:"totalSessions"`
-	BestScore     *int               `json:"bestScore"`
-	LastMode      *LearningMode      `json:"lastMode"`
-	History       []LearningSession  `json:"history"`
-	Page          int                `json:"page"`
-	PerPage       int                `json:"perPage"`
-	TotalPages    int                `json:"totalPages"`
+	StudySetID    int64             `json:"studySetId"`
+	TotalSessions int               `json:"totalSessions"`
+	BestScore     *int              `json:"bestScore"`
+	LastMode      *LearningMode     `json:"lastMode"`
+	History       []LearningSession `json:"history"`
+	Page          int               `json:"page"`
+	PerPage       int               `json:"perPage"`
+	TotalPages    int               `json:"totalPages"`
 }
 
 // ProgressFilter holds pagination params for listing history.
@@ -179,23 +180,24 @@ type StudySetListResult struct {
 
 // Folder is a named container for study sets, owned by a user.
 type Folder struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"userId"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
-	StudySets   []StudySet `json:"studySets,omitempty"`
+	ID            int64      `json:"id"`
+	UserID        int64      `json:"-"`
+	Title         string     `json:"title"`
+	Description   string     `json:"description"`
+	StudySetCount int        `json:"studySetCount"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	StudySets     []StudySet `json:"studySets,omitempty"`
 }
 
 // CreateFolderInput is the validated payload for creating a folder.
 type CreateFolderInput struct {
-	Name        string `json:"name"`
+	Title       string `json:"title"`
 	Description string `json:"description"`
 }
 
 // UpdateFolderInput is the validated payload for updating a folder.
 type UpdateFolderInput struct {
-	Name        string `json:"name"`
+	Title       string `json:"title"`
 	Description string `json:"description"`
 }

@@ -1,6 +1,6 @@
 # ADR-003: Rust quiz engine runtime integration
 
-- Status: **Deferred / no runtime binding yet**
+- Status: **Accepted — Go runtime, Rust spec/golden crate**
 - Date: 2026-09-01
 - Owner: Dev5
 - Scope: `crates/quiz-core`
@@ -62,3 +62,18 @@ service boundary. Cons: no immediate runtime speedup.
 Revisit this ADR after the Rust benchmark report and golden vectors are merged.
 A runtime binding may be proposed only in a separate PR with target-specific
 CI coverage and a rollback path.
+
+## Phase 5 revisit — 2026-09-02
+
+Phase 4 evidence now covers Go and Rust at 10, 100, 1,000 and 10,000 cards.
+The Go request path is contract-capped at 100 generated items and remains
+acceptable; the Rust numbers measure crate-level work and do not include an
+FFI, WASM, serialization, network, CI, or deployment boundary. Therefore the
+evidence does not establish an end-to-end benefit large enough to justify a
+production runtime integration.
+
+Phase 5 selects Option A: keep the Go quiz engine in production and retain
+`quiz-core` as the deterministic specification, golden-vector source and
+benchmark tool. Any future FFI/WASM/sidecar proposal must be a separate phase,
+measure end-to-end latency, include deterministic CI builds and preserve a Go
+rollback path.

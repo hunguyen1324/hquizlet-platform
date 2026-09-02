@@ -3,7 +3,7 @@
 
 export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
-export type AppView = "dashboard" | "editor" | "study";
+export type AppView = "dashboard" | "editor" | "study" | "folders";
 
 export type User = {
   id: number;
@@ -29,6 +29,7 @@ export type StudySet = {
   title: string;
   description: string;
   flashcards?: Flashcard[];
+  flashcardCount?: number;
 };
 
 export type Flashcard = {

@@ -18,18 +18,18 @@ func NewFolderRepository(db *sql.DB) *FolderRepository {
 	return &FolderRepository{db: db}
 }
 
-const folderCols = `id, user_id, name, description, created_at, updated_at`
+const folderCols = `id, user_id, title, description, created_at, updated_at`
 
 func scanFolder(s interface{ Scan(...any) error }) (model.Folder, error) {
 	var f model.Folder
-	err := s.Scan(&f.ID, &f.UserID, &f.Name, &f.Description, &f.CreatedAt, &f.UpdatedAt)
+	err := s.Scan(&f.ID, &f.UserID, &f.Title, &f.Description, &f.CreatedAt, &f.UpdatedAt)
 	return f, err
 }
 
 // List returns all folders for a user ordered by updated_at DESC.
 func (r *FolderRepository) List(ctx context.Context, userID int64) ([]model.Folder, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT `+folderCols+`
+		SELECT `+folderCols+`, (SELECT COUNT(*) FROM folder_to_study_sets fs WHERE fs.folder_id = folders.id)
 		FROM folders
 		WHERE user_id = $1
 		ORDER BY updated_at DESC, id DESC
@@ -41,7 +41,8 @@ func (r *FolderRepository) List(ctx context.Context, userID int64) ([]model.Fold
 
 	folders := []model.Folder{}
 	for rows.Next() {
-		f, err := scanFolder(rows)
+		var f model.Folder
+		err := rows.Scan(&f.ID, &f.UserID, &f.Title, &f.Description, &f.CreatedAt, &f.UpdatedAt, &f.StudySetCount)
 		if err != nil {
 			return nil, err
 		}
@@ -63,21 +64,21 @@ func (r *FolderRepository) Get(ctx context.Context, id int64) (model.Folder, err
 // Create inserts a new folder and returns the persisted record.
 func (r *FolderRepository) Create(ctx context.Context, userID int64, in model.CreateFolderInput) (model.Folder, error) {
 	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO folders (user_id, name, description)
+		INSERT INTO folders (user_id, title, description)
 		VALUES ($1, $2, $3)
 		RETURNING `+folderCols,
-		userID, in.Name, in.Description)
+		userID, in.Title, in.Description)
 	f, err := scanFolder(row)
 	return f, err
 }
 
-// Update modifies name/description of a folder.
+// Update modifies title/description of a folder.
 func (r *FolderRepository) Update(ctx context.Context, id int64, in model.UpdateFolderInput) (model.Folder, error) {
 	row := r.db.QueryRowContext(ctx, `
-		UPDATE folders SET name = $1, description = $2, updated_at = now()
+		UPDATE folders SET title = $1, description = $2, updated_at = now()
 		WHERE id = $3
 		RETURNING `+folderCols,
-		in.Name, in.Description, id)
+		in.Title, in.Description, id)
 	f, err := scanFolder(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Folder{}, ErrNotFound
@@ -85,7 +86,7 @@ func (r *FolderRepository) Update(ctx context.Context, id int64, in model.Update
 	return f, err
 }
 
-// Delete removes a folder (cascades to folder_study_sets).
+// Delete removes a folder (cascades to folder_to_study_sets).
 func (r *FolderRepository) Delete(ctx context.Context, id int64) error {
 	res, err := r.db.ExecContext(ctx, "DELETE FROM folders WHERE id = $1", id)
 	if err != nil {
@@ -114,9 +115,10 @@ func (r *FolderRepository) IsOwner(ctx context.Context, id, userID int64) (bool,
 // ListStudySets returns the study sets inside a folder.
 func (r *FolderRepository) ListStudySets(ctx context.Context, folderID int64) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT s.id, s.user_id, s.title, s.description, s.created_at, s.updated_at
+		SELECT s.id, s.user_id, s.title, s.description, s.created_at, s.updated_at,
+		       (SELECT COUNT(*) FROM flashcards c WHERE c.study_set_id = s.id)
 		FROM study_sets s
-		JOIN folder_study_sets fs ON fs.study_set_id = s.id
+		JOIN folder_to_study_sets fs ON fs.study_set_id = s.id
 		WHERE fs.folder_id = $1
 		ORDER BY fs.added_at DESC
 	`, folderID)
@@ -128,7 +130,7 @@ func (r *FolderRepository) ListStudySets(ctx context.Context, folderID int64) ([
 	sets := []model.StudySet{}
 	for rows.Next() {
 		var s model.StudySet
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.CreatedAt, &s.UpdatedAt, &s.FlashcardCount); err != nil {
 			return nil, err
 		}
 		sets = append(sets, s)
@@ -139,7 +141,7 @@ func (r *FolderRepository) ListStudySets(ctx context.Context, folderID int64) ([
 // AddStudySet links a study set to a folder (idempotent via ON CONFLICT DO NOTHING).
 func (r *FolderRepository) AddStudySet(ctx context.Context, folderID, studySetID int64) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO folder_study_sets (folder_id, study_set_id)
+		INSERT INTO folder_to_study_sets (folder_id, study_set_id)
 		VALUES ($1, $2)
 		ON CONFLICT DO NOTHING
 	`, folderID, studySetID)
@@ -149,7 +151,7 @@ func (r *FolderRepository) AddStudySet(ctx context.Context, folderID, studySetID
 // RemoveStudySet unlinks a study set from a folder.
 func (r *FolderRepository) RemoveStudySet(ctx context.Context, folderID, studySetID int64) error {
 	res, err := r.db.ExecContext(ctx, `
-		DELETE FROM folder_study_sets WHERE folder_id = $1 AND study_set_id = $2
+		DELETE FROM folder_to_study_sets WHERE folder_id = $1 AND study_set_id = $2
 	`, folderID, studySetID)
 	if err != nil {
 		return err

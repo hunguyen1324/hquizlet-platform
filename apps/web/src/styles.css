@@ -63,6 +63,12 @@ textarea { min-height: 92px; resize: vertical; }
 .match-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .match-pair { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; display: grid; gap: 6px; padding: 14px; }
 .global-message { margin-top: 20px; }
+.folder-page { display: grid; gap: 18px; }
+.folder-grid { margin-top: 4px; }
+.folder-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.folder-dialog { border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12); max-width: 560px; padding: 20px; width: calc(100% - 32px); }
+.folder-dialog::backdrop { background: rgba(15, 23, 42, 0.42); }
+.folder-dialog .mini-card { width: 100%; }
 @media (max-width: 900px) { .auth-shell, .summary-grid, .set-grid, .create-meta, .match-grid { grid-template-columns: 1fr; } .draft-card { grid-template-columns: 42px 1fr; } .draft-card .icon-button { grid-column: 2; } .auth-shell, .app-shell { padding: 18px; } .topbar, .page-heading, .create-header, .cards-editor-heading, .mini-card { align-items: stretch; flex-direction: column; } }
 
 /* ── Dashboard list controls — Dev 3 [P2-WEB-03] ─────────────────────── */

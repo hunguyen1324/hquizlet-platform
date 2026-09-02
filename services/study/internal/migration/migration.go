@@ -101,14 +101,33 @@ var migrations = []string{
 	`CREATE TABLE IF NOT EXISTS folders (
 		id          BIGSERIAL   PRIMARY KEY,
 		user_id     BIGINT      NOT NULL,
-		name        TEXT        NOT NULL,
+		title       TEXT        NOT NULL CHECK (btrim(title) <> ''),
 		description TEXT        NOT NULL DEFAULT '',
 		created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
 		updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`,
+	// Upgrade Phase 2/early Folder schemas that used `name` instead of `title`.
+	`ALTER TABLE folders ADD COLUMN IF NOT EXISTS title TEXT`,
+	`DO $$
+	BEGIN
+		IF EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'folders' AND column_name = 'name'
+		) THEN
+			UPDATE folders SET title = name WHERE title IS NULL;
+			ALTER TABLE folders ALTER COLUMN name DROP NOT NULL;
+		END IF;
+	END $$`,
+	`ALTER TABLE folders ALTER COLUMN title SET NOT NULL`,
+	`DO $$
+	BEGIN
+		IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'folders_title_not_blank') THEN
+			ALTER TABLE folders ADD CONSTRAINT folders_title_not_blank CHECK (btrim(title) <> '');
+		END IF;
+	END $$`,
 
-	// 011 – folder_study_sets join table
-	`CREATE TABLE IF NOT EXISTS folder_study_sets (
+	// 011 – folder_to_study_sets join table
+	`CREATE TABLE IF NOT EXISTS folder_to_study_sets (
 		folder_id    BIGINT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
 		study_set_id BIGINT NOT NULL REFERENCES study_sets(id) ON DELETE CASCADE,
 		added_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -117,7 +136,7 @@ var migrations = []string{
 
 	// 012 – indexes for folder queries
 	`CREATE INDEX IF NOT EXISTS folders_user_id_idx ON folders(user_id)`,
-	`CREATE INDEX IF NOT EXISTS folder_study_sets_folder_id_idx ON folder_study_sets(folder_id)`,
+	`CREATE INDEX IF NOT EXISTS folder_to_study_sets_study_set_id_idx ON folder_to_study_sets(study_set_id)`,
 	`CREATE INDEX IF NOT EXISTS starred_flashcards_user_id_idx ON starred_flashcards(user_id)`,
 
 	// 013 – enable trigram search before creating the trigram index

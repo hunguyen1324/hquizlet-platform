@@ -104,3 +104,4 @@ func (s *StudySetService) checkOwner(ctx context.Context, id, userID int64) erro
 // ErrUnauthorized is returned when no authenticated user ID is available.
 var ErrUnauthorized = errors.New("unauthorized")
 var ErrForbidden = errors.New("forbidden")
+var ErrValidation = errors.New("validation error")

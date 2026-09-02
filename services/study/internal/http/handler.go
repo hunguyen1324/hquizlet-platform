@@ -74,7 +74,11 @@ func (h *Handler) createStudySet(w http.ResponseWriter, r *http.Request) {
 	}
 	set, err := h.sets.Create(r.Context(), userIDFromHeader(r), in)
 	if err != nil {
-		if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }
+		if isValidationError(err) {
+			WriteError(w, http.StatusBadRequest, err.Error())
+		} else {
+			WriteServiceError(w, err)
+		}
 		return
 	}
 	WriteJSON(w, http.StatusCreated, set)
@@ -82,16 +86,30 @@ func (h *Handler) createStudySet(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	parts := PathParts(r.URL.Path, "/v1/study-sets/")
-	if len(parts) == 0 { WriteError(w, http.StatusNotFound, "study set not found"); return }
+	if len(parts) == 0 {
+		WriteError(w, http.StatusNotFound, "study set not found")
+		return
+	}
 	setID, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil { WriteError(w, http.StatusBadRequest, "invalid study set id"); return }
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid study set id")
+		return
+	}
 
 	if len(parts) == 2 && parts[1] == "flashcards" {
-		if r.Method == http.MethodPost { h.createFlashcard(w, r, setID) } else { WriteError(w, http.StatusMethodNotAllowed, "method not allowed") }
+		if r.Method == http.MethodPost {
+			h.createFlashcard(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
 		return
 	}
 	if len(parts) == 3 && parts[1] == "flashcards" && parts[2] == "bulk" {
-		if r.Method == http.MethodPost { h.bulkSaveFlashcards(w, r, setID) } else { WriteError(w, http.StatusMethodNotAllowed, "method not allowed") }
+		if r.Method == http.MethodPost {
+			h.bulkSaveFlashcards(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
 		return
 	}
 
@@ -111,7 +129,11 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 3 && parts[1] == "progress" && parts[2] == "latest" {
-		if r.Method == http.MethodGet { h.getLatestProgress(w, r, setID) } else { WriteError(w, http.StatusMethodNotAllowed, "method not allowed") }
+		if r.Method == http.MethodGet {
+			h.getLatestProgress(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
 		return
 	}
 
@@ -120,16 +142,32 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Ownership is mandatory: the authenticated user ID flows into the service.
 		set, err := h.sets.GetWithCards(r.Context(), setID, userID)
-		if err != nil { WriteServiceError(w, err); return }
+		if err != nil {
+			WriteServiceError(w, err)
+			return
+		}
 		WriteJSON(w, http.StatusOK, set)
 	case http.MethodPut:
 		var in model.UpdateStudySetInput
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			WriteError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
 		set, err := h.sets.Update(r.Context(), setID, userID, in)
-		if err != nil { if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }; return }
+		if err != nil {
+			if isValidationError(err) {
+				WriteError(w, http.StatusBadRequest, err.Error())
+			} else {
+				WriteServiceError(w, err)
+			}
+			return
+		}
 		WriteJSON(w, http.StatusOK, set)
 	case http.MethodDelete:
-		if err := h.sets.Delete(r.Context(), setID, userID); err != nil { WriteServiceError(w, err); return }
+		if err := h.sets.Delete(r.Context(), setID, userID); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
 		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -138,40 +176,83 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createFlashcard(w http.ResponseWriter, r *http.Request, studySetID int64) {
 	var in model.CreateFlashcardInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
 	card, err := h.cards.Create(r.Context(), studySetID, userIDFromHeader(r), in)
-	if err != nil { if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }; return }
+	if err != nil {
+		if isValidationError(err) {
+			WriteError(w, http.StatusBadRequest, err.Error())
+		} else {
+			WriteServiceError(w, err)
+		}
+		return
+	}
 	WriteJSON(w, http.StatusCreated, card)
 }
 
 func (h *Handler) bulkSaveFlashcards(w http.ResponseWriter, r *http.Request, studySetID int64) {
 	var in model.BulkSaveFlashcardsInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
 	result, err := h.cards.BulkSave(r.Context(), studySetID, userIDFromHeader(r), in)
-	if err != nil { if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }; return }
+	if err != nil {
+		if isValidationError(err) {
+			WriteError(w, http.StatusBadRequest, err.Error())
+		} else {
+			WriteServiceError(w, err)
+		}
+		return
+	}
 	WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) flashcardRouter(w http.ResponseWriter, r *http.Request) {
 	parts := PathParts(r.URL.Path, "/v1/flashcards/")
-	if len(parts) == 0 { WriteError(w, http.StatusNotFound, "flashcard not found"); return }
+	if len(parts) == 0 {
+		WriteError(w, http.StatusNotFound, "flashcard not found")
+		return
+	}
 	cardID, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil { WriteError(w, http.StatusBadRequest, "invalid flashcard id"); return }
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid flashcard id")
+		return
+	}
 	if len(parts) == 2 && parts[1] == "star" && r.Method == http.MethodPost {
 		card, err := h.cards.ToggleStar(r.Context(), cardID, userIDFromHeader(r))
-		if err != nil { WriteServiceError(w, err); return }
-		WriteJSON(w, http.StatusOK, card); return
+		if err != nil {
+			WriteServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, card)
+		return
 	}
 	userID := userIDFromHeader(r)
 	switch r.Method {
 	case http.MethodPut:
 		var in model.UpdateFlashcardInput
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			WriteError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
 		card, err := h.cards.Update(r.Context(), cardID, userID, in)
-		if err != nil { if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }; return }
+		if err != nil {
+			if isValidationError(err) {
+				WriteError(w, http.StatusBadRequest, err.Error())
+			} else {
+				WriteServiceError(w, err)
+			}
+			return
+		}
 		WriteJSON(w, http.StatusOK, card)
 	case http.MethodDelete:
-		if err := h.cards.Delete(r.Context(), cardID, userID); err != nil { WriteServiceError(w, err); return }
+		if err := h.cards.Delete(r.Context(), cardID, userID); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
 		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -180,49 +261,100 @@ func (h *Handler) flashcardRouter(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) listFolders(w http.ResponseWriter, r *http.Request) {
 	folders, err := h.folders.List(r.Context(), userIDFromHeader(r))
-	if err != nil { WriteServiceError(w, err); return }
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
 	WriteJSON(w, http.StatusOK, folders)
 }
 
 func (h *Handler) createFolder(w http.ResponseWriter, r *http.Request) {
 	var in model.CreateFolderInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
+		WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "body"})
+		return
+	}
 	folder, err := h.folders.Create(r.Context(), userIDFromHeader(r), in)
-	if err != nil { if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }; return }
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "title"})
+		} else {
+			WriteServiceError(w, err)
+		}
+		return
+	}
 	WriteJSON(w, http.StatusCreated, folder)
 }
 
 func (h *Handler) folderRouter(w http.ResponseWriter, r *http.Request) {
 	parts := PathParts(r.URL.Path, "/v1/folders/")
-	if len(parts) == 0 { WriteError(w, http.StatusNotFound, "folder not found"); return }
+	if len(parts) == 0 {
+		WriteError(w, http.StatusNotFound, "folder not found")
+		return
+	}
 	folderID, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil { WriteError(w, http.StatusBadRequest, "invalid folder id"); return }
+	if err != nil || folderID <= 0 {
+		WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "folderId"})
+		return
+	}
 	userID := userIDFromHeader(r)
 	if len(parts) == 2 && parts[1] == "study-sets" && r.Method == http.MethodPost {
-		var body struct { StudySetID int64 `json:"studySetId"` }
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
-		if err := h.folders.AddStudySet(r.Context(), folderID, body.StudySetID, userID); err != nil { WriteServiceError(w, err); return }
-		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true}); return
+		var body struct {
+			StudySetID int64 `json:"studySetId"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil || body.StudySetID <= 0 {
+			WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "studySetId"})
+			return
+		}
+		if err := h.folders.AddStudySet(r.Context(), folderID, body.StudySetID, userID); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
 	}
 	if len(parts) == 3 && parts[1] == "study-sets" && r.Method == http.MethodDelete {
 		setID, err := strconv.ParseInt(parts[2], 10, 64)
-		if err != nil { WriteError(w, http.StatusBadRequest, "invalid study set id"); return }
-		if err := h.folders.RemoveStudySet(r.Context(), folderID, setID, userID); err != nil { WriteServiceError(w, err); return }
-		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true}); return
+		if err != nil || setID <= 0 {
+			WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "studySetId"})
+			return
+		}
+		if err := h.folders.RemoveStudySet(r.Context(), folderID, setID, userID); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
 	}
 	switch r.Method {
 	case http.MethodGet:
 		folder, err := h.folders.GetWithStudySets(r.Context(), folderID, userID)
-		if err != nil { WriteServiceError(w, err); return }
+		if err != nil {
+			WriteServiceError(w, err)
+			return
+		}
 		WriteJSON(w, http.StatusOK, folder)
 	case http.MethodPut:
 		var in model.UpdateFolderInput
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil { WriteError(w, http.StatusBadRequest, "invalid JSON body"); return }
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
+			WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "body"})
+			return
+		}
 		folder, err := h.folders.Update(r.Context(), folderID, userID, in)
-		if err != nil { if isValidationError(err) { WriteError(w, http.StatusBadRequest, err.Error()) } else { WriteServiceError(w, err) }; return }
+		if err != nil {
+			if errors.Is(err, service.ErrValidation) {
+				WriteRequestError(w, r, http.StatusUnprocessableEntity, "invalid request", map[string]any{"field": "title"})
+			} else {
+				WriteServiceError(w, err)
+			}
+			return
+		}
 		WriteJSON(w, http.StatusOK, folder)
 	case http.MethodDelete:
-		if err := h.folders.Delete(r.Context(), folderID, userID); err != nil { WriteServiceError(w, err); return }
+		if err := h.folders.Delete(r.Context(), folderID, userID); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
 		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -327,7 +459,9 @@ func (h *Handler) getFlashcardsInternal(w http.ResponseWriter, r *http.Request, 
 
 func userIDFromHeader(r *http.Request) int64 {
 	raw := r.Header.Get("X-User-ID")
-	if raw == "" { return 0 }
+	if raw == "" {
+		return 0
+	}
 	id, _ := strconv.ParseInt(raw, 10, 64)
 	return id
 }
@@ -337,8 +471,12 @@ func isValidationError(err error) bool {
 }
 
 func intQueryParam(s string, def int) int {
-	if s == "" { return def }
+	if s == "" {
+		return def
+	}
 	n, err := strconv.Atoi(s)
-	if err != nil || n <= 0 { return def }
+	if err != nil || n <= 0 {
+		return def
+	}
 	return n
 }

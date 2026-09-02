@@ -10,6 +10,7 @@ import { AuthScreen } from "./features/auth/AuthScreen";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
+import { Folders } from "./features/folders/Folders";
 import { studySetApi, flashcardApi, fetchHealth } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus } from "./types";
 
@@ -87,6 +88,7 @@ function AppShell() {
           HQuizlet
         </button>
         <div className="user-menu">
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setView("folders"); }}>Thư mục</button>
           <span>{user.name}</span>
           <button onClick={() => void logout()}>Logout</button>
         </div>
@@ -124,6 +126,13 @@ function AppShell() {
           onDelete={() => void handleDeleteSet()}
           onBack={() => setView("dashboard")}
           onToggleStar={(card) => void handleToggleStar(card)}
+        />
+      )}
+
+      {!loadingSet && view === "folders" && (
+        <Folders
+          onBack={() => setView("dashboard")}
+          onOpenSet={(id) => void handleOpenSet(id)}
         />
       )}
     </main>

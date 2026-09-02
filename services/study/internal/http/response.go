@@ -11,9 +11,11 @@ import (
 )
 
 type ErrorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Field   string `json:"field,omitempty"`
+	Code      string         `json:"code"`
+	Message   string         `json:"message"`
+	RequestID string         `json:"requestId"`
+	Details   map[string]any `json:"details"`
+	Field     string         `json:"field,omitempty"`
 }
 
 func WriteJSON(w http.ResponseWriter, status int, value any) {
@@ -25,11 +27,18 @@ func WriteJSON(w http.ResponseWriter, status int, value any) {
 // WriteError keeps the existing handler call signature while emitting the
 // canonical {code,message} envelope used by Auth and the frontend client.
 func WriteError(w http.ResponseWriter, status int, message string) {
-	WriteJSON(w, status, ErrorResponse{Code: errorCodeForStatus(status), Message: message})
+	WriteJSON(w, status, ErrorResponse{Code: errorCodeForStatus(status), Message: message, Details: map[string]any{}})
+}
+
+func WriteRequestError(w http.ResponseWriter, r *http.Request, status int, message string, details map[string]any) {
+	if details == nil {
+		details = map[string]any{}
+	}
+	WriteJSON(w, status, ErrorResponse{Code: errorCodeForStatus(status), Message: message, RequestID: r.Header.Get("X-Request-ID"), Details: details})
 }
 
 func WriteValidationError(w http.ResponseWriter, status int, field, message string) {
-	WriteJSON(w, status, ErrorResponse{Code: "validation_error", Message: message, Field: field})
+	WriteJSON(w, status, ErrorResponse{Code: "validation_error", Message: message, Details: map[string]any{"field": field}, Field: field})
 }
 
 func WriteServiceError(w http.ResponseWriter, err error) {
@@ -40,6 +49,10 @@ func WriteServiceError(w http.ResponseWriter, err error) {
 		WriteError(w, http.StatusUnauthorized, "authentication required")
 	case errors.Is(err, service.ErrForbidden):
 		WriteError(w, http.StatusForbidden, "you do not have permission to perform this action")
+	case errors.Is(err, service.ErrValidation):
+		WriteError(w, http.StatusUnprocessableEntity, "invalid request")
+	case errors.Is(err, service.ErrConflict):
+		WriteError(w, http.StatusConflict, "resource already exists")
 	default:
 		WriteError(w, http.StatusInternalServerError, "internal server error")
 	}

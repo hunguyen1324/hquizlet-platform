@@ -242,3 +242,21 @@ kill -9 <PID>
 ---
 
 > Không commit `.env`, secret, hay token vào git. Dùng `.env.example` làm template.
+
+## Phase 5 – Folder API
+
+```bash
+# Create a folder
+curl -X POST http://localhost:8080/v1/folders \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"title":"English","description":"IELTS vocabulary"}'
+
+# Add/remove a study set (neither operation changes the source study set)
+curl -X POST http://localhost:8080/v1/folders/<folderId>/study-sets \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"studySetId":10}'
+curl -X DELETE http://localhost:8080/v1/folders/<folderId>/study-sets/10 \
+  -H "Authorization: Bearer <token>"
+```
+
+Run the fresh-stack API gate with `bash infra/scripts/phase5-e2e.sh`.

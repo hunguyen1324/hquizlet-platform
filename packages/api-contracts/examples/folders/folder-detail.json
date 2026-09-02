@@ -1,0 +1,19 @@
+{
+  "id": 1,
+  "title": "English",
+  "description": "IELTS vocabulary",
+  "studySetCount": 1,
+  "studySets": [
+    {
+      "id": 10,
+      "userId": 1,
+      "title": "Unit 1",
+      "description": "Basic vocabulary",
+      "flashcardCount": 20,
+      "createdAt": "2026-09-01T10:00:00Z",
+      "updatedAt": "2026-09-01T10:00:00Z"
+    }
+  ],
+  "createdAt": "2026-09-01T10:00:00Z",
+  "updatedAt": "2026-09-01T10:00:00Z"
+}

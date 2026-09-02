@@ -12,9 +12,9 @@ import (
 // ---------- fake folder repo ----------
 
 type fakeFolderRepo struct {
-	folders     map[int64]model.Folder
-	links       map[int64][]int64 // folderID -> []studySetID
-	nextID      int64
+	folders map[int64]model.Folder
+	links   map[int64][]int64 // folderID -> []studySetID
+	nextID  int64
 }
 
 func newFakeFolderRepo() *fakeFolderRepo {
@@ -44,7 +44,7 @@ func (r *fakeFolderRepo) Get(_ context.Context, id int64) (model.Folder, error) 
 }
 
 func (r *fakeFolderRepo) Create(_ context.Context, userID int64, in model.CreateFolderInput) (model.Folder, error) {
-	f := model.Folder{ID: r.nextID, UserID: userID, Name: in.Name, Description: in.Description}
+	f := model.Folder{ID: r.nextID, UserID: userID, Title: in.Title, Description: in.Description}
 	r.folders[r.nextID] = f
 	r.nextID++
 	return f, nil
@@ -55,7 +55,7 @@ func (r *fakeFolderRepo) Update(_ context.Context, id int64, in model.UpdateFold
 	if !ok {
 		return model.Folder{}, errors.New("not found")
 	}
-	f.Name = in.Name
+	f.Title = in.Title
 	f.Description = in.Description
 	r.folders[id] = f
 	return f, nil
@@ -107,9 +107,9 @@ func newFolderSvc() (*service.FolderService, *fakeFolderRepo, *fakeSetRepo) {
 	return svc, fr, sr
 }
 
-func TestFolderCreate_RequiresName(t *testing.T) {
+func TestFolderCreate_RequiresTitle(t *testing.T) {
 	svc, _, _ := newFolderSvc()
-	_, err := svc.Create(context.Background(), 1, model.CreateFolderInput{Name: "  "})
+	_, err := svc.Create(context.Background(), 1, model.CreateFolderInput{Title: "  "})
 	if err == nil {
 		t.Fatal("expected error for empty name")
 	}
@@ -117,7 +117,7 @@ func TestFolderCreate_RequiresName(t *testing.T) {
 
 func TestFolderCreate_RequiresAuth(t *testing.T) {
 	svc, _, _ := newFolderSvc()
-	_, err := svc.Create(context.Background(), 0, model.CreateFolderInput{Name: "My Folder"})
+	_, err := svc.Create(context.Background(), 0, model.CreateFolderInput{Title: "My Folder"})
 	if err == nil {
 		t.Fatal("expected error when unauthenticated")
 	}
@@ -125,9 +125,9 @@ func TestFolderCreate_RequiresAuth(t *testing.T) {
 
 func TestFolderUpdate_ForbiddenForOtherUser(t *testing.T) {
 	svc, fr, _ := newFolderSvc()
-	folder, _ := fr.Create(context.Background(), 1, model.CreateFolderInput{Name: "Owner"})
+	folder, _ := fr.Create(context.Background(), 1, model.CreateFolderInput{Title: "Owner"})
 
-	_, err := svc.Update(context.Background(), folder.ID, 2, model.UpdateFolderInput{Name: "Hijack"})
+	_, err := svc.Update(context.Background(), folder.ID, 2, model.UpdateFolderInput{Title: "Hijack"})
 	if !errors.Is(err, service.ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
 	}
@@ -135,7 +135,7 @@ func TestFolderUpdate_ForbiddenForOtherUser(t *testing.T) {
 
 func TestFolderDelete_OwnerCanDelete(t *testing.T) {
 	svc, fr, _ := newFolderSvc()
-	folder, _ := fr.Create(context.Background(), 1, model.CreateFolderInput{Name: "My Folder"})
+	folder, _ := fr.Create(context.Background(), 1, model.CreateFolderInput{Title: "My Folder"})
 
 	if err := svc.Delete(context.Background(), folder.ID, 1); err != nil {
 		t.Errorf("owner should be able to delete, got %v", err)
@@ -144,7 +144,7 @@ func TestFolderDelete_OwnerCanDelete(t *testing.T) {
 
 func TestFolderAddStudySet_ForbiddenIfNotSetOwner(t *testing.T) {
 	svc, fr, sr := newFolderSvc()
-	folder, _ := fr.Create(context.Background(), 1, model.CreateFolderInput{Name: "Folder"})
+	folder, _ := fr.Create(context.Background(), 1, model.CreateFolderInput{Title: "Folder"})
 	// study set owned by user 2
 	set, _ := sr.Create(context.Background(), 2, model.CreateStudySetInput{Title: "Other's set"})
 
@@ -156,8 +156,8 @@ func TestFolderAddStudySet_ForbiddenIfNotSetOwner(t *testing.T) {
 
 func TestFolderList_OnlyReturnsOwnFolders(t *testing.T) {
 	svc, fr, _ := newFolderSvc()
-	fr.Create(context.Background(), 1, model.CreateFolderInput{Name: "User1 Folder"})
-	fr.Create(context.Background(), 2, model.CreateFolderInput{Name: "User2 Folder"})
+	fr.Create(context.Background(), 1, model.CreateFolderInput{Title: "User1 Folder"})
+	fr.Create(context.Background(), 2, model.CreateFolderInput{Title: "User2 Folder"})
 
 	folders, err := svc.List(context.Background(), 1)
 	if err != nil {
