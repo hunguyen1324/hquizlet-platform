@@ -27,7 +27,7 @@ export const authApi = {
 };
 
 export type CreateStudySetPayload = { title: string; description?: string };
-export type UpdateStudySetPayload = { title?: string; description?: string };
+export type UpdateStudySetPayload = { title?: string; description?: string; thumbnailUrl?: string | null };
 export type StudySetListParams = { search?: string; sort?: "updated" | "created" | "title"; page?: number; per_page?: number };
 export type StudySetListResult = { items: StudySet[]; total: number; page: number; perPage: number; totalPages: number };
 export const studySetApi = {
@@ -39,7 +39,7 @@ export const studySetApi = {
 };
 
 export type CreateFlashcardPayload = { term: string; definition: string };
-export type UpdateFlashcardPayload = { term?: string; definition?: string };
+export type UpdateFlashcardPayload = { term?: string; definition?: string; imageUrl?: string | null };
 export type BulkFlashcardItem = { id?: number; term: string; definition: string; position?: number; delete?: boolean };
 export type BulkSaveResult = { created: Flashcard[]; updated: Flashcard[]; deleted: number[] };
 export const flashcardApi = {
@@ -189,4 +189,7 @@ export const adminApi = {
 };
 
 export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };
+export { presignUpload, confirmUpload, deleteFile, listFiles, uploadToStorage, validateFile } from "./files";
+export type { UploadType, PresignRequest, PresignResponse, ConfirmResponse, FileMetadata, QuotaInfo, FileListResponse } from "./files";
+
 export type { WalletBalance, WalletTransactionItem, WalletTransactionList, PaymentOrder, DepositOrderStatus, StudySetAccessInfo, PurchaseResult, AdminOrderList, AdminTxList } from "../../types";

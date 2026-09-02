@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 1.5.0
+  version: 1.7.0
   description: |
     HQuizlet Platform API contract. All public application routes are exposed
     through the gateway at localhost:8080.
-    Phase 6 adds Live Quiz: server-authoritative real-time quiz sessions.
+    Phase 9 adds File Upload: presigned URL upload flow for avatars, flashcard
+    images, and study set thumbnails.
 servers:
   - url: http://localhost:8080
     description: Local gateway
@@ -26,6 +27,7 @@ tags:
   - name: class-members
   - name: class-study-sets
   - name: activity
+  - name: files
 
 components:
   securitySchemes:
@@ -86,6 +88,7 @@ components:
         description: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        thumbnailUrl: { type: [string, 'null'], description: 'Optional study set thumbnail image URL' }
         flashcards:
           type: array
           items: { $ref: '#/components/schemas/Flashcard' }
@@ -100,6 +103,7 @@ components:
         definition: { type: string }
         starred: { type: boolean }
         position: { type: integer }
+        imageUrl: { type: [string, 'null'], description: 'Optional flashcard illustration image URL' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -545,6 +549,77 @@ components:
           items: { $ref: '#/components/schemas/ActivityItem' }
         nextCursor: { type: string, description: 'Opaque base64 cursor for next page' }
         hasMore: { type: boolean }
+
+    # ---- Phase 9: File Upload Schemas ----
+
+    PresignUploadRequest:
+      type: object
+      required: [upload_type, filename, content_type, file_size]
+      properties:
+        upload_type:
+          type: string
+          enum: [avatar, flashcard_image, study_set_thumbnail]
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        content_type: { type: string }
+        file_size: { type: integer, format: int64, minimum: 1 }
+
+    PresignUploadResponse:
+      type: object
+      required: [file_id, upload_url, upload_method, expires_at, headers_required]
+      properties:
+        file_id: { type: string, format: uuid }
+        upload_url: { type: string, format: uri }
+        upload_method: { type: string, const: PUT }
+        expires_at: { type: string, format: date-time }
+        headers_required:
+          type: object
+          properties:
+            Content-Type: { type: string }
+
+    ConfirmUploadResponse:
+      type: object
+      required: [file_id, url, upload_type, size_bytes, confirmed_at]
+      properties:
+        file_id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        upload_type: { type: string }
+        size_bytes: { type: integer, format: int64 }
+        confirmed_at: { type: string, format: date-time }
+
+    FileMetadata:
+      type: object
+      required: [file_id, upload_type, filename, content_type, size_bytes, url, status, created_at]
+      properties:
+        file_id: { type: string, format: uuid }
+        upload_type: { type: string }
+        filename: { type: string }
+        content_type: { type: string }
+        size_bytes: { type: integer, format: int64 }
+        url: { type: string, format: uri }
+        status: { type: string, enum: [pending, active, deleted] }
+        created_at: { type: string, format: date-time }
+        confirmed_at: { type: [string, 'null'], format: date-time }
+
+    QuotaInfo:
+      type: object
+      required: [active_files, max_files, used_bytes, max_bytes]
+      properties:
+        active_files: { type: integer, minimum: 0 }
+        max_files: { type: integer, const: 100 }
+        used_bytes: { type: integer, format: int64, minimum: 0 }
+        max_bytes: { type: integer, format: int64, const: 524288000 }
+
+    FileListResponse:
+      type: object
+      required: [items, total, quota]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/FileMetadata' }
+        total: { type: integer, minimum: 0 }
+        quota: { $ref: '#/components/schemas/QuotaInfo' }
+
+    # ---- End Phase 9 Schemas ----
 
     # ---- End Phase 7 Schemas ----
 
@@ -1038,6 +1113,102 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/ActivityFeedResponse' } } }
         '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  # ---- Phase 9: File Upload Endpoints ----
+
+  /v1/files/presign:
+    post:
+      tags: [files]
+      summary: Request a presigned URL for file upload
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PresignUploadRequest' }
+      responses:
+        '201':
+          description: Presigned URL created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PresignUploadResponse' }
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' } 
+        '401': { description: Authentication required }
+        '429':
+          description: Quota exceeded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/files/{fileId}:
+    parameters:
+      - { in: path, name: fileId, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [files]
+      summary: Get file metadata (owner only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileMetadata' }
+        '401': { description: Authentication required }
+        '403': { description: Not owner }
+        '404': { description: File not found }
+    delete:
+      tags: [files]
+      summary: Soft delete a file (owner only)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '204': { description: Deleted }
+        '401': { description: Authentication required }
+        '403': { description: Not owner }
+        '404': { description: File not found }
+
+  /v1/files/{fileId}/confirm:
+    parameters:
+      - { in: path, name: fileId, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [files]
+      summary: Confirm upload and activate file metadata
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: File confirmed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfirmUploadResponse' }
+        '401': { description: Authentication required }
+        '403': { description: Not owner }
+        '404': { description: File not found }
+        '409':
+          description: Already confirmed or not yet uploaded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/files:
+    get:
+      tags: [files]
+      summary: List user files with quota info
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
+        - { in: query, name: per_page, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: File list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileListResponse' }
+        '401': { description: Authentication required }
+
+  # ---- End Phase 9 Endpoints ----
+
   # ---- End Phase 7 Endpoints ----
 
   /healthz:
@@ -1272,6 +1443,8 @@ paths:
                 definition: { type: string }
       responses:
         '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Flashcard' } } } }
+        '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
       tags: [flashcards]
       security: [{ BearerAuth: [] }]

@@ -1,4 +1,4 @@
-# HQuizlet Platform – Docker Compose (Phase 8)
+# HQuizlet Platform – Docker Compose (Phase 9)
 # Chạy: docker compose -f infra/docker/docker-compose.yml up --build
 
 services:
@@ -15,6 +15,7 @@ services:
       QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http://quiz:8083}"
       CLASS_SERVICE_URL: "${CLASS_SERVICE_URL:-http://class:8084}"
       PAYMENT_SERVICE_URL: "${PAYMENT_SERVICE_URL:-http://payment:8085}"
+      FILE_SERVICE_URL: "${FILE_SERVICE_URL:-http://file:8086}"
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -27,6 +28,8 @@ services:
       class:
         condition: service_healthy
       payment:
+        condition: service_healthy
+      file:
         condition: service_healthy
     restart: on-failure
     healthcheck:
@@ -233,6 +236,69 @@ services:
       retries: 5
       start_period: 15s
 
+  file:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: file
+    environment:
+      PORT: "8086"
+      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      STORAGE_PROVIDER: "${STORAGE_PROVIDER:-minio}"
+      STORAGE_ENDPOINT: "${STORAGE_ENDPOINT:-http://minio:9000}"
+      STORAGE_BUCKET: "${STORAGE_BUCKET:-hquizlet}"
+      STORAGE_ACCESS_KEY: "${STORAGE_ACCESS_KEY:-minioadmin}"
+      STORAGE_SECRET_KEY: "${STORAGE_SECRET_KEY:-minioadmin}"
+      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-http://localhost:9000/hquizlet}"
+      STORAGE_REGION: "${STORAGE_REGION:-us-east-1}"
+      STORAGE_PATH_STYLE: "${STORAGE_PATH_STYLE:-true}"
+    ports:
+      - "${FILE_PORT:-8086}:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
+        mc mb --ignore-existing local/${STORAGE_BUCKET:-hquizlet} &&
+        mc anonymous set download local/${STORAGE_BUCKET:-hquizlet}
+      "
+    restart: "no"
+
   nats:
     image: nats:2-alpine
     command: ["-js", "--store_dir", "/data", "-m", "8222"]
@@ -252,3 +318,4 @@ volumes:
   postgres-data:
   web-node-modules:
   nats-data:
+  minio-data:

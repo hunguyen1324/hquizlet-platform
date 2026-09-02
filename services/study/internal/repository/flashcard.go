@@ -23,11 +23,11 @@ func scanCard(s interface {
 	Scan(...any) error
 }) (model.Flashcard, error) {
 	var c model.Flashcard
-	err := s.Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.Starred, &c.Position, &c.CreatedAt, &c.UpdatedAt)
+	err := s.Scan(&c.ID, &c.StudySetID, &c.Term, &c.Definition, &c.ImageURL, &c.Starred, &c.Position, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
-const selectCols = `id, study_set_id, term, definition, starred, position, created_at, updated_at`
+const selectCols = `id, study_set_id, term, definition, image_url, starred, position, created_at, updated_at`
 
 // ListByStudySet returns all flashcards for a study set ordered by position then id.
 func (r *FlashcardRepository) ListByStudySet(ctx context.Context, studySetID int64) ([]model.Flashcard, error) {
@@ -74,14 +74,14 @@ func (r *FlashcardRepository) Create(ctx context.Context, studySetID int64, in m
 	return c, err
 }
 
-// Update modifies term/definition/position of an existing flashcard.
+// Update modifies term/definition/position/image_url of an existing flashcard.
 func (r *FlashcardRepository) Update(ctx context.Context, id int64, in model.UpdateFlashcardInput) (model.Flashcard, error) {
 	row := r.db.QueryRowContext(ctx, `
 		UPDATE flashcards
-		SET term = $1, definition = $2, updated_at = now()
+		SET term = $1, definition = $2, image_url = $4, updated_at = now()
 		WHERE id = $3
 		RETURNING `+selectCols,
-		in.Term, in.Definition, id)
+		in.Term, in.Definition, id, in.ImageURL)
 	c, err := scanCard(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Flashcard{}, ErrNotFound

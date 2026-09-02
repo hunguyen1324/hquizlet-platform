@@ -9,6 +9,7 @@ export type User = {
   id: number;
   name: string;
   email: string;
+  image?: string;
   role: string;
 };
 
@@ -28,6 +29,7 @@ export type StudySet = {
   id: number;
   title: string;
   description: string;
+  thumbnailUrl?: string | null;
   flashcards?: Flashcard[];
   flashcardCount?: number;
 };
@@ -37,6 +39,7 @@ export type Flashcard = {
   studySetId: number;
   term: string;
   definition: string;
+  imageUrl?: string | null;
   starred: boolean;
 };
 

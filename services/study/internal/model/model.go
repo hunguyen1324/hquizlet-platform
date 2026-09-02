@@ -8,6 +8,7 @@ type StudySet struct {
 	UserID         int64       `json:"userId"`
 	Title          string      `json:"title"`
 	Description    string      `json:"description"`
+	ThumbnailURL   *string     `json:"thumbnailUrl,omitempty"`
 	CreatedAt      time.Time   `json:"createdAt"`
 	UpdatedAt      time.Time   `json:"updatedAt"`
 	FlashcardCount int         `json:"flashcardCount,omitempty"`
@@ -20,6 +21,7 @@ type Flashcard struct {
 	StudySetID int64     `json:"studySetId"`
 	Term       string    `json:"term"`
 	Definition string    `json:"definition"`
+	ImageURL   *string   `json:"imageUrl,omitempty"`
 	Starred    bool      `json:"starred"`
 	Position   int       `json:"position"`
 	CreatedAt  time.Time `json:"createdAt"`
@@ -34,8 +36,9 @@ type CreateStudySetInput struct {
 
 // UpdateStudySetInput is the validated payload for updating a study set.
 type UpdateStudySetInput struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title         string  `json:"title"`
+	Description   string  `json:"description"`
+	ThumbnailURL  *string `json:"thumbnailUrl,omitempty"`
 }
 
 // CreateFlashcardInput is the validated payload for creating a flashcard.
@@ -46,8 +49,9 @@ type CreateFlashcardInput struct {
 
 // UpdateFlashcardInput is the validated payload for updating a flashcard.
 type UpdateFlashcardInput struct {
-	Term       string `json:"term"`
-	Definition string `json:"definition"`
+	Term       string  `json:"term"`
+	Definition string  `json:"definition"`
+	ImageURL   *string `json:"imageUrl,omitempty"`
 }
 
 // BulkFlashcardItem represents one card in a bulk save operation.

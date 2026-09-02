@@ -1,4 +1,4 @@
-.PHONY: dev-infra test-go test-rust test-golden test-phase4 lint-openapi test-frontend test-e2e test-all ci-gate
+.PHONY: dev-infra test-go test-rust test-golden test-phase4 test-phase9 lint-openapi test-frontend test-e2e test-all ci-gate e2e-phase9
 
 # ── Infrastructure ──────────────────────────────────────────────────────────────
 dev-infra:
@@ -7,9 +7,11 @@ dev-infra:
 # ── Go ──────────────────────────────────────────────────────────────────────────
 test-go:
 	cd services/quiz && go test ./... -count=1
+	cd services/file && go test ./... -count=1
 
 build-go:
 	cd services/quiz && go build ./...
+	cd services/file && go build ./...
 
 # ── Rust ────────────────────────────────────────────────────────────────────────
 test-rust:
@@ -38,6 +40,13 @@ lint-openapi:
 # ── E2E ─────────────────────────────────────────────────────────────────────────
 test-e2e:
 	bash infra/scripts/phase4-e2e.sh
+
+# ── Phase 9 gate ──────────────────────────────────────────────────────────────
+test-phase9: test-go test-frontend lint-openapi
+	@echo "Phase 9 gate OK"
+
+e2e-phase9:
+	bash infra/scripts/phase9-e2e.sh
 
 # ── Combined phase4 gate ───────────────────────────────────────────────────────
 test-phase4: test-go test-rust test-golden lint-openapi test-frontend

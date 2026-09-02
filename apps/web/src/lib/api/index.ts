@@ -17,6 +17,12 @@ export {
   entitlementApi,
   priceApi,
   adminApi,
+  presignUpload,
+  confirmUpload,
+  deleteFile,
+  listFiles,
+  uploadToStorage,
+  validateFile,
 } from "./client";
 export type {
   User,
@@ -56,4 +62,11 @@ export type {
   PurchaseResult,
   AdminOrderList,
   AdminTxList,
+  UploadType,
+  PresignRequest,
+  PresignResponse,
+  ConfirmResponse,
+  FileMetadata,
+  QuotaInfo,
+  FileListResponse,
 } from "./client";

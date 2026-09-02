@@ -38,6 +38,7 @@ func main() {
 	quizURL := env("QUIZ_SERVICE_URL", "http://localhost:8083")
 	classURL := env("CLASS_SERVICE_URL", "http://localhost:8084")
 	paymentURL := env("PAYMENT_SERVICE_URL", "http://localhost:8085")
+	fileURL := env("FILE_SERVICE_URL", "http://localhost:8086")
 	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
@@ -70,6 +71,11 @@ func main() {
 	mux.HandleFunc("/v1/classes", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/classes/", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/activity", authenticatedProxy(authURL, classURL))
+
+	// Phase 9: File upload routes [P9-GW-01]
+	mux.HandleFunc("POST /v1/files/presign", authenticatedProxy(authURL, fileURL))
+	mux.HandleFunc("/v1/files/", authenticatedProxy(authURL, fileURL))
+	mux.HandleFunc("GET /v1/files", authenticatedProxy(authURL, fileURL))
 
 	// Phase 8: Payment, Wallet, and Entitlement routes [P8-GW-01]
 	// Webhook: forwarded raw (NO authenticatedProxy), SePay verifies via Apikey header
@@ -127,6 +133,7 @@ func servicesHealth(w http.ResponseWriter, r *http.Request) {
 		{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
 		{Name: "class", URL: env("CLASS_SERVICE_URL", "http://localhost:8084") + "/healthz"},
 		{Name: "payment", URL: env("PAYMENT_SERVICE_URL", "http://localhost:8085") + "/healthz"},
+		{Name: "file", URL: env("FILE_SERVICE_URL", "http://localhost:8086") + "/healthz"},
 	}
 	for i := range services {
 		if services[i].Name == "gateway" {

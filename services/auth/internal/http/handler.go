@@ -34,6 +34,7 @@ func NewRouter(svc *service.AuthService, db *sql.DB) http.Handler {
 	// user profile – P2-AUTH-03
 	mux.HandleFunc("GET /v1/auth/profile", profileGetHandler(svc))
 	mux.HandleFunc("PATCH /v1/auth/profile", profilePatchHandler(svc))
+	mux.HandleFunc("PUT /v1/auth/profile", profilePatchHandler(svc))
 
 	return loggingMiddleware(requestIDMiddleware(mux))
 }
