@@ -52,7 +52,6 @@ export type Flashcard = {
   synonyms?: string;
   imageUrl?: string | null;
   starred: boolean;
-  imageUrl?: string;
 };
 
 export type DraftCard = {
@@ -65,7 +64,6 @@ export type DraftCard = {
   synonyms?: string;
   imageUrl?: string | null;
   starred?: boolean;
-  imageUrl?: string;
   imageLocalPreview?: string; // base64 preview, không gửi lên server
 };
 

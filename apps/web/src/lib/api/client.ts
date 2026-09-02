@@ -1,6 +1,26 @@
 // lib/api/client.ts — Dev 5
 // Canonical frontend API client. Feature code should call this module instead of fetch directly.
-import type { AuthResponse, StudySet, Flashcard, User, DraftCard } from "../../types";
+import type {
+  ActivityFeedResponse,
+  AdminOrderList,
+  AdminTxList,
+  AuthResponse,
+  ClassDetail,
+  ClassMember,
+  ClassStudySet,
+  ClassSummary,
+  DepositOrderStatus,
+  DraftCard,
+  Flashcard,
+  JoinClassResponse,
+  PaymentOrder,
+  PurchaseResult,
+  StudySet,
+  StudySetAccessInfo,
+  User,
+  WalletBalance,
+  WalletTransactionList,
+} from "../../types";
 
 const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 export type ApiErrorBody = { code?: string; message?: string; field?: string; error?: string; requestId?: string; details?: Record<string, unknown> };
@@ -10,7 +30,15 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, token: string, init: RequestInit = {}, params?: Record<string, string | number | undefined>): Promise<T> {
   const url = new URL(`${gatewayUrl}${path}`);
   if (params) for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
-  const res = await fetch(url.toString(), { ...init, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers as Record<string, string> | undefined) } });
+  const isFormData = init.body instanceof FormData;
+  const res = await fetch(url.toString(), {
+    ...init,
+    headers: {
+      ...(!isFormData ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers as Record<string, string> | undefined),
+    },
+  });
   if (res.status === 204) return undefined as unknown as T;
   const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
   if (!res.ok) throw new ApiError(res.status, body.message ?? body.error ?? `Request failed ${res.status}`, body.code, body.field, body.requestId);
@@ -26,8 +54,15 @@ export const authApi = {
   updateProfile: (token: string, payload: { name?: string; image?: string }): Promise<User> => apiFetch("/v1/auth/profile", token, { method: "PATCH", body: JSON.stringify(payload) }),
 };
 
-export type CreateStudySetPayload = { title: string; description?: string };
-export type UpdateStudySetPayload = { title?: string; description?: string };
+export type CreateStudySetPayload = {
+  title: string;
+  description?: string;
+  contentType?: "flashcard" | "quiz" | "grammar";
+  termLanguage?: string;
+  definitionLanguage?: string;
+  visibility?: "public" | "private" | string;
+};
+export type UpdateStudySetPayload = Partial<CreateStudySetPayload>;
 export type StudySetListParams = { search?: string; sort?: "updated" | "created" | "title"; page?: number; per_page?: number };
 export type StudySetListResult = { items: StudySet[]; total: number; page: number; perPage: number; totalPages: number };
 export const studySetApi = {
@@ -38,9 +73,19 @@ export const studySetApi = {
   delete: (token: string, id: number): Promise<void> => apiFetch(`/v1/study-sets/${id}`, token, { method: "DELETE" }),
 };
 
-export type CreateFlashcardPayload = { term: string; definition: string; imageUrl?: string };
-export type UpdateFlashcardPayload = { term?: string; definition?: string; imageUrl?: string };
-export type BulkFlashcardItem = { id?: number; term: string; definition: string; position?: number; delete?: boolean; imageUrl?: string };
+export type CreateFlashcardPayload = { term: string; definition: string; imageUrl?: string | null };
+export type UpdateFlashcardPayload = { term?: string; definition?: string; imageUrl?: string | null };
+export type BulkFlashcardItem = {
+  id?: number;
+  term: string;
+  definition: string;
+  exampleSentence?: string;
+  hintExplanation?: string;
+  synonyms?: string;
+  position?: number;
+  delete?: boolean;
+  imageUrl?: string | null;
+};
 export type BulkSaveResult = { created: Flashcard[]; updated: Flashcard[]; deleted: number[] };
 export const flashcardApi = {
   create: (token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> => apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, { method: "POST", body: JSON.stringify(payload) }),
@@ -108,6 +153,13 @@ export const quizApi = {
     apiFetch(`/v1/study-sets/${studySetId}/quiz/generate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
   evaluate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit: number; answers: QuizAnswer[] }, signal?: AbortSignal): Promise<QuizEvaluateResponse> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz/evaluate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
+  create: async (token: string, payload: CreateStudySetPayload & { questions?: QuizQuestionPayload[] }): Promise<StudySet> => {
+    const set = await studySetApi.create(token, payload);
+    if (payload.questions?.length) {
+      await quizQuestionApi.bulkSave(token, set.id, payload.questions);
+    }
+    return studySetApi.get(token, set.id);
+  },
 };
 
 export type ServiceHealth = { name: string; url: string; status: string };
@@ -115,8 +167,6 @@ export async function fetchHealth(): Promise<ServiceHealth[]> { const data = awa
 export const healthApi = { check: () => apiFetch<{ service: string; status: string }>("/healthz", ""), services: () => apiFetch<{ services: ServiceHealth[] }>("/healthz/services", "") };
 
 // --- Phase 7: Class & Activity API ---
-
-import type { ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse } from "../../types";
 
 export type CreateClassPayload = { name: string; description?: string; maxMembers?: number };
 export type UpdateClassPayload = { name?: string; description?: string };
@@ -149,4 +199,106 @@ export const activityApi = {
   getFeed: (token: string, cursor?: string, limit?: number): Promise<ActivityFeedResponse> => apiFetch("/v1/activity", token, {}, { cursor, limit: limit?.toString() }),
 };
 
-export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };
+export const walletApi = {
+  getBalance: (token: string): Promise<WalletBalance> => apiFetch("/v1/wallet", token),
+  getTransactions: (token: string, limit = 20, offset = 0): Promise<WalletTransactionList> =>
+    apiFetch("/v1/wallet/transactions", token, {}, { limit, offset }),
+};
+
+export const paymentApi = {
+  createOrder: (token: string, amountVnd: number): Promise<PaymentOrder> =>
+    apiFetch("/v1/payments/orders", token, { method: "POST", body: JSON.stringify({ amountVnd }) }),
+  getOrderStatus: (token: string, orderId: number): Promise<DepositOrderStatus> =>
+    apiFetch(`/v1/payments/orders/${orderId}`, token),
+};
+
+export const entitlementApi = {
+  checkAccess: (token: string, studySetId: number): Promise<StudySetAccessInfo> =>
+    apiFetch("/v1/entitlements/check", token, {}, { study_set_id: studySetId }),
+  purchase: (token: string, studySetId: number): Promise<PurchaseResult> =>
+    apiFetch("/v1/entitlements/purchase", token, { method: "POST", body: JSON.stringify({ studySetId }) }),
+};
+
+export const priceApi = {
+  update: (token: string, studySetId: number, payload: { pricingType: string; priceVnd: number }) =>
+    apiFetch(`/v1/study-sets/${studySetId}/price`, token, { method: "PUT", body: JSON.stringify(payload) }),
+};
+
+export const adminApi = {
+  listOrders: (token: string, limit = 50, offset = 0): Promise<AdminOrderList> =>
+    apiFetch("/v1/admin/payments/orders", token, {}, { limit, offset }),
+  listTransactions: (token: string, limit = 50, offset = 0): Promise<AdminTxList> =>
+    apiFetch("/v1/admin/wallet/transactions", token, {}, { limit, offset }),
+  credit: (token: string, userId: number, amountVnd: number, note: string): Promise<void> =>
+    apiFetch("/v1/admin/wallet/credit", token, { method: "POST", body: JSON.stringify({ userId, amountVnd, note }) }),
+};
+
+export type QuizQuestionPayload = {
+  questionText: string;
+  questionType: string;
+  correctAnswer?: string;
+  timeInSeconds?: number;
+  audioUrl?: string;
+  answerExplanation?: string;
+  paragraphText?: string;
+  subQuestions?: unknown;
+  tags?: string[];
+  options?: Array<{ text: string; position: number; isCorrect?: boolean }>;
+  position: number;
+};
+
+export const quizQuestionApi = {
+  list: (token: string, studySetId: number) => apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token),
+  bulkSave: (token: string, studySetId: number, questions: QuizQuestionPayload[]): Promise<void> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "PUT", body: JSON.stringify({ questions }) }),
+  deleteByStudySet: (token: string, studySetId: number): Promise<void> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "DELETE" }),
+};
+
+export const grammarApi = {
+  create: (token: string, payload: CreateStudySetPayload & { grammarPoints?: unknown[] }): Promise<StudySet> =>
+    studySetApi.create(token, payload),
+};
+
+export type ImportResult = { imported: number; errors: Array<{ row: number; field: string; reason: string }> };
+async function uploadExcel(token: string, path: string, file: File): Promise<ImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch(path, token, { method: "POST", body: form, headers: {} });
+}
+export const importApi = {
+  flashcards: (token: string, studySetId: number, file: File): Promise<ImportResult> =>
+    uploadExcel(token, `/v1/study-sets/${studySetId}/flashcards/import`, file),
+  quiz: (token: string, studySetId: number, file: File): Promise<ImportResult> =>
+    uploadExcel(token, `/v1/study-sets/${studySetId}/quiz/import`, file),
+};
+
+export type Language = { code: string; name: string };
+export const languageApi = {
+  list: (token: string): Promise<Language[]> => apiFetch("/v1/languages", token),
+};
+
+export const ttsApi = {
+  getAudio: async (token: string, text: string, lang: string): Promise<Blob> => {
+    const url = new URL(`${gatewayUrl}/v1/tts`);
+    url.searchParams.set("text", text);
+    url.searchParams.set("lang", lang);
+    const res = await fetch(url.toString(), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, `Request failed ${res.status}`);
+    return res.blob();
+  },
+};
+
+export type {
+  ActivityFeedResponse,
+  AuthResponse,
+  ClassDetail,
+  ClassMember,
+  ClassStudySet,
+  ClassSummary,
+  DraftCard,
+  Flashcard,
+  JoinClassResponse,
+  StudySet,
+  User,
+} from "../../types";

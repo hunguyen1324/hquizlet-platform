@@ -95,6 +95,11 @@ type server struct {
 	met   *metrics
 }
 
+const (
+	dependencyWaitTimeout = 60 * time.Second
+	dependencyRetryDelay  = 2 * time.Second
+)
+
 type generateRequest struct {
 	Mode    string         `json:"mode"`
 	Seed    uint64         `json:"seed"`
@@ -152,8 +157,11 @@ func main() {
 		} else {
 			db.SetMaxOpenConns(25)
 			db.SetMaxIdleConns(5)
-			if err := db.PingContext(ctx); err != nil {
+			if err := waitForDependency(ctx, "database", func(ctx context.Context) error {
+				return db.PingContext(ctx)
+			}); err != nil {
 				log.Printf("[quiz] warning: database ping failed: %v", err)
+				_ = db.Close()
 			} else {
 				if err := quizmigrations.Run(db); err != nil {
 					log.Fatalf("[quiz] migration failed: %v", err)
@@ -172,8 +180,11 @@ func main() {
 			log.Printf("[quiz] warning: invalid REDIS_URL: %v", err)
 		} else {
 			rdb := redis.NewClient(opts)
-			if err := rdb.Ping(ctx).Err(); err != nil {
+			if err := waitForDependency(ctx, "redis", func(ctx context.Context) error {
+				return rdb.Ping(ctx).Err()
+			}); err != nil {
 				log.Printf("[quiz] warning: redis ping failed: %v", err)
+				_ = rdb.Close()
 			} else {
 				redisStore = redisstore.New(rdb)
 				log.Printf("[quiz] Redis connected")
@@ -186,6 +197,7 @@ func main() {
 	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
 		nc, err := nats.Connect(natsURL,
 			nats.Name("quiz-service"),
+			nats.RetryOnFailedConnect(true),
 			nats.MaxReconnects(-1),
 			nats.ReconnectWait(2*time.Second),
 		)
@@ -323,6 +335,32 @@ func eventIDFromPayload(data []byte) string {
 	}
 	_ = json.Unmarshal(data, &envelope)
 	return envelope.EventID
+}
+
+func waitForDependency(ctx context.Context, name string, ping func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, dependencyWaitTimeout)
+	defer cancel()
+
+	var lastErr error
+	for {
+		if err := ping(ctx); err != nil {
+			lastErr = err
+			log.Printf("[quiz] waiting for %s: %v", name, err)
+		} else {
+			return nil
+		}
+
+		timer := time.NewTimer(dependencyRetryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			if lastErr != nil {
+				return lastErr
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (p *eventPublisherStub) IsConnected() bool {
