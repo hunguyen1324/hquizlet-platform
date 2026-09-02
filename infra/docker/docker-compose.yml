@@ -1,6 +1,5 @@
-# HQuizlet Platform – Docker Compose (Phase 6)
+# HQuizlet Platform – Docker Compose (Phase 8)
 # Chạy: docker compose -f infra/docker/docker-compose.yml up --build
-# Dev 2 - [P6-DB-01, P6-NATS-01]
 
 services:
   gateway:
@@ -13,8 +12,9 @@ services:
       PORT: "8080"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
       STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
-      QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http:8083}"
+      QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http://quiz:8083}"
       CLASS_SERVICE_URL: "${CLASS_SERVICE_URL:-http://class:8084}"
+      PAYMENT_SERVICE_URL: "${PAYMENT_SERVICE_URL:-http://payment:8085}"
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -25,6 +25,8 @@ services:
       quiz:
         condition: service_healthy
       class:
+        condition: service_healthy
+      payment:
         condition: service_healthy
     restart: on-failure
     healthcheck:
@@ -110,6 +112,37 @@ services:
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8083/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  payment:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: payment
+    environment:
+      PORT: "8085"
+      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
+      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      SEPAY_API_TOKEN: "${SEPAY_API_TOKEN:-}"
+      SEPAY_BIDV_BANK_ACCOUNT_ID: "${SEPAY_BIDV_BANK_ACCOUNT_ID:-}"
+      SEPAY_WEBHOOK_API_KEY: "${SEPAY_WEBHOOK_API_KEY:-}"
+      SEPAY_API_BASE_URL: "${SEPAY_API_BASE_URL:-}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
+    ports:
+      - "${PAYMENT_PORT:-8085}:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5

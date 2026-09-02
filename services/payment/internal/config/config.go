@@ -1,0 +1,38 @@
+package config
+
+import "os"
+
+type Config struct {
+	Port                 string
+	DatabaseURL          string
+	StudyServiceURL      string
+	AuthServiceURL       string
+	SePayAPIToken        string
+	SePayBankAccountID   string
+	SePayWebhookAPIKey   string
+	SePayBaseURL         string
+	SePayAllowedIPs      string
+	AdminToken           string
+}
+
+func Load() Config {
+	return Config{
+		Port:               env("PORT", "8085"),
+		DatabaseURL:        env("DATABASE_URL", "postgres://hquizlet:hquizlet@localhost:5432/hquizlet?sslmode=disable"),
+		StudyServiceURL:    env("STUDY_SERVICE_URL", "http://localhost:8082"),
+		AuthServiceURL:     env("AUTH_SERVICE_URL", "http://localhost:8081"),
+		SePayAPIToken:      os.Getenv("SEPAY_API_TOKEN"),
+		SePayBankAccountID: os.Getenv("SEPAY_BIDV_BANK_ACCOUNT_ID"),
+		SePayWebhookAPIKey: os.Getenv("SEPAY_WEBHOOK_API_KEY"),
+		SePayBaseURL:       env("SEPAY_API_BASE_URL", "https://userapi.sepay.vn/v2"),
+		SePayAllowedIPs:    os.Getenv("SEPAY_ALLOWED_IPS"),
+		AdminToken:         env("ADMIN_TOKEN", "dev-admin-token"),
+	}
+}
+
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}

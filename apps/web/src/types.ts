@@ -3,7 +3,7 @@
 
 export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
-export type AppView = "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity";
+export type AppView = "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments";
 
 export type User = {
   id: number;
@@ -104,4 +104,76 @@ export type ActivityFeedResponse = {
   items: ActivityItem[];
   nextCursor?: string;
   hasMore: boolean;
+};
+
+// --- Phase 8: Payment, Wallet & Entitlement Types ---
+
+export type WalletBalance = {
+  balance: number;
+};
+
+export type WalletTransactionItem = {
+  id: number;
+  type: string;
+  direction: string;
+  amountVnd: number;
+  label: string;
+  note?: string;
+  createdAt: string;
+};
+
+export type WalletTransactionList = {
+  items: WalletTransactionItem[];
+  total: number;
+};
+
+export type PaymentOrder = {
+  orderId: number;
+  orderCode: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  bankName: string;
+  amountVnd: number;
+  qrCodeUrl: string;
+};
+
+export type DepositOrderStatus = {
+  orderId: number;
+  status: string;
+  amountVnd: number;
+  createdAt: string;
+  qrCodeUrl: string;
+};
+
+export type StudySetAccessInfo = {
+  pricingType: string;
+  priceVnd: number;
+  hasAccess: boolean;
+  requiresPurchase: boolean;
+  isOwner: boolean;
+  grantedVia?: string;
+};
+
+export type PurchaseResult = {
+  balance: number;
+  priceVnd: number;
+};
+
+export type AdminOrderItem = {
+  id: number;
+  userId: number;
+  sepayOrderCode: string;
+  amountVnd: number;
+  status: string;
+  createdAt: string;
+};
+
+export type AdminOrderList = {
+  items: AdminOrderItem[];
+  total: number;
+};
+
+export type AdminTxList = {
+  items: WalletTransactionItem[];
+  total: number;
 };

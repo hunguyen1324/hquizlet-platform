@@ -18,6 +18,10 @@ import { ClassDetail as ClassDetailView } from "./features/classes/ClassDetail";
 import { EditClass } from "./features/classes/EditClass";
 import { JoinClass } from "./features/classes/JoinClass";
 import { ActivityFeed } from "./features/activity/ActivityFeed";
+import { WalletPage } from "./features/wallet/WalletPage";
+import { DepositPage } from "./features/payment/DepositPage";
+import { StudySetPaywall } from "./features/payment/StudySetPaywall";
+import { AdminPayments } from "./features/admin/AdminPayments";
 import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
 
@@ -97,9 +101,13 @@ function AppShell() {
         </button>
         <div className="user-menu">
           <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("classes"); }}>Lớp học</button>
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("wallet"); }}>Ví</button>
           <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("activity"); }}>Hoạt động</button>
           <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("folders"); }}>Thư mục</button>
           <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("live"); }}>Live Quiz</button>
+          {user.role === "admin" && (
+            <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("admin-payments"); }}>Admin 💰</button>
+          )}
           <span>{user.name}</span>
           <button onClick={() => void logout()}>Logout</button>
         </div>
@@ -218,8 +226,26 @@ function AppShell() {
         />
       )}
 
+      {!loadingSet && view === "wallet" && (
+        <WalletPage
+          onDeposit={() => setView("deposit")}
+          onBack={() => setView("dashboard")}
+        />
+      )}
+
+      {view === "deposit" && (
+        <DepositPage
+          onBack={() => setView("wallet")}
+          onSuccess={() => setView("wallet")}
+        />
+      )}
+
       {!loadingSet && view === "activity" && (
         <ActivityFeed onBack={() => setView("dashboard")} />
+      )}
+
+      {!loadingSet && view === "admin-payments" && (
+        <AdminPayments onBack={() => setView("dashboard")} />
       )}
     </main>
   );

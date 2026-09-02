@@ -37,6 +37,7 @@ func main() {
 	studyURL := env("STUDY_SERVICE_URL", "http://localhost:8082")
 	quizURL := env("QUIZ_SERVICE_URL", "http://localhost:8083")
 	classURL := env("CLASS_SERVICE_URL", "http://localhost:8084")
+	paymentURL := env("PAYMENT_SERVICE_URL", "http://localhost:8085")
 	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
@@ -70,6 +71,25 @@ func main() {
 	mux.HandleFunc("/v1/classes/", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/activity", authenticatedProxy(authURL, classURL))
 
+	// Phase 8: Payment, Wallet, and Entitlement routes [P8-GW-01]
+	// Webhook: forwarded raw (NO authenticatedProxy), SePay verifies via Apikey header
+	mux.HandleFunc("POST /v1/payments/webhooks/sepay", reverseProxy(paymentURL))
+	// Internal endpoint for other services (Study service calls this)
+	mux.HandleFunc("GET /internal/payment/", authenticatedProxy(authURL, paymentURL))
+	// Authenticated payment routes
+	mux.HandleFunc("GET /v1/wallet", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/wallet/transactions", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("POST /v1/payments/orders", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/payments/orders/", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("POST /v1/entitlements/purchase", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/entitlements/check", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/entitlements", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("PUT /v1/study-sets/", routeStudySetPrice(authURL, studyURL, paymentURL))
+	// Admin payment routes
+	mux.HandleFunc("GET /v1/admin/payments/orders", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/admin/wallet/transactions", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("POST /v1/admin/wallet/credit", authenticatedProxy(authURL, paymentURL))
+
 	log.Printf("[gateway] listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
 		log.Fatal(err)
@@ -88,12 +108,24 @@ func routeStudySets(authTarget, studyTarget, quizTarget string) http.HandlerFunc
 	}
 }
 
+// routeStudySetPrice routes PUT /v1/study-sets/{id}/price to payment service.
+func routeStudySetPrice(authTarget, studyTarget, paymentTarget string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/price") && r.Method == http.MethodPut {
+			authenticatedProxy(authTarget, paymentTarget)(w, r)
+			return
+		}
+		authenticatedProxy(authTarget, studyTarget)(w, r)
+	}
+}
+
 func servicesHealth(w http.ResponseWriter, r *http.Request) {		services := []serviceHealth{
 			{Name: "gateway", URL: "http://localhost:" + env("PORT", "8080") + "/healthz"},
 			{Name: "auth", URL: env("AUTH_SERVICE_URL", "http://localhost:8081") + "/healthz"},
 			{Name: "study", URL: env("STUDY_SERVICE_URL", "http://localhost:8082") + "/healthz"},
 			{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
 			{Name: "class", URL: env("CLASS_SERVICE_URL", "http://localhost:8084") + "/healthz"},
+			{Name: "payment", URL: env("PAYMENT_SERVICE_URL", "http://localhost:8085") + "/healthz"},
 		}
 	for i := range services {
 		if services[i].Name == "gateway" {
@@ -138,11 +170,13 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 		}
 		// Strip all client-supplied identity headers [P6-SEC-01]
 		r.Header.Del("X-User-ID")
+		r.Header.Del("X-User-Role")
 		r.Header.Del("X-Participant-ID")
 		r.Header.Del("X-Live-Role")
 		r.Header.Del("X-Class-Role")
 		r.Header.Del("X-Member-ID")
 		r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
+		r.Header.Set("X-User-Role", identity.Role)
 		reverseProxy(serviceTarget)(w, r)
 	}
 }

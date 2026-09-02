@@ -12,6 +12,11 @@ export {
   memberApi,
   classStudySetApi,
   activityApi,
+  walletApi,
+  paymentApi,
+  entitlementApi,
+  priceApi,
+  adminApi,
 } from "./client";
 export type {
   User,
@@ -42,4 +47,13 @@ export type {
   ActivityFeedResponse,
   CreateClassPayload,
   UpdateClassPayload,
+  WalletBalance,
+  WalletTransactionItem,
+  WalletTransactionList,
+  PaymentOrder,
+  DepositOrderStatus,
+  StudySetAccessInfo,
+  PurchaseResult,
+  AdminOrderList,
+  AdminTxList,
 } from "./client";

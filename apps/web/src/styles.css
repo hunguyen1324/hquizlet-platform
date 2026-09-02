@@ -132,3 +132,101 @@ textarea { min-height: 92px; resize: vertical; }
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ── Phase 8: Payment / Wallet / Paywall ──────────────────────────── */
+
+/* Transaction list */
+.transaction-list { display: grid; gap: 2px; }
+.transaction-item {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.tx-info { display: grid; gap: 4px; }
+.tx-label { font-weight: 800; color: #1e293b; }
+.tx-date { color: #94a3b8; font-size: 0.85rem; }
+.tx-amount { font-weight: 900; font-size: 1.1rem; }
+.tx-amount.credit { color: #16a34a; }
+.tx-amount.debit { color: #dc2626; }
+
+/* Deposit page */
+.deposit-amounts { display: grid; gap: 20px; }
+.amount-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.amount-btn {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 900;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.15s;
+}
+.amount-btn:hover { border-color: #2563eb; background: #eff6ff; }
+.amount-btn.selected { border-color: #2563eb; background: #dbeafe; color: #1d4ed8; }
+.custom-amount { display: grid; gap: 6px; }
+.custom-amount input { font-size: 1.1rem; padding: 14px; }
+
+/* Waiting card / QR */
+.deposit-waiting { text-align: center; }
+.qr-section { margin: 16px auto; }
+.deposit-qr { max-width: 300px; width: 100%; border-radius: 12px; border: 1px solid #e2e8f0; }
+.order-info { display: grid; gap: 10px; margin: 20px auto; max-width: 400px; text-align: left; }
+.info-row { display: flex; justify-content: space-between; align-items: center; }
+.info-row span { color: #64748b; }
+.info-row strong { font-weight: 900; }
+.info-row.highlight { background: #fef3c7; border-radius: 8px; padding: 10px 14px; margin-top: 8px; }
+.order-code { font-size: 1.15rem; letter-spacing: 0.04em; color: #92400e; }
+.poll-status { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px; color: #64748b; }
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.deposit-success { padding: 24px; }
+.deposit-success h2 { color: #16a34a; margin-bottom: 8px; }
+
+/* Paywall */
+.paywall-overlay { margin-top: 16px; }
+.paywall-card {
+  background: linear-gradient(135deg, #f0f9ff 0%, #eff6ff 100%);
+  border: 2px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.paywall-card h2 { margin-bottom: 8px; }
+.paywall-price {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 1.4rem;
+  margin: 16px 0;
+}
+.paywall-price strong { color: #1d4ed8; }
+.paywall-actions { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
+
+/* Admin */
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th, .admin-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+}
+.admin-table th { background: #f8fafc; font-weight: 900; color: #475569; }
+.admin-table td.credit { color: #16a34a; font-weight: 700; }
+.admin-table td.debit { color: #dc2626; font-weight: 700; }
+.admin-form { display: grid; gap: 14px; max-width: 400px; }
+.form-group { display: grid; gap: 4px; }
+.form-group label { font-size: 0.85rem; font-weight: 700; color: #475569; }
+.message--success { color: #16a34a; }
+

@@ -149,4 +149,44 @@ export const activityApi = {
   getFeed: (token: string, cursor?: string, limit?: number): Promise<ActivityFeedResponse> => apiFetch("/v1/activity", token, {}, { cursor, limit: limit?.toString() }),
 };
 
+// --- Phase 8: Payment, Wallet & Entitlement API ---
+
+import type { WalletBalance, WalletTransactionList, PaymentOrder, DepositOrderStatus, StudySetAccessInfo, PurchaseResult, AdminOrderList, AdminTxList } from "../../types";
+
+export const walletApi = {
+  getBalance: (token: string): Promise<WalletBalance> => apiFetch("/v1/wallet", token),
+  getTransactions: (token: string, limit?: number, offset?: number): Promise<WalletTransactionList> =>
+    apiFetch("/v1/wallet/transactions", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
+};
+
+export const paymentApi = {
+  createOrder: (token: string, amountVnd: number): Promise<PaymentOrder> =>
+    apiFetch("/v1/payments/orders", token, { method: "POST", body: JSON.stringify({ amountVnd }) }),
+  getOrderStatus: (token: string, orderId: number): Promise<DepositOrderStatus> =>
+    apiFetch(`/v1/payments/orders/${orderId}`, token),
+};
+
+export const entitlementApi = {
+  checkAccess: (token: string, studySetId: number): Promise<StudySetAccessInfo> =>
+    apiFetch("/v1/entitlements/check", token, {}, { study_set_id: studySetId.toString() }),
+  purchase: (token: string, studySetId: number): Promise<PurchaseResult> =>
+    apiFetch("/v1/entitlements/purchase", token, { method: "POST", body: JSON.stringify({ studySetId }) }),
+  list: (token: string): Promise<{ items: any[] }> => apiFetch("/v1/entitlements", token),
+};
+
+export const priceApi = {
+  setPrice: (token: string, studySetId: number, pricingType: string, priceVnd: number): Promise<any> =>
+    apiFetch(`/v1/study-sets/${studySetId}/price`, token, { method: "PUT", body: JSON.stringify({ pricingType, priceVnd }) }),
+};
+
+export const adminApi = {
+  listOrders: (token: string, limit?: number, offset?: number): Promise<AdminOrderList> =>
+    apiFetch("/v1/admin/payments/orders", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
+  listTransactions: (token: string, limit?: number, offset?: number): Promise<AdminTxList> =>
+    apiFetch("/v1/admin/wallet/transactions", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
+  credit: (token: string, userId: number, amountVnd: number, note: string): Promise<{ ok: boolean }> =>
+    apiFetch("/v1/admin/wallet/credit", token, { method: "POST", body: JSON.stringify({ userId, amountVnd, note }) }),
+};
+
 export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };
+export type { WalletBalance, WalletTransactionItem, WalletTransactionList, PaymentOrder, DepositOrderStatus, StudySetAccessInfo, PurchaseResult, AdminOrderList, AdminTxList } from "../../types";
