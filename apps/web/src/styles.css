@@ -328,3 +328,39 @@ textarea { min-height: 92px; resize: vertical; }
   .app-shell { padding: 12px; }
   .topbar, .page-heading { flex-direction: column; gap: 12px; align-items: stretch; }
 }
+
+/* ===== Create Type Selector ===== */
+.create-type-selector { display: grid; gap: 24px; max-width: 860px; margin: 0 auto; padding: 32px 16px; }
+.create-type-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.create-type-header h1 { font-size: 1.8rem; font-weight: 800; margin: 0; }
+.create-type-subtitle { color: var(--muted-foreground, #64748b); margin: 4px 0 0; }
+.create-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 700px) { .create-type-grid { grid-template-columns: 1fr; } }
+.create-type-card { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; text-align: left; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.create-type-card:hover { border-color: #6366f1; box-shadow: 0 4px 20px rgba(99,102,241,0.12); }
+.create-type-icon { padding: 12px; border-radius: 10px; background: rgba(99,102,241,0.1); color: #6366f1; }
+.create-type-title { font-size: 1.1rem; font-weight: 700; }
+.create-type-desc { font-size: 0.875rem; color: #64748b; line-height: 1.5; }
+
+/* ===== Quiz Question Card ===== */
+.quiz-question-body { display: grid; gap: 16px; }
+.quiz-type-row { display: grid; grid-template-columns: 1fr; }
+.quiz-options { display: grid; gap: 10px; }
+.quiz-options-label { font-size: 0.875rem; font-weight: 600; color: #64748b; }
+.quiz-option-row { display: flex; align-items: center; gap: 10px; }
+.quiz-option-input { flex: 1; }
+
+/* ===== Grammar Point Card ===== */
+.grammar-point-body { display: grid; gap: 16px; padding: 20px; }
+.grammar-examples { display: grid; gap: 10px; }
+.grammar-examples-header { display: flex; align-items: center; justify-content: space-between; }
+.grammar-example-item { display: grid; gap: 8px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.grammar-example-header { display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; color: #64748b; font-weight: 600; }
+.empty-hint { text-align: center; color: #94a3b8; font-style: italic; font-size: 0.875rem; padding: 16px; border: 1px dashed #e2e8f0; border-radius: 8px; }
+.card-actions { display: flex; gap: 4px; }
+.required { color: #ef4444; }
+
+/* Dark mode overrides */
+.dark .create-type-card { background: #1e293b; border-color: #334155; }
+.dark .create-type-card:hover { border-color: #818cf8; }
+.dark .grammar-example-item { background: #0f172a; border-color: #334155; }

@@ -188,6 +188,26 @@ export const adminApi = {
     apiFetch("/v1/admin/wallet/credit", token, { method: "POST", body: JSON.stringify({ userId, amountVnd, note }) }),
 };
 
+// Quiz API — gọi study service với contentType=quiz
+export const quizApi = {
+  create: (token: string, payload: Record<string, unknown>): Promise<any> =>
+    apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) }),
+  get: (token: string, id: number): Promise<any> =>
+    apiFetch(`/v1/study-sets/${id}`, token),
+  update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
+    apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
+};
+
+// Grammar API — gọi study service với contentType=grammar
+export const grammarApi = {
+  create: (token: string, payload: Record<string, unknown>): Promise<any> =>
+    apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) }),
+  get: (token: string, id: number): Promise<any> =>
+    apiFetch(`/v1/study-sets/${id}`, token),
+  update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
+    apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
+};
+
 export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };
 export { presignUpload, confirmUpload, deleteFile, listFiles, uploadToStorage, validateFile } from "./files";
 export type { UploadType, PresignRequest, PresignResponse, ConfirmResponse, FileMetadata, QuotaInfo, FileListResponse } from "./files";

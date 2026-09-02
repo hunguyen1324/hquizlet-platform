@@ -3,7 +3,7 @@
 
 export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
-export type AppView = "home" | "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments";
+export type AppView = "home" | "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments" | "create-type" | "quiz-editor" | "grammar-editor";
 
 export type User = {
   id: number;

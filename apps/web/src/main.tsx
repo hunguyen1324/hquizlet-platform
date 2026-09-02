@@ -9,6 +9,9 @@ import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { AuthScreen } from "./features/auth/AuthScreen";
 import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
+import { CreateTypeSelector } from "./features/study-sets/CreateTypeSelector";
+import { QuizSetEditor } from "./features/study-sets/QuizSetEditor";
+import { GrammarSetEditor } from "./features/study-sets/GrammarSetEditor";
 import { Folders } from "./features/folders/Folders";
 import { LiveGame } from "./features/live/LiveGame";
 import { ClassList } from "./features/classes/ClassList";
@@ -114,11 +117,36 @@ function RootApp() {
         />
       )}
 
+      {view === "create-type" && (
+        <CreateTypeSelector
+          onSelect={(type) => {
+            if (type === "flashcard") setView("editor");
+            else if (type === "quiz") setView("quiz-editor");
+            else if (type === "grammar") setView("grammar-editor");
+          }}
+          onCancel={() => setView("dashboard")}
+        />
+      )}
+
       {view === "editor" && (
         <StudySetEditor
           existingSet={selectedSet ?? undefined}
           onSave={handleSaveSet}
           onCancel={() => setView(selectedSet ? "study" : "dashboard")}
+        />
+      )}
+
+      {view === "quiz-editor" && (
+        <QuizSetEditor
+          onSave={() => setView("dashboard")}
+          onCancel={() => setView("create-type")}
+        />
+      )}
+
+      {view === "grammar-editor" && (
+        <GrammarSetEditor
+          onSave={() => setView("dashboard")}
+          onCancel={() => setView("create-type")}
         />
       )}
 

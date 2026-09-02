@@ -17,6 +17,8 @@ export {
   entitlementApi,
   priceApi,
   adminApi,
+  quizApi,
+  grammarApi,
   presignUpload,
   confirmUpload,
   deleteFile,

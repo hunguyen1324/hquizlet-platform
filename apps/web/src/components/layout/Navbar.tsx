@@ -98,10 +98,10 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate }: Na
               className="w-full text-left px-4 py-2.5 hover:bg-[var(--accent)] text-sm font-medium"
               onClick={() => {
                 setShowCreateDropdown(false);
-                onNavigate?.("editor");
+                onNavigate?.("create-type");
               }}
             >
-              📝 Thẻ ghi nhớ
+              📚 Thẻ học
             </button>
             <button
               className="w-full text-left px-4 py-2.5 hover:bg-[var(--accent)] text-sm font-medium"
