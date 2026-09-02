@@ -1,6 +1,6 @@
-// FlashcardsMode — Dev 4
+// FlashcardsMode — Dev 4 (UI Refresh)
 // P2-LEARN-01: Flip card, next/prev, shuffle, starred filter
-// P3-LEARN-01,02,03: Nối completion với saveProgress thật khi xem hết toàn bộ deck
+// P3-LEARN-01,02,03: saveProgress khi xem hết toàn bộ deck
 
 import React from "react";
 import type { Flashcard } from "./types";
@@ -23,7 +23,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   const [deck, setDeck] = React.useState<Flashcard[]>(cards);
   const [index, setIndex] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
-  // Track seen cards for completion detection.
+  const [darkCard, setDarkCard] = React.useState(false);
   const [seenCardIds, setSeenCardIds] = React.useState<Set<number>>(new Set());
   const completionTriggered = React.useRef(false);
 
@@ -34,7 +34,13 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
 
   React.useEffect(() => {
     if (generation.state.state !== "ready") return;
-    const generated = generation.state.data.items.map((item) => ({ id: item.flashcardId, studySetId, term: item.term ?? "", definition: item.definition ?? "", starred: item.starred ?? false }));
+    const generated = generation.state.data.items.map((item) => ({
+      id: item.flashcardId,
+      studySetId,
+      term: item.term ?? "",
+      definition: item.definition ?? "",
+      starred: item.starred ?? false,
+    }));
     const base = starredOnly ? generated.filter((c) => c.starred) : generated;
     setDeck(base);
     setIndex(0);
@@ -48,7 +54,6 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   const current = deck[index];
   const total = deck.length;
 
-  // Mark current card as seen and check for completion.
   React.useEffect(() => {
     if (!current) return;
     setSeenCardIds((prev) => {
@@ -59,12 +64,10 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     });
   }, [current]);
 
-  // Trigger save when all cards in current deck have been seen.
   React.useEffect(() => {
     if (completionTriggered.current || total === 0) return;
     if (seenCardIds.size >= total) {
       completionTriggered.current = true;
-      // Flashcards: no right/wrong — score = total (all seen = session complete).
       onSessionComplete({
         score: total,
         total,
@@ -76,12 +79,12 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
 
   function handlePrev() {
     setFlipped(false);
-    setIndex((i) => (i - 1 + total) % total);
+    setTimeout(() => setIndex((i) => (i - 1 + total) % total), 50);
   }
 
   function handleNext() {
     setFlipped(false);
-    setIndex((i) => (i + 1) % total);
+    setTimeout(() => setIndex((i) => (i + 1) % total), 50);
   }
 
   function handleRestart() {
@@ -96,7 +99,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLButtonElement) return;
+      if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLInputElement) return;
       if (e.key === " ") { e.preventDefault(); setFlipped((f) => !f); }
       if (e.key === "ArrowLeft") { e.preventDefault(); handlePrev(); }
       if (e.key === "ArrowRight") { e.preventDefault(); handleNext(); }
@@ -107,10 +110,26 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   }, [total, index]);
 
   const starredCount = cards.filter((c) => c.starred).length;
+  const allSeen = seenCardIds.size >= total && total > 0;
+  const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
 
   if (cards.length === 0) return <LearningEmptyState />;
-  if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bộ flashcards…</div>;
-  if (generation.state.state === "error") return <div className="learn-error" role="alert">Không thể tạo Flashcards: {generation.state.error.message}<button className="secondary-button" onClick={generation.regenerate}>Thử lại</button></div>;
+  if (generation.state.state === "loading") {
+    return (
+      <div className="fc-loading" role="status">
+        <div className="fc-loading-spinner" />
+        <span>Đang tạo bộ flashcards…</span>
+      </div>
+    );
+  }
+  if (generation.state.state === "error") {
+    return (
+      <div className="fc-error" role="alert">
+        <span>Không thể tạo Flashcards: {generation.state.error.message}</span>
+        <button className="fc-btn fc-btn--ghost" onClick={generation.regenerate}>Thử lại</button>
+      </div>
+    );
+  }
   if (total === 0 && starredOnly) {
     return (
       <LearningEmptyState
@@ -120,74 +139,134 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     );
   }
 
-  const allSeen = seenCardIds.size >= total && total > 0;
-
   return (
-    <div className="flashcards-mode">
-      <div className="flashcards-toolbar">
-        <span className="flashcards-counter">{index + 1} / {total}</span>
-        <div className="toolbar-right">
+    <div className={`fc-root${darkCard ? " fc-root--dark" : ""}`}>
+      {/* Toolbar */}
+      <div className="fc-toolbar">
+        <span className="fc-counter">
+          <strong>{index + 1}</strong>
+          <span className="fc-counter-sep">/</span>
+          <span>{total}</span>
+        </span>
+
+        <div className="fc-toolbar-actions">
           {starredCount > 0 && (
             <button
-              className={`ghost-button${starredOnly ? " active" : ""}`}
+              className={`fc-btn fc-btn--ghost${starredOnly ? " fc-btn--active" : ""}`}
               onClick={() => setStarredOnly((s) => !s)}
               title={starredOnly ? "Bỏ lọc sao" : "Chỉ xem thẻ đã đánh dấu sao"}
             >
-              {starredOnly ? "★ Đang lọc sao" : "☆ Lọc sao"}
+              {starredOnly ? "★" : "☆"}
             </button>
           )}
           <button
-            className={`ghost-button${shuffled ? " active" : ""}`}
+            className={`fc-btn fc-btn--ghost${shuffled ? " fc-btn--active" : ""}`}
             onClick={() => { setShuffled(true); generation.regenerate(); }}
             title="Xáo trộn"
           >
-            {shuffled ? "🔀 Xáo lại" : "🔀 Xáo trộn"}
+            🔀
           </button>
-          <button className="ghost-button" onClick={handleRestart} title="Làm lại">↺ Làm lại</button>
+          <button
+            className={`fc-btn fc-btn--ghost${darkCard ? " fc-btn--active" : ""}`}
+            onClick={() => setDarkCard((d) => !d)}
+            title="Đổi màu thẻ"
+          >
+            {darkCard ? "☀️" : "🌙"}
+          </button>
+          <button className="fc-btn fc-btn--ghost" onClick={handleRestart} title="Làm lại">↺</button>
         </div>
       </div>
 
+      {/* Progress bar */}
+      <div className="fc-progress-track" role="progressbar" aria-valuenow={index + 1} aria-valuemax={total}>
+        <div className="fc-progress-fill" style={{ width: `${progressPct}%` }} />
+      </div>
+
+      {/* Card */}
       <div
-        className={`flip-card${flipped ? " flipped" : ""}`}
+        className={`fc-card${flipped ? " fc-card--flipped" : ""}`}
         onClick={() => setFlipped((f) => !f)}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === " " || e.key === "Enter") { e.preventDefault(); setFlipped((f) => !f); }
         }}
         role="button"
-        aria-label={flipped ? `Định nghĩa: ${current.definition}` : `Thuật ngữ: ${current.term}. Nhấn Space hoặc click để lật.`}
+        aria-label={flipped
+          ? `Định nghĩa: ${current.definition}. Nhấn Space để lật lại.`
+          : `Thuật ngữ: ${current.term}. Nhấn Space để xem định nghĩa.`}
       >
-        <div className="flip-card-inner">
-          <div className="flip-card-front">
-            <span className="card-side-label">Thuật ngữ</span>
-            <p className="card-text">{current.term}</p>
-            <span className="flip-hint">Space / click để lật</span>
+        <div className="fc-card-inner">
+          {/* Front */}
+          <div className="fc-face fc-face--front">
+            <span className="fc-face-label">Thuật ngữ</span>
+            {current.imageUrl && (
+              <div className="fc-card-img-wrap">
+                <img src={current.imageUrl} alt={current.term} className="fc-card-img" />
+              </div>
+            )}
+            <p className="fc-card-text">{current.term}</p>
+            <span className="fc-flip-hint">Nhấn Space hoặc click để lật →</span>
           </div>
-          <div className="flip-card-back">
-            <span className="card-side-label">Định nghĩa</span>
-            <p className="card-text">{current.definition}</p>
-            {current.starred && <span className="starred-badge">★ Đã đánh dấu</span>}
+          {/* Back */}
+          <div className="fc-face fc-face--back">
+            <span className="fc-face-label">Định nghĩa</span>
+            <p className="fc-card-text fc-card-text--def">{current.definition}</p>
+            {current.starred && <span className="fc-starred-badge">★ Đã đánh dấu</span>}
           </div>
         </div>
       </div>
 
-      <div className="flashcards-nav">
-        <button className="nav-btn" onClick={handlePrev} disabled={total <= 1} aria-label="Thẻ trước (←)">← Trước</button>
-        <button className="nav-btn" onClick={handleNext} disabled={total <= 1} aria-label="Thẻ tiếp (→)">Tiếp →</button>
+      {/* Navigation */}
+      <div className="fc-nav">
+        <button
+          className="fc-nav-btn fc-nav-btn--prev"
+          onClick={handlePrev}
+          disabled={total <= 1}
+          aria-label="Thẻ trước"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M12 4l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span>Trước</span>
+        </button>
+
+        {/* Dot indicators — show up to 9 dots */}
+        {total <= 9 ? (
+          <div className="fc-dots" aria-hidden="true">
+            {deck.map((_, i) => (
+              <button
+                key={i}
+                className={`fc-dot${i === index ? " fc-dot--active" : ""}${seenCardIds.has(deck[i].id) ? " fc-dot--seen" : ""}`}
+                onClick={(e) => { e.stopPropagation(); setFlipped(false); setIndex(i); }}
+                aria-label={`Đến thẻ ${i + 1}`}
+              />
+            ))}
+          </div>
+        ) : (
+          <span className="fc-nav-label" aria-hidden="true">{index + 1} / {total}</span>
+        )}
+
+        <button
+          className="fc-nav-btn fc-nav-btn--next"
+          onClick={handleNext}
+          disabled={total <= 1}
+          aria-label="Thẻ tiếp"
+        >
+          <span>Tiếp</span>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M8 4l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
       </div>
 
-      <div className="progress-bar-track" role="progressbar" aria-valuenow={index + 1} aria-valuemax={total}>
-        <div className="progress-bar-fill" style={{ width: `${((index + 1) / total) * 100}%` }} />
-      </div>
-
-      {/* Show save status when all cards seen */}
+      {/* Completion */}
       {allSeen && (
-        <div className="flashcards-completion">
+        <div className="fc-completion">
           <ProgressSaveStatus status={saveStatus} />
         </div>
       )}
 
-      <p className="keyboard-hint" aria-hidden="true">← → để điều hướng · Space để lật</p>
+      <p className="fc-kbd-hint" aria-hidden="true">← → điều hướng · Space lật thẻ</p>
     </div>
   );
 }

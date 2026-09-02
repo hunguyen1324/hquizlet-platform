@@ -26,8 +26,8 @@ export const authApi = {
   updateProfile: (token: string, payload: { name?: string; image?: string }): Promise<User> => apiFetch("/v1/auth/profile", token, { method: "PATCH", body: JSON.stringify(payload) }),
 };
 
-export type CreateStudySetPayload = { title: string; description?: string; contentType?: string; termLanguage?: string; definitionLanguage?: string; visibility?: string };
-export type UpdateStudySetPayload = { title?: string; description?: string; thumbnailUrl?: string | null; termLanguage?: string; definitionLanguage?: string; visibility?: string };
+export type CreateStudySetPayload = { title: string; description?: string };
+export type UpdateStudySetPayload = { title?: string; description?: string };
 export type StudySetListParams = { search?: string; sort?: "updated" | "created" | "title"; page?: number; per_page?: number };
 export type StudySetListResult = { items: StudySet[]; total: number; page: number; perPage: number; totalPages: number };
 export const studySetApi = {
@@ -38,9 +38,9 @@ export const studySetApi = {
   delete: (token: string, id: number): Promise<void> => apiFetch(`/v1/study-sets/${id}`, token, { method: "DELETE" }),
 };
 
-export type CreateFlashcardPayload = { term: string; definition: string; exampleSentence?: string; hintExplanation?: string; synonyms?: string; imageUrl?: string | null };
-export type UpdateFlashcardPayload = { term?: string; definition?: string; exampleSentence?: string; hintExplanation?: string; synonyms?: string; imageUrl?: string | null };
-export type BulkFlashcardItem = { id?: number; term: string; definition: string; exampleSentence?: string; hintExplanation?: string; synonyms?: string; imageUrl?: string | null; position?: number; delete?: boolean };
+export type CreateFlashcardPayload = { term: string; definition: string; imageUrl?: string };
+export type UpdateFlashcardPayload = { term?: string; definition?: string; imageUrl?: string };
+export type BulkFlashcardItem = { id?: number; term: string; definition: string; position?: number; delete?: boolean; imageUrl?: string };
 export type BulkSaveResult = { created: Flashcard[]; updated: Flashcard[]; deleted: number[] };
 export const flashcardApi = {
   create: (token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> => apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, { method: "POST", body: JSON.stringify(payload) }),
@@ -108,12 +108,6 @@ export const quizApi = {
     apiFetch(`/v1/study-sets/${studySetId}/quiz/generate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
   evaluate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit: number; answers: QuizAnswer[] }, signal?: AbortSignal): Promise<QuizEvaluateResponse> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz/evaluate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
-  create: (token: string, payload: Record<string, unknown>): Promise<any> =>
-    apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) }),
-  get: (token: string, id: number): Promise<any> =>
-    apiFetch(`/v1/study-sets/${id}`, token),
-  update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
-    apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
 };
 
 export type ServiceHealth = { name: string; url: string; status: string };
@@ -155,131 +149,4 @@ export const activityApi = {
   getFeed: (token: string, cursor?: string, limit?: number): Promise<ActivityFeedResponse> => apiFetch("/v1/activity", token, {}, { cursor, limit: limit?.toString() }),
 };
 
-// --- Phase 8: Payment, Wallet & Entitlement API ---
-
-import type { WalletBalance, WalletTransactionList, PaymentOrder, DepositOrderStatus, StudySetAccessInfo, PurchaseResult, AdminOrderList, AdminTxList } from "../../types";
-
-export const walletApi = {
-  getBalance: (token: string): Promise<WalletBalance> => apiFetch("/v1/wallet", token),
-  getTransactions: (token: string, limit?: number, offset?: number): Promise<WalletTransactionList> =>
-    apiFetch("/v1/wallet/transactions", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
-};
-
-export const paymentApi = {
-  createOrder: (token: string, amountVnd: number): Promise<PaymentOrder> =>
-    apiFetch("/v1/payments/orders", token, { method: "POST", body: JSON.stringify({ amountVnd }) }),
-  getOrderStatus: (token: string, orderId: number): Promise<DepositOrderStatus> =>
-    apiFetch(`/v1/payments/orders/${orderId}`, token),
-};
-
-export const entitlementApi = {
-  checkAccess: (token: string, studySetId: number): Promise<StudySetAccessInfo> =>
-    apiFetch("/v1/entitlements/check", token, {}, { study_set_id: studySetId.toString() }),
-  purchase: (token: string, studySetId: number): Promise<PurchaseResult> =>
-    apiFetch("/v1/entitlements/purchase", token, { method: "POST", body: JSON.stringify({ studySetId }) }),
-  list: (token: string): Promise<{ items: any[] }> => apiFetch("/v1/entitlements", token),
-};
-
-export const priceApi = {
-  setPrice: (token: string, studySetId: number, pricingType: string, priceVnd: number): Promise<any> =>
-    apiFetch(`/v1/study-sets/${studySetId}/price`, token, { method: "PUT", body: JSON.stringify({ pricingType, priceVnd }) }),
-};
-
-export const adminApi = {
-  listOrders: (token: string, limit?: number, offset?: number): Promise<AdminOrderList> =>
-    apiFetch("/v1/admin/payments/orders", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
-  listTransactions: (token: string, limit?: number, offset?: number): Promise<AdminTxList> =>
-    apiFetch("/v1/admin/wallet/transactions", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
-  credit: (token: string, userId: number, amountVnd: number, note: string): Promise<{ ok: boolean }> =>
-    apiFetch("/v1/admin/wallet/credit", token, { method: "POST", body: JSON.stringify({ userId, amountVnd, note }) }),
-};
-
-// Grammar API — gọi study service với contentType=grammar
-export const grammarApi = {
-  create: (token: string, payload: Record<string, unknown>): Promise<any> =>
-    apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) }),
-  get: (token: string, id: number): Promise<any> =>
-    apiFetch(`/v1/study-sets/${id}`, token),
-  update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
-    apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
-};
-
-// Phase 10: Quiz Question API
-import type { QuizQuestion } from "../../types";
-
-export type QuizQuestionPayload = {
-  position: number;
-  questionText: string;
-  questionType: string;
-  correctAnswer?: string;
-  timeInSeconds?: number;
-  audioUrl?: string;
-  answerExplanation?: string;
-  paragraphText?: string;
-  subQuestions?: unknown;
-  tags?: string[];
-  options: Array<{ text: string; position: number; isCorrect: boolean }>;
-};
-
-export const quizQuestionApi = {
-  list: (token: string, studySetId: number): Promise<QuizQuestion[]> =>
-    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token),
-  bulkSave: (token: string, studySetId: number, questions: QuizQuestionPayload[]): Promise<{ ok: boolean }> =>
-    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "POST", body: JSON.stringify({ questions }) }),
-  delete: (token: string, studySetId: number): Promise<{ ok: boolean }> =>
-    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "DELETE" }),
-};
-
-// Phase 10: TTS API
-export const ttsApi = {
-  getAudio: (token: string, text: string, lang: string): Promise<Blob> =>
-    fetch(`${gatewayUrl}/v1/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(lang)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.blob()),
-};
-
-// Phase 10: Languages API
-export type Language = { code: string; name: string; flag: string };
-export const languageApi = {
-  list: (token: string): Promise<Language[]> => apiFetch("/v1/languages", token),
-};
-
-// Phase 10: Import API
-export type ImportResult = { imported: number; errors: Array<{ row: number; field: string; reason: string }> };
-
-export const importApi = {
-  flashcards: async (token: string, studySetId: number, file: File): Promise<ImportResult> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(`${gatewayUrl}/v1/study-sets/${studySetId}/import/flashcards`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || body.reason || `Import failed ${res.status}`);
-    }
-    return res.json();
-  },
-  quiz: async (token: string, studySetId: number, file: File): Promise<ImportResult> => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(`${gatewayUrl}/v1/study-sets/${studySetId}/import/quiz`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || body.reason || `Import failed ${res.status}`);
-    }
-    return res.json();
-  },
-};
-
 export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };
-export { presignUpload, confirmUpload, deleteFile, listFiles, uploadToStorage, validateFile } from "./files";
-export type { UploadType, PresignRequest, PresignResponse, ConfirmResponse, FileMetadata, QuotaInfo, FileListResponse } from "./files";
-
-export type { WalletBalance, WalletTransactionItem, WalletTransactionList, PaymentOrder, DepositOrderStatus, StudySetAccessInfo, PurchaseResult, AdminOrderList, AdminTxList } from "../../types";
