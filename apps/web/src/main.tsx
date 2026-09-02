@@ -11,6 +11,7 @@ import { Dashboard } from "./features/dashboard/Dashboard";
 import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
 import { Folders } from "./features/folders/Folders";
+import { LiveGame } from "./features/live/LiveGame";
 import { studySetApi, flashcardApi, fetchHealth } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus } from "./types";
 
@@ -89,6 +90,7 @@ function AppShell() {
         </button>
         <div className="user-menu">
           <button className="ghost-button" onClick={() => { setSelectedSet(null); setView("folders"); }}>Thư mục</button>
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setView("live"); }}>Live Quiz</button>
           <span>{user.name}</span>
           <button onClick={() => void logout()}>Logout</button>
         </div>
@@ -134,6 +136,10 @@ function AppShell() {
           onBack={() => setView("dashboard")}
           onOpenSet={(id) => void handleOpenSet(id)}
         />
+      )}
+
+      {!loadingSet && view === "live" && (
+        <LiveGame />
       )}
     </main>
   );

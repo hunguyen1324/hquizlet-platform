@@ -1,0 +1,78 @@
+/* apps/web/src/features/live/live.css — Phase 6 Live Quiz */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.live-home,
+.host-lobby,
+.host-game,
+.player-lobby,
+.player-game,
+.live-leaderboard {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.primary-button {
+  padding: 0.5rem 1.25rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghost-button {
+  padding: 0.5rem 1.25rem;
+  background: transparent;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ghost-button:hover {
+  background: #f3f4f6;
+}
+
+/* SSE connection indicator */
+.sse-connected::before {
+  content: "●";
+  color: #22c55e;
+  margin-right: 0.5rem;
+}
+
+.sse-disconnected::before {
+  content: "●";
+  color: #ef4444;
+  margin-right: 0.5rem;
+}
+
+/* Leaderboard table */
+.live-leaderboard table {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.live-leaderboard th {
+  background: #f9fafb;
+}
+
+.live-leaderboard tr:hover {
+  background: #f9fafb;
+}

@@ -3,7 +3,7 @@
 
 export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
-export type AppView = "dashboard" | "editor" | "study" | "folders";
+export type AppView = "dashboard" | "editor" | "study" | "folders" | "live";
 
 export type User = {
   id: number;

@@ -1,6 +1,6 @@
-# HQuizlet Platform – Docker Compose (Phase 2)
+# HQuizlet Platform – Docker Compose (Phase 6)
 # Chạy: docker compose -f infra/docker/docker-compose.yml up --build
-# Dev 5 – [P2-INT-03]
+# Dev 2 - [P6-DB-01, P6-NATS-01]
 
 services:
   gateway:
@@ -20,6 +20,8 @@ services:
       auth:
         condition: service_healthy
       study:
+        condition: service_healthy
+      quiz:
         condition: service_healthy
     restart: on-failure
     healthcheck:
@@ -89,6 +91,8 @@ services:
       DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
       STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
+      NATS_URL: "${NATS_URL:-nats://nats:4222}"
     ports:
       - "${QUIZ_PORT:-8083}:8083"
     depends_on:
@@ -96,9 +100,13 @@ services:
         condition: service_healthy
       auth:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     restart: on-failure
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8083/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/readyz"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -161,11 +169,20 @@ services:
 
   nats:
     image: nats:2-alpine
+    command: ["-js", "--store_dir", "/data", "-m", "8222"]
     ports:
       - "${NATS_CLIENT_PORT:-4222}:4222"
       - "${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
 volumes:
   postgres-data:
   web-node-modules:
+  nats-data:

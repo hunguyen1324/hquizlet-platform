@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,12 +11,24 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
 	"sync"
 	"time"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/engine"
 	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/studyclient"
+
+	livehttp "github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/http"
+	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/model"
+	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/outbox"
+	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/realtime"
+	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/redisstore"
+	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/repository"
+	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/live/service"
+	quizmigrations "github.com/hunguyen1324/hquizlet-platform/services/quiz/migrations"
+
+	_ "github.com/lib/pq"
+	"github.com/nats-io/nats.go"
+	"github.com/redis/go-redis/v9"
 )
 
 type metrics struct {
@@ -80,24 +94,28 @@ type server struct {
 	study *studyclient.Client
 	met   *metrics
 }
+
 type generateRequest struct {
 	Mode    string         `json:"mode"`
 	Seed    uint64         `json:"seed"`
 	Limit   int            `json:"limit"`
 	Options map[string]any `json:"options,omitempty"`
 }
+
 type evaluateRequest struct {
 	Mode    string          `json:"mode"`
 	Seed    uint64          `json:"seed"`
 	Limit   int             `json:"limit"`
 	Answers []engine.Answer `json:"answers"`
 }
+
 type generateResponse struct {
 	Mode            string        `json:"mode"`
 	Seed            uint64        `json:"seed"`
 	Items           []engine.Item `json:"items"`
 	ContractVersion string        `json:"contractVersion"`
 }
+
 type evaluateResponse struct {
 	Mode            string              `json:"mode"`
 	Seed            uint64              `json:"seed"`
@@ -106,6 +124,7 @@ type evaluateResponse struct {
 	CardResults     []engine.CardResult `json:"cardResults"`
 	ContractVersion string              `json:"contractVersion"`
 }
+
 type errorEnvelope struct {
 	Code      string         `json:"code"`
 	Message   string         `json:"message"`
@@ -114,22 +133,200 @@ type errorEnvelope struct {
 }
 
 func main() {
+	port := env("PORT", "8083")
+	ctx := context.Background()
+
 	s := &server{
 		study: studyclient.New(env("STUDY_SERVICE_URL", "http://localhost:8082")),
 		met:   newMetrics(),
 	}
+
+	// --- Phase 6: Live Quiz Dependencies ---
+
+	// PostgreSQL
+	var repoDB *repository.DB
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		db, err := sql.Open("postgres", dbURL)
+		if err != nil {
+			log.Printf("[quiz] warning: cannot open database: %v", err)
+		} else {
+			db.SetMaxOpenConns(25)
+			db.SetMaxIdleConns(5)
+			if err := db.PingContext(ctx); err != nil {
+				log.Printf("[quiz] warning: database ping failed: %v", err)
+			} else {
+				if err := quizmigrations.Run(db); err != nil {
+					log.Fatalf("[quiz] migration failed: %v", err)
+				}
+				repoDB = repository.New(db)
+				log.Printf("[quiz] PostgreSQL connected")
+			}
+		}
+	}
+
+	// Redis
+	var redisStore *redisstore.Store
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		opts, err := redis.ParseURL(redisURL)
+		if err != nil {
+			log.Printf("[quiz] warning: invalid REDIS_URL: %v", err)
+		} else {
+			rdb := redis.NewClient(opts)
+			if err := rdb.Ping(ctx).Err(); err != nil {
+				log.Printf("[quiz] warning: redis ping failed: %v", err)
+			} else {
+				redisStore = redisstore.New(rdb)
+				log.Printf("[quiz] Redis connected")
+			}
+		}
+	}
+
+	// NATS
+	var natsConn *nats.Conn
+	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+		nc, err := nats.Connect(natsURL,
+			nats.Name("quiz-service"),
+			nats.MaxReconnects(-1),
+			nats.ReconnectWait(2*time.Second),
+		)
+		if err != nil {
+			log.Printf("[quiz] warning: NATS connect failed: %v", err)
+		} else {
+			natsConn = nc
+			// Ensure the durable stream exists before the outbox starts publishing.
+			if js, err := nc.JetStream(); err == nil {
+				if _, err := js.StreamInfo("HQUIZLET_LIVE"); err != nil {
+					if _, addErr := js.AddStream(&nats.StreamConfig{
+						Name: "HQUIZLET_LIVE", Subjects: []string{"hquizlet.live.>"},
+						Storage: nats.FileStorage,
+					}); addErr != nil {
+						log.Printf("[quiz] warning: create JetStream stream failed: %v", addErr)
+					}
+				}
+				log.Printf("[quiz] NATS JetStream available")
+			}
+			log.Printf("[quiz] NATS connected: %s", natsURL)
+		}
+	}
+
+	// Live service + handlers
+	var liveHandlers *livehttp.Handlers
+	var broadcaster *realtime.Broadcaster
+	var scheduler *livehttp.Scheduler
+	var outboxWorker *outbox.Worker
+
+	if repoDB != nil && redisStore != nil {
+		pub := newEventPublisherStub(natsConn)
+		svc := service.New(repoDB, redisStore, s.study, pub)
+		broadcaster = realtime.NewBroadcaster()
+		liveHandlers = livehttp.NewHandlers(svc, broadcaster)
+		scheduler = livehttp.NewScheduler(svc, broadcaster)
+		liveHandlers.SetScheduler(scheduler)
+
+		// Recover non-terminal sessions and restore auto-close timers.
+		recovered, err := svc.RecoverSessions(ctx)
+		if err != nil {
+			log.Printf("[quiz] session recovery error: %v", err)
+		} else {
+			for _, session := range recovered {
+				if session.Status != model.StatusQuestionOpen {
+					continue
+				}
+				remaining := time.Until(session.UpdatedAt.Add(time.Duration(session.QuestionDurationMs) * time.Millisecond))
+				if remaining < time.Millisecond {
+					remaining = time.Millisecond
+				}
+				scheduler.ScheduleAutoClose(session.ID, int(remaining.Milliseconds()))
+			}
+		}
+
+		// Start outbox worker
+		outboxWorker = outbox.NewWorker(repoDB, pub)
+		_ = outboxWorker
+		outboxWorker.Start(ctx)
+		scheduler.Start(ctx)
+		log.Printf("[quiz] Live Quiz subsystem initialized")
+	} else {
+		log.Printf("[quiz] Live Quiz disabled: missing database or redis configuration")
+	}
+
+	// --- HTTP Router ---
 	mux := http.NewServeMux()
+
+	// Health
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"service": "quiz", "status": "ok"})
 	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		ready := repoDB != nil && redisStore != nil && natsConn != nil && natsConn.IsConnected()
+		status := "ok"
+		httpStatus := http.StatusOK
+		if !ready {
+			status = "degraded"
+			httpStatus = http.StatusServiceUnavailable
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(httpStatus)
+		_ = json.NewEncoder(w).Encode(map[string]string{"service": "quiz", "status": status})
+	})
 	mux.HandleFunc("GET /metrics", s.met.writePrometheus)
+
+	// Existing deterministic quiz endpoints
 	mux.HandleFunc("POST /v1/study-sets/{id}/quiz/generate", s.generate)
 	mux.HandleFunc("POST /v1/study-sets/{id}/quiz/evaluate", s.evaluate)
-	port := env("PORT", "8083")
+
+	// Phase 6: Live Quiz endpoints
+	if liveHandlers != nil {
+		liveHandlers.RegisterRoutes(mux)
+	}
+
 	log.Printf("quiz service listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// eventPublisherStub wraps the event publisher for the service interface.
+type eventPublisherStub struct {
+	nc *nats.Conn
+}
+
+func newEventPublisherStub(nc *nats.Conn) *eventPublisherStub {
+	return &eventPublisherStub{nc: nc}
+}
+
+func (p *eventPublisherStub) Publish(ctx context.Context, subject string, event interface{}) error {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	if p.nc == nil || !p.nc.IsConnected() {
+		return fmt.Errorf("NATS unavailable")
+	}
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+		Header:  nats.Header{},
+	}
+	js, err := p.nc.JetStream()
+	if err != nil {
+		return err
+	}
+	msg.Header.Set(nats.MsgIdHdr, eventIDFromPayload(data))
+	_, err = js.PublishMsg(msg)
+	return err
+}
+
+func eventIDFromPayload(data []byte) string {
+	var envelope struct {
+		EventID string `json:"eventId"`
+	}
+	_ = json.Unmarshal(data, &envelope)
+	return envelope.EventID
+}
+
+func (p *eventPublisherStub) IsConnected() bool {
+	return p.nc != nil && p.nc.IsConnected()
 }
 
 func (s *server) generate(w http.ResponseWriter, r *http.Request) {
@@ -230,14 +427,17 @@ func decode(w http.ResponseWriter, r *http.Request, dst any) bool {
 	}
 	return true
 }
+
 func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	writeJSON(w, status, errorEnvelope{Code: code, Message: message, RequestID: r.Header.Get("X-Request-ID"), Details: map[string]any{}})
 }
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
+
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
