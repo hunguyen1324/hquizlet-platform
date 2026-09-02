@@ -159,6 +159,15 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate }: Na
             <button
               className="w-full text-left px-4 py-2.5 hover:bg-[var(--accent)] text-sm"
               onClick={() => {
+                setShowUserMenu(false);
+                onNavigate?.("wallet");
+              }}
+            >
+              💰 Ví của tôi
+            </button>
+            <button
+              className="w-full text-left px-4 py-2.5 hover:bg-[var(--accent)] text-sm"
+              onClick={() => {
                 document.documentElement.classList.toggle("dark");
                 setShowUserMenu(false);
               }}

@@ -12,6 +12,7 @@ const navItems = [
   { id: "dashboard", label: "Thư viện của bạn", icon: "📚" },
   { id: "classes", label: "Nhóm học", icon: "👥" },
   { id: "activity", label: "Thông báo", icon: "🔔" },
+  { id: "wallet", label: "Ví của tôi", icon: "💰" },
 ];
 
 const quickLinks = [
