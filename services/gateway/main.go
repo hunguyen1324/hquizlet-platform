@@ -36,6 +36,7 @@ func main() {
 	authURL := env("AUTH_SERVICE_URL", "http://localhost:8081")
 	studyURL := env("STUDY_SERVICE_URL", "http://localhost:8082")
 	quizURL := env("QUIZ_SERVICE_URL", "http://localhost:8083")
+	classURL := env("CLASS_SERVICE_URL", "http://localhost:8084")
 	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
@@ -64,6 +65,11 @@ func main() {
 	// SSE endpoint (host or player scope)
 	mux.HandleFunc("GET /v1/live-sessions/{sessionId}/events", sseProxy(authURL, quizURL))
 
+	// Phase 7: Class and Activity routes [P7-GW-01]
+	mux.HandleFunc("/v1/classes", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/classes/", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/activity", authenticatedProxy(authURL, classURL))
+
 	log.Printf("[gateway] listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
 		log.Fatal(err)
@@ -82,13 +88,13 @@ func routeStudySets(authTarget, studyTarget, quizTarget string) http.HandlerFunc
 	}
 }
 
-func servicesHealth(w http.ResponseWriter, r *http.Request) {
-	services := []serviceHealth{
-		{Name: "gateway", URL: "http://localhost:" + env("PORT", "8080") + "/healthz"},
-		{Name: "auth", URL: env("AUTH_SERVICE_URL", "http://localhost:8081") + "/healthz"},
-		{Name: "study", URL: env("STUDY_SERVICE_URL", "http://localhost:8082") + "/healthz"},
-		{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
-	}
+func servicesHealth(w http.ResponseWriter, r *http.Request) {		services := []serviceHealth{
+			{Name: "gateway", URL: "http://localhost:" + env("PORT", "8080") + "/healthz"},
+			{Name: "auth", URL: env("AUTH_SERVICE_URL", "http://localhost:8081") + "/healthz"},
+			{Name: "study", URL: env("STUDY_SERVICE_URL", "http://localhost:8082") + "/healthz"},
+			{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
+			{Name: "class", URL: env("CLASS_SERVICE_URL", "http://localhost:8084") + "/healthz"},
+		}
 	for i := range services {
 		if services[i].Name == "gateway" {
 			services[i].Status = "ok"
@@ -134,6 +140,8 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 		r.Header.Del("X-User-ID")
 		r.Header.Del("X-Participant-ID")
 		r.Header.Del("X-Live-Role")
+		r.Header.Del("X-Class-Role")
+		r.Header.Del("X-Member-ID")
 		r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
 		reverseProxy(serviceTarget)(w, r)
 	}

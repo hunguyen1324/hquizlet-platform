@@ -7,5 +7,6 @@ use (
 	./services/quiz
 	./services/payment
 	./services/file
+	./services/class
 )
 

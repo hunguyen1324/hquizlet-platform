@@ -13,7 +13,8 @@ services:
       PORT: "8080"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
       STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
-      QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http://quiz:8083}"
+      QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http:8083}"
+      CLASS_SERVICE_URL: "${CLASS_SERVICE_URL:-http://class:8084}"
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -22,6 +23,8 @@ services:
       study:
         condition: service_healthy
       quiz:
+        condition: service_healthy
+      class:
         condition: service_healthy
     restart: on-failure
     healthcheck:
@@ -166,6 +169,36 @@ services:
       timeout: 5s
       retries: 3
     restart: unless-stopped
+
+  class:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: class
+    environment:
+      PORT: "8084"
+      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
+      NATS_URL: "${NATS_URL:-nats://nats:4222}"
+      CLASS_INTERNAL_TOKEN: "${CLASS_INTERNAL_TOKEN:-dev-internal-token}"
+    ports:
+      - "${CLASS_PORT:-8084}:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   nats:
     image: nats:2-alpine

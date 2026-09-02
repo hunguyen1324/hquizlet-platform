@@ -8,6 +8,10 @@ export {
   healthApi,
   fetchHealth,
   ApiError,
+  classApi,
+  memberApi,
+  classStudySetApi,
+  activityApi,
 } from "./client";
 export type {
   User,
@@ -30,4 +34,12 @@ export type {
   CreateFlashcardPayload,
   UpdateFlashcardPayload,
   ServiceHealth,
+  ClassSummary,
+  ClassDetail,
+  ClassMember,
+  ClassStudySet,
+  JoinClassResponse,
+  ActivityFeedResponse,
+  CreateClassPayload,
+  UpdateClassPayload,
 } from "./client";

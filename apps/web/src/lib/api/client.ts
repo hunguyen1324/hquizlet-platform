@@ -113,4 +113,40 @@ export const quizApi = {
 export type ServiceHealth = { name: string; url: string; status: string };
 export async function fetchHealth(): Promise<ServiceHealth[]> { const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", ""); return data.services ?? []; }
 export const healthApi = { check: () => apiFetch<{ service: string; status: string }>("/healthz", ""), services: () => apiFetch<{ services: ServiceHealth[] }>("/healthz/services", "") };
-export type { User, AuthResponse, StudySet, Flashcard, DraftCard };
+
+// --- Phase 7: Class & Activity API ---
+
+import type { ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse } from "../../types";
+
+export type CreateClassPayload = { name: string; description?: string; maxMembers?: number };
+export type UpdateClassPayload = { name?: string; description?: string };
+
+export const classApi = {
+  list: (token: string): Promise<ClassSummary[]> => apiFetch("/v1/classes", token),
+  create: (token: string, payload: CreateClassPayload): Promise<ClassDetail> => apiFetch("/v1/classes", token, { method: "POST", body: JSON.stringify(payload) }),
+  get: (token: string, id: number): Promise<ClassDetail> => apiFetch(`/v1/classes/${id}`, token),
+  update: (token: string, id: number, payload: UpdateClassPayload): Promise<ClassDetail> => apiFetch(`/v1/classes/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
+  delete: (token: string, id: number): Promise<void> => apiFetch(`/v1/classes/${id}`, token, { method: "DELETE" }),
+  join: (token: string, code: string): Promise<JoinClassResponse> => apiFetch(`/v1/classes/${code}/join`, token, { method: "POST" }),
+  resetInviteCode: (token: string, id: number): Promise<{ inviteCode: string }> => apiFetch(`/v1/classes/${id}/invite-code/reset`, token, { method: "POST" }),
+};
+
+export const memberApi = {
+  list: (token: string, classId: number): Promise<ClassMember[]> => apiFetch(`/v1/classes/${classId}/members`, token),
+  add: (token: string, classId: number, payload: { userId: number; role: string }): Promise<ClassMember> => apiFetch(`/v1/classes/${classId}/members`, token, { method: "POST", body: JSON.stringify(payload) }),
+  updateRole: (token: string, classId: number, userId: number, role: string): Promise<void> => apiFetch(`/v1/classes/${classId}/members/${userId}`, token, { method: "PUT", body: JSON.stringify({ role }) }),
+  remove: (token: string, classId: number, userId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/members/${userId}`, token, { method: "DELETE" }),
+  leave: (token: string, classId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/members/me`, token, { method: "DELETE" }),
+};
+
+export const classStudySetApi = {
+  list: (token: string, classId: number): Promise<ClassStudySet[]> => apiFetch(`/v1/classes/${classId}/study-sets`, token),
+  add: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets`, token, { method: "POST", body: JSON.stringify({ studySetId }) }),
+  remove: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
+};
+
+export const activityApi = {
+  getFeed: (token: string, cursor?: string, limit?: number): Promise<ActivityFeedResponse> => apiFetch("/v1/activity", token, {}, { cursor, limit: limit?.toString() }),
+};
+
+export type { User, AuthResponse, StudySet, Flashcard, DraftCard, ClassSummary, ClassDetail, ClassMember, ClassStudySet, JoinClassResponse, ActivityFeedResponse };

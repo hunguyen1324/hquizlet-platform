@@ -12,13 +12,20 @@ import { StudySetEditor } from "./features/study-sets/StudySetEditor";
 import { StudyDetail } from "./features/study-sets/StudyDetail";
 import { Folders } from "./features/folders/Folders";
 import { LiveGame } from "./features/live/LiveGame";
-import { studySetApi, flashcardApi, fetchHealth } from "./lib/api";
-import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus } from "./types";
+import { ClassList } from "./features/classes/ClassList";
+import { CreateClass } from "./features/classes/CreateClass";
+import { ClassDetail as ClassDetailView } from "./features/classes/ClassDetail";
+import { EditClass } from "./features/classes/EditClass";
+import { JoinClass } from "./features/classes/JoinClass";
+import { ActivityFeed } from "./features/activity/ActivityFeed";
+import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
+import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
 
 function AppShell() {
   const { user, logout, token } = useAuth();
   const [view, setView] = useState<AppView>("dashboard");
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
+  const [selectedClass, setSelectedClass] = useState<ClassDetailType | null>(null);
   const [loadingSet, setLoadingSet] = useState(false);
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
   const [services, setServices] = useState<ServiceHealth[]>([]);
@@ -89,8 +96,10 @@ function AppShell() {
           HQuizlet
         </button>
         <div className="user-menu">
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setView("folders"); }}>Thư mục</button>
-          <button className="ghost-button" onClick={() => { setSelectedSet(null); setView("live"); }}>Live Quiz</button>
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("classes"); }}>Lớp học</button>
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("activity"); }}>Hoạt động</button>
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("folders"); }}>Thư mục</button>
+          <button className="ghost-button" onClick={() => { setSelectedSet(null); setSelectedClass(null); setView("live"); }}>Live Quiz</button>
           <span>{user.name}</span>
           <button onClick={() => void logout()}>Logout</button>
         </div>
@@ -140,6 +149,77 @@ function AppShell() {
 
       {!loadingSet && view === "live" && (
         <LiveGame />
+      )}
+
+      {!loadingSet && view === "classes" && (
+        <ClassList
+          onCreate={() => setView("class-create")}
+          onJoin={() => setView("class-join")}
+          onSelect={async (id) => {
+            if (!token) return;
+            try {
+              const cls = await classApi.get(token, id);
+              setSelectedClass(cls);
+              setView("class-detail");
+            } catch {}
+          }}
+        />
+      )}
+
+      {view === "class-create" && (
+        <CreateClass
+          onCreated={(cls) => { setSelectedClass(cls); setView("class-detail"); }}
+          onCancel={() => setView("classes")}
+        />
+      )}
+
+      {view === "class-join" && (
+        <JoinClass
+          onJoined={async (resp) => {
+            if (token) {
+              try {
+                const cls = await classApi.get(token, resp.classId);
+                setSelectedClass(cls);
+              } catch {
+                setSelectedClass({
+                  id: resp.classId, name: resp.className, description: "", inviteCode: "",
+                  memberCount: 0, studySetCount: 0, myRole: resp.myRole as any, maxMembers: 0,
+                  createdAt: resp.joinedAt, updatedAt: resp.joinedAt,
+                } as ClassDetailType);
+              }
+            }
+            setView("class-detail");
+          }}
+          onCancel={() => setView("classes")}
+        />
+      )}
+
+      {!loadingSet && view === "class-detail" && selectedClass && (
+        <ClassDetailView
+          classId={selectedClass.id}
+          onBack={() => { setSelectedClass(null); setView("classes"); }}
+          onEdit={(cls) => { setSelectedClass(cls); setView("class-edit"); }}
+          onDelete={async () => {
+            if (!token || !selectedClass) return;
+            if (confirm("Bạn có chắc muốn xóa lớp này?")) {
+              await classApi.delete(token, selectedClass.id);
+              setSelectedClass(null);
+              setView("classes");
+            }
+          }}
+        />
+      )}
+
+      {view === "class-edit" && selectedClass && (
+        <EditClass
+          cls={selectedClass}
+          onSaved={(cls) => { setSelectedClass(cls); setView("class-detail"); }}
+          onCancel={() => setView("class-detail")}
+        />
+      )}
+
+      {!loadingSet && view === "activity" && (
+        <ActivityFeed onBack={() => setView("dashboard")} />
       )}
     </main>
   );
