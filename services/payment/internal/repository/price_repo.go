@@ -58,6 +58,20 @@ func GetBalanceForUser(ctx context.Context, db *sql.DB, userID int64) (int, erro
 	return int(balance.Int64), nil
 }
 
+// GetBalanceForUserTx computes a user's wallet balance inside an existing transaction.
+func GetBalanceForUserTx(ctx context.Context, tx *sql.Tx, userID int64) (int, error) {
+	var balance sql.NullInt64
+	err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_vnd ELSE 0 END)
+		       - SUM(CASE WHEN direction = 'debit' THEN amount_vnd ELSE 0 END), 0)
+		 FROM wallet_transaction WHERE user_id = $1`, userID,
+	).Scan(&balance)
+	if err != nil {
+		return 0, err
+	}
+	return int(balance.Int64), nil
+}
+
 // DebitWallet inserts a debit transaction. Called within a DB transaction.
 func DebitWallet(ctx context.Context, tx *sql.Tx, userID int64, amountVnd int, refID, note string) (int64, error) {
 	var id int64

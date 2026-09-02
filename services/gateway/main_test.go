@@ -9,16 +9,24 @@ import (
 
 func TestAuthenticatedProxyUsesVerifiedIdentity(t *testing.T) {
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/internal/auth/verify" { t.Fatalf("unexpected auth path: %s", r.URL.Path) }
-		if r.Header.Get("Authorization") != "Bearer valid" { t.Fatalf("authorization was not forwarded") }
+		if r.URL.Path != "/internal/auth/verify" {
+			t.Fatalf("unexpected auth path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer valid" {
+			t.Fatalf("authorization was not forwarded")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 42, Email: "a@example.com", Name: "A", Role: "user"})
 	}))
 	defer auth.Close()
 
 	study := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("X-User-ID"); got != "42" { t.Fatalf("expected verified user id 42, got %q", got) }
-		if got := r.Header.Get("X-Request-ID"); got != "req-42" { t.Fatalf("expected request id propagation, got %q", got) }
+		if got := r.Header.Get("X-User-ID"); got != "42" {
+			t.Fatalf("expected verified user id 42, got %q", got)
+		}
+		if got := r.Header.Get("X-Request-ID"); got != "req-42" {
+			t.Fatalf("expected request id propagation, got %q", got)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer study.Close()
@@ -31,7 +39,9 @@ func TestAuthenticatedProxyUsesVerifiedIdentity(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	h.ServeHTTP(resp, req)
-	if resp.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String()) }
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
 }
 
 func TestAuthenticatedProxyRejectsMissingBearer(t *testing.T) {
@@ -41,10 +51,66 @@ func TestAuthenticatedProxyRejectsMissingBearer(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	h.ServeHTTP(resp, req)
-	if resp.Code != http.StatusUnauthorized { t.Fatalf("expected 401, got %d", resp.Code) }
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.Code)
+	}
 	var body errorEnvelope
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil { t.Fatal(err) }
-	if body.Code != "UNAUTHORIZED" || body.Message == "" || body.RequestID != "req-missing" { t.Fatalf("unexpected error envelope: %+v", body) }
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "UNAUTHORIZED" || body.Message == "" || body.RequestID != "req-missing" {
+		t.Fatalf("unexpected error envelope: %+v", body)
+	}
+}
+
+func TestOptionalAuthenticatedProxyAllowsAnonymousAndStripsSpoofedHeaders(t *testing.T) {
+	payment := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-User-ID"); got != "" {
+			t.Fatalf("expected spoofed user id to be stripped, got %q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer payment.Close()
+
+	h := optionalAuthenticatedProxy("http://127.0.0.1:1", payment.URL)
+	req := httptest.NewRequest(http.MethodGet, "/v1/entitlements/check?study_set_id=7", nil)
+	req.Header.Set("X-User-ID", "999")
+	resp := httptest.NewRecorder()
+
+	h.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestOptionalAuthenticatedProxyInjectsVerifiedIdentityWhenBearerPresent(t *testing.T) {
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer valid" {
+			t.Fatalf("authorization was not forwarded")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 77, Role: "user"})
+	}))
+	defer auth.Close()
+
+	payment := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-User-ID"); got != "77" {
+			t.Fatalf("expected verified user id 77, got %q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer payment.Close()
+
+	h := optionalAuthenticatedProxy(auth.URL, payment.URL)
+	req := httptest.NewRequest(http.MethodGet, "/v1/entitlements/check?study_set_id=7", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set("X-User-ID", "999")
+	resp := httptest.NewRecorder()
+
+	h.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
 }
 
 // ─── Phase 4: routeStudySets ─────────────────────────────────────────────────
@@ -188,9 +254,9 @@ func TestClassRoutesStripsSpoofedHeaders(t *testing.T) {
 	h := requestID(authenticatedProxy(auth.URL, class.URL))
 	req := httptest.NewRequest(http.MethodGet, "/v1/classes", nil)
 	req.Header.Set("Authorization", "Bearer valid")
-	req.Header.Set("X-User-ID", "999") // spoofed
+	req.Header.Set("X-User-ID", "999")      // spoofed
 	req.Header.Set("X-Class-Role", "admin") // spoofed
-	req.Header.Set("X-Member-ID", "123") // spoofed
+	req.Header.Set("X-Member-ID", "123")    // spoofed
 	req.Header.Set("X-Request-ID", "req-class")
 	resp := httptest.NewRecorder()
 

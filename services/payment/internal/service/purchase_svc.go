@@ -49,17 +49,30 @@ func (s *PurchaseService) PurchaseStudySet(ctx context.Context, userID, studySet
 		return nil, ErrFreeSet
 	}
 
-	// 2. Check if already owned
-	existing, err := s.entitlementRepo.GetEntitlement(ctx, userID, studySetID)
+	// 2. Atomic DB transaction: lock user wallet, debit, and grant entitlement.
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, userID); err != nil {
+		return nil, fmt.Errorf("lock wallet: %w", err)
+	}
+
+	var existingID int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM entitlement WHERE user_id = $1 AND study_set_id = $2`,
+		userID, studySetID,
+	).Scan(&existingID)
+	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("check entitlement: %w", err)
 	}
-	if existing != nil {
+	if err == nil {
 		return nil, ErrAlreadyOwned
 	}
 
-	// 3. Check balance
-	balance, err := repository.GetBalanceForUser(ctx, s.db, userID)
+	balance, err := repository.GetBalanceForUserTx(ctx, tx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get balance: %w", err)
 	}
@@ -67,14 +80,6 @@ func (s *PurchaseService) PurchaseStudySet(ctx context.Context, userID, studySet
 		return nil, ErrInsufficientBalance
 	}
 
-	// 4. Atomic DB transaction: debit + entitlement
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Debit wallet
 	note := fmt.Sprintf("Mua study set #%d", studySetID)
 	txID, err := repository.DebitWallet(ctx, tx, userID, price.PriceVnd, fmt.Sprintf("set_%d", studySetID), note)
 	if err != nil {

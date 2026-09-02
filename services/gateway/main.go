@@ -75,14 +75,14 @@ func main() {
 	// Webhook: forwarded raw (NO authenticatedProxy), SePay verifies via Apikey header
 	mux.HandleFunc("POST /v1/payments/webhooks/sepay", reverseProxy(paymentURL))
 	// Internal endpoint for other services (Study service calls this)
-	mux.HandleFunc("GET /internal/payment/", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /internal/payment/", reverseProxy(paymentURL))
 	// Authenticated payment routes
 	mux.HandleFunc("GET /v1/wallet", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/wallet/transactions", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("POST /v1/payments/orders", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/payments/orders/", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("POST /v1/entitlements/purchase", authenticatedProxy(authURL, paymentURL))
-	mux.HandleFunc("GET /v1/entitlements/check", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/entitlements/check", optionalAuthenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/entitlements", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("PUT /v1/study-sets/", routeStudySetPrice(authURL, studyURL, paymentURL))
 	// Admin payment routes
@@ -119,14 +119,15 @@ func routeStudySetPrice(authTarget, studyTarget, paymentTarget string) http.Hand
 	}
 }
 
-func servicesHealth(w http.ResponseWriter, r *http.Request) {		services := []serviceHealth{
-			{Name: "gateway", URL: "http://localhost:" + env("PORT", "8080") + "/healthz"},
-			{Name: "auth", URL: env("AUTH_SERVICE_URL", "http://localhost:8081") + "/healthz"},
-			{Name: "study", URL: env("STUDY_SERVICE_URL", "http://localhost:8082") + "/healthz"},
-			{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
-			{Name: "class", URL: env("CLASS_SERVICE_URL", "http://localhost:8084") + "/healthz"},
-			{Name: "payment", URL: env("PAYMENT_SERVICE_URL", "http://localhost:8085") + "/healthz"},
-		}
+func servicesHealth(w http.ResponseWriter, r *http.Request) {
+	services := []serviceHealth{
+		{Name: "gateway", URL: "http://localhost:" + env("PORT", "8080") + "/healthz"},
+		{Name: "auth", URL: env("AUTH_SERVICE_URL", "http://localhost:8081") + "/healthz"},
+		{Name: "study", URL: env("STUDY_SERVICE_URL", "http://localhost:8082") + "/healthz"},
+		{Name: "quiz", URL: env("QUIZ_SERVICE_URL", "http://localhost:8083") + "/healthz"},
+		{Name: "class", URL: env("CLASS_SERVICE_URL", "http://localhost:8084") + "/healthz"},
+		{Name: "payment", URL: env("PAYMENT_SERVICE_URL", "http://localhost:8085") + "/healthz"},
+	}
 	for i := range services {
 		if services[i].Name == "gateway" {
 			services[i].Status = "ok"
@@ -177,6 +178,36 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 		r.Header.Del("X-Member-ID")
 		r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
 		r.Header.Set("X-User-Role", identity.Role)
+		reverseProxy(serviceTarget)(w, r)
+	}
+}
+
+// optionalAuthenticatedProxy forwards anonymous requests, but verifies and
+// injects identity when a bearer token is present.
+func optionalAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		r.Header.Del("X-User-ID")
+		r.Header.Del("X-User-Role")
+		r.Header.Del("X-Participant-ID")
+		r.Header.Del("X-Live-Role")
+		r.Header.Del("X-Class-Role")
+		r.Header.Del("X-Member-ID")
+
+		if strings.HasPrefix(auth, "Bearer ") {
+			identity, status, err := verifyIdentity(r.Context(), authTarget, auth)
+			if err != nil {
+				if status == http.StatusUnauthorized {
+					writeGatewayError(w, r, status, "UNAUTHORIZED", "authentication required")
+					return
+				}
+				writeGatewayError(w, r, status, "AUTH_UNAVAILABLE", "authentication service unavailable")
+				return
+			}
+			r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
+			r.Header.Set("X-User-Role", identity.Role)
+		}
+
 		reverseProxy(serviceTarget)(w, r)
 	}
 }
@@ -337,7 +368,7 @@ func cors(next http.Handler) http.Handler {
 	allowedOrigins := map[string]bool{
 		"http://localhost:5173": true, "http://127.0.0.1:5173": true,
 		"http://localhost:3000": true, "http://127.0.0.1:3000": true,
-		"http://web:5173":      true,
+		"http://web:5173": true,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

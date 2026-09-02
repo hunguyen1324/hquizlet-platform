@@ -35,7 +35,7 @@ components:
     ParticipantAuth:
       type: http
       scheme: bearer
-      description: Opaque participant token issued on join. Use "Authorization: Bearer <participantToken>".
+      description: 'Opaque participant token issued on join. Use "Authorization: Bearer <participantToken>".'
 
   schemas:
     Error:
