@@ -108,6 +108,12 @@ export const quizApi = {
     apiFetch(`/v1/study-sets/${studySetId}/quiz/generate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
   evaluate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit: number; answers: QuizAnswer[] }, signal?: AbortSignal): Promise<QuizEvaluateResponse> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz/evaluate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
+  create: (token: string, payload: Record<string, unknown>): Promise<any> =>
+    apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) }),
+  get: (token: string, id: number): Promise<any> =>
+    apiFetch(`/v1/study-sets/${id}`, token),
+  update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
+    apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
 };
 
 export type ServiceHealth = { name: string; url: string; status: string };
@@ -186,16 +192,6 @@ export const adminApi = {
     apiFetch("/v1/admin/wallet/transactions", token, {}, { limit: limit?.toString(), offset: offset?.toString() }),
   credit: (token: string, userId: number, amountVnd: number, note: string): Promise<{ ok: boolean }> =>
     apiFetch("/v1/admin/wallet/credit", token, { method: "POST", body: JSON.stringify({ userId, amountVnd, note }) }),
-};
-
-// Quiz API — gọi study service với contentType=quiz
-export const quizApi = {
-  create: (token: string, payload: Record<string, unknown>): Promise<any> =>
-    apiFetch("/v1/study-sets", token, { method: "POST", body: JSON.stringify(payload) }),
-  get: (token: string, id: number): Promise<any> =>
-    apiFetch(`/v1/study-sets/${id}`, token),
-  update: (token: string, id: number, payload: Record<string, unknown>): Promise<any> =>
-    apiFetch(`/v1/study-sets/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
 };
 
 // Grammar API — gọi study service với contentType=grammar
