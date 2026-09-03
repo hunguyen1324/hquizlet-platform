@@ -24,7 +24,7 @@ func NewWebhookService(db *sql.DB, orderRepo *repository.OrderRepo, walletRepo *
 type WebhookResult string
 
 const (
-	ResultCredited       WebhookResult = "credited"
+	ResultCredited         WebhookResult = "credited"
 	ResultAlreadyProcessed WebhookResult = "already_processed"
 	ResultAmountMismatch   WebhookResult = "amount_mismatch"
 	ResultOrderNotFound    WebhookResult = "order_not_found"
@@ -32,6 +32,11 @@ const (
 
 // CreditDepositIfPaid processes an incoming webhook, credits the wallet idempotently.
 func (s *WebhookService) CreditDepositIfPaid(ctx context.Context, orderCode string, payloadTransferAmount int, sepayTxID int64) WebhookResult {
+	return s.CreditDepositIfPaidRef(ctx, orderCode, payloadTransferAmount, fmt.Sprintf("%d", sepayTxID))
+}
+
+// CreditDepositIfPaidRef credits a pending deposit order using a stable SePay transaction reference.
+func (s *WebhookService) CreditDepositIfPaidRef(ctx context.Context, orderCode string, payloadTransferAmount int, refID string) WebhookResult {
 	order, err := s.orderRepo.GetOrderByCode(ctx, orderCode)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -70,7 +75,6 @@ func (s *WebhookService) CreditDepositIfPaid(ctx context.Context, orderCode stri
 	}
 
 	// Insert wallet transaction (credit) - dedup via partial unique index
-	refID := fmt.Sprintf("%d", sepayTxID)
 	note := "Nạp tiền qua SePay"
 	var txID int64
 	err = tx.QueryRowContext(ctx,

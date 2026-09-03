@@ -126,16 +126,18 @@ services:
       dockerfile: infra/docker/go-service.Dockerfile
       args:
         SERVICE: payment
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
       PORT: "8085"
       DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
       SEPAY_API_TOKEN: "${SEPAY_API_TOKEN:-}"
       SEPAY_BIDV_BANK_ACCOUNT_ID: "${SEPAY_BIDV_BANK_ACCOUNT_ID:-}"
       SEPAY_WEBHOOK_API_KEY: "${SEPAY_WEBHOOK_API_KEY:-}"
-      SEPAY_API_BASE_URL: "${SEPAY_API_BASE_URL:-}"
-      ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
     ports:
       - "${PAYMENT_PORT:-8085}:8085"
     depends_on:

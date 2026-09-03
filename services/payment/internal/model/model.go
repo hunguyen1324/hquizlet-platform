@@ -8,14 +8,14 @@ import (
 // WalletTransaction represents a single entry in the append-only wallet ledger.
 // Balance = SUM(credit) - SUM(debit), never stored as a column.
 type WalletTransaction struct {
-	ID        int64        `json:"id"`
-	UserID    int64        `json:"userId"`
-	Type      string       `json:"type"`      // deposit, purchase, refund, adjustment
-	AmountVnd int          `json:"amountVnd"`
-	Direction string       `json:"direction"` // credit, debit
-	RefID     string       `json:"refId"`
-	Note      string       `json:"note"`
-	CreatedAt time.Time    `json:"createdAt"`
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"userId"`
+	Type      string    `json:"type"` // deposit, purchase, refund, adjustment
+	AmountVnd int       `json:"amountVnd"`
+	Direction string    `json:"direction"` // credit, debit
+	RefID     string    `json:"refId"`
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // WalletTransactionListItem is the API response shape for listing transactions.
@@ -31,35 +31,35 @@ type WalletTransactionListItem struct {
 
 // PaymentOrder represents a deposit order created via SePay.
 type PaymentOrder struct {
-	ID                  int64        `json:"id"`
-	UserID              int64        `json:"userId"`
-	SepayOrderCode      string       `json:"sepayOrderCode"`
-	AmountVnd           int          `json:"amountVnd"`
-	Status              string       `json:"status"` // PENDING, PAID, CANCELLED, EXPIRED
-	QRCodeURL           string       `json:"qrCodeUrl"`
-	ExpiredAt           *time.Time   `json:"expiredAt"`
-	WebhookReceivedAt   *time.Time   `json:"webhookReceivedAt"`
-	CreatedAt           time.Time    `json:"createdAt"`
+	ID                int64      `json:"id"`
+	UserID            int64      `json:"userId"`
+	SepayOrderCode    string     `json:"sepayOrderCode"`
+	AmountVnd         int        `json:"amountVnd"`
+	Status            string     `json:"status"` // PENDING, PAID, CANCELLED, EXPIRED
+	QRCodeURL         string     `json:"qrCodeUrl"`
+	ExpiredAt         *time.Time `json:"expiredAt"`
+	WebhookReceivedAt *time.Time `json:"webhookReceivedAt"`
+	CreatedAt         time.Time  `json:"createdAt"`
 }
 
 // StudySetPrice stores the price for a paid study set.
 // No row = free.
 type StudySetPrice struct {
-	StudySetID   int64     `json:"studySetId"`
-	PricingType  string    `json:"pricingType"` // free, one_time
-	PriceVnd     int       `json:"priceVnd"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	StudySetID  int64     `json:"studySetId"`
+	PricingType string    `json:"pricingType"` // free, one_time
+	PriceVnd    int       `json:"priceVnd"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // Entitlement represents access to a paid study set.
 type Entitlement struct {
-	ID          int64        `json:"id"`
-	UserID      int64        `json:"userId"`
-	StudySetID  int64        `json:"studySetId"`
-	GrantedVia  string       `json:"grantedVia"` // purchase, free, admin_grant
-	TxID        *int64       `json:"txId"`
-	ExpiresAt   *time.Time   `json:"expiresAt"`
-	CreatedAt   time.Time    `json:"createdAt"`
+	ID         int64      `json:"id"`
+	UserID     int64      `json:"userId"`
+	StudySetID int64      `json:"studySetId"`
+	GrantedVia string     `json:"grantedVia"` // purchase, free, admin_grant
+	TxID       *int64     `json:"txId"`
+	ExpiresAt  *time.Time `json:"expiresAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 // StudySetOwnerInfo is the minimal info returned by Study service internal API.
@@ -76,13 +76,13 @@ type CreateDepositOrderRequest struct {
 }
 
 type CreateDepositOrderResponse struct {
-	OrderID          int64  `json:"orderId"`
-	OrderCode        string `json:"orderCode"`
+	OrderID           int64  `json:"orderId"`
+	OrderCode         string `json:"orderCode"`
 	BankAccountNumber string `json:"bankAccountNumber"`
 	BankAccountHolder string `json:"bankAccountHolder"`
-	BankName         string `json:"bankName"`
-	AmountVnd        int    `json:"amountVnd"`
-	QRCodeURL        string `json:"qrCodeUrl"`
+	BankName          string `json:"bankName"`
+	AmountVnd         int    `json:"amountVnd"`
+	QRCodeURL         string `json:"qrCodeUrl"`
 }
 
 type DepositOrderStatusResponse struct {
@@ -103,14 +103,15 @@ type WalletTransactionListResponse struct {
 }
 
 type SePayWebhookPayload struct {
-	ID                int64  `json:"id"`
-	Gateway           string `json:"gateway"`
-	TransactionDate   string `json:"transactionDate"`
-	Code              string `json:"code"`
-	TransferType      string `json:"transferType"`
-	TransferAmount    int    `json:"transferAmount"`
-	Content           string `json:"content"`
-	ReferenceCode     string `json:"referenceCode"`
+	ID              int64  `json:"id"`
+	Gateway         string `json:"gateway"`
+	TransactionDate string `json:"transactionDate"`
+	Code            string `json:"code"`
+	TransferType    string `json:"transferType"`
+	TransferAmount  int    `json:"transferAmount"`
+	Content         string `json:"content"`
+	Description     string `json:"description"`
+	ReferenceCode   string `json:"referenceCode"`
 }
 
 type WebhookResponse struct {

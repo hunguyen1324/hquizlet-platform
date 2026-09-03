@@ -1,19 +1,23 @@
 package sepay
 
 import (
+	"fmt"
 	"net/url"
 )
 
-// BuildVietQrURL returns a VietQR image URL for the given bank account info.
-// Uses "des" parameter (not "note") per vietqr.app docs.
-func BuildVietQrURL(accountNumber, bankBin string, amountVnd int, note string) string {
+// BuildVietQrURL returns a VietQR image URL using SePay's VietQR app format.
+func BuildVietQrURL(accountNumber, bankCode, holderName string, amountVnd int, note string) string {
 	q := url.Values{}
+	q.Set("bank", bankCode)
 	q.Set("acc", accountNumber)
-	q.Set("bank", bankBin)
 	q.Set("amount", fmtInt(amountVnd))
 	q.Set("des", note)
 	q.Set("template", "compact")
-	return "https://vietqr.app/img?" + q.Encode()
+	q.Set("showinfo", "true")
+	if holderName != "" {
+		q.Set("holder", holderName)
+	}
+	return fmt.Sprintf("https://vietqr.app/img?%s", q.Encode())
 }
 
 func fmtInt(n int) string {

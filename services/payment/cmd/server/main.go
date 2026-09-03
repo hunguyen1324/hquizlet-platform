@@ -17,7 +17,7 @@ func main() {
 	cfg := config.Load()
 
 	// Initialize SePay client
-	sepay.Init(cfg.SePayAPIToken, cfg.SePayBankAccountID, cfg.SePayWebhookAPIKey, cfg.SePayBaseURL)
+	sepay.Init(cfg.SePayAPIToken, cfg.SePayBankAccountID, cfg.SePayVAAccount, cfg.SePayWebhookAPIKey, cfg.SePayBaseURL)
 
 	// Open database
 	db := store.Open(cfg.DatabaseURL)
@@ -35,8 +35,8 @@ func main() {
 	priceRepo := repository.NewPriceRepo(db)
 
 	// Wire services
-	orderSvc := service.NewOrderService(orderRepo)
 	webhookSvc := service.NewWebhookService(db, orderRepo, walletRepo)
+	orderSvc := service.NewOrderService(orderRepo, webhookSvc)
 	purchaseSvc := service.NewPurchaseService(db, entitlementRepo, priceRepo, walletRepo)
 	accessSvc := service.NewAccessService(db, entitlementRepo, priceRepo, cfg.StudyServiceURL)
 	walletSvc := service.NewWalletService(walletRepo)

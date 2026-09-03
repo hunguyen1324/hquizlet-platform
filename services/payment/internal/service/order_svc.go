@@ -27,11 +27,12 @@ var (
 )
 
 type OrderService struct {
-	orderRepo *repository.OrderRepo
+	orderRepo  *repository.OrderRepo
+	webhookSvc *WebhookService
 }
 
-func NewOrderService(orderRepo *repository.OrderRepo) *OrderService {
-	return &OrderService{orderRepo: orderRepo}
+func NewOrderService(orderRepo *repository.OrderRepo, webhookSvc *WebhookService) *OrderService {
+	return &OrderService{orderRepo: orderRepo, webhookSvc: webhookSvc}
 }
 
 // CreateOrder creates a new deposit order with rate limiting.
@@ -64,10 +65,23 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID int64, amountVnd 
 		}
 	}
 
+	accountForQR := bankAcct.AccountNumber
+	if bankAcct.VA != "" {
+		accountForQR = bankAcct.VA
+	}
+	if cfg := sepay.GetConfig(); cfg.VAAccount != "" {
+		accountForQR = cfg.VAAccount
+	}
+	bankCode := bankAcct.BankShortName
+	if bankCode == "" {
+		bankCode = bankAcct.BankBin
+	}
+
 	// Build QR URL
 	qrURL := sepay.BuildVietQrURL(
-		bankAcct.AccountNumber,
-		bankAcct.BankBin,
+		accountForQR,
+		bankCode,
+		bankAcct.AccountHolderName,
 		amountVnd,
 		orderCode,
 	)
@@ -92,7 +106,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID int64, amountVnd 
 	return &model.CreateDepositOrderResponse{
 		OrderID:           id,
 		OrderCode:         orderCode,
-		BankAccountNumber: bankAcct.AccountNumber,
+		BankAccountNumber: accountForQR,
 		BankAccountHolder: bankAcct.AccountHolderName,
 		BankName:          bankAcct.BankShortName,
 		AmountVnd:         amountVnd,
@@ -109,6 +123,12 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID int64
 	if order.UserID != userID {
 		return nil, ErrOrderNotFound
 	}
+	if order.Status == "PENDING" {
+		s.reconcilePendingOrder(ctx, order)
+		if refreshed, err := s.orderRepo.GetOrderByID(ctx, orderID); err == nil {
+			order = refreshed
+		}
+	}
 
 	return &model.DepositOrderStatusResponse{
 		OrderID:   order.ID,
@@ -117,4 +137,24 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID int64
 		CreatedAt: order.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		QRCodeURL: order.QRCodeURL,
 	}, nil
+}
+
+func (s *OrderService) reconcilePendingOrder(ctx context.Context, order *model.PaymentOrder) {
+	if s.webhookSvc == nil {
+		return
+	}
+	tx, err := sepay.FindIncomingTransaction(order.SepayOrderCode, order.AmountVnd)
+	if err != nil {
+		log.Printf("[payment] reconcile: SePay lookup failed for order %s: %v", order.SepayOrderCode, err)
+		return
+	}
+	if tx == nil {
+		return
+	}
+	refID := tx.ID
+	if refID == "" {
+		refID = tx.ReferenceNumber
+	}
+	result := s.webhookSvc.CreditDepositIfPaidRef(ctx, order.SepayOrderCode, tx.AmountIn, refID)
+	log.Printf("[payment] reconcile: order=%s sepay_tx=%s result=%s", order.SepayOrderCode, refID, result)
 }

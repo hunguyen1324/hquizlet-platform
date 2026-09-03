@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/payment/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/payment/internal/sepay"
@@ -34,8 +35,9 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	orderCode := extractOrderCode(payload)
 	log.Printf("[payment] webhook: received id=%d gateway=%s code=%s type=%s amount=%d",
-		payload.ID, payload.Gateway, payload.Code, payload.TransferType, payload.TransferAmount)
+		payload.ID, payload.Gateway, orderCode, payload.TransferType, payload.TransferAmount)
 
 	// 3. Only process incoming transfers
 	if payload.TransferType != "in" {
@@ -45,25 +47,37 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. Check for DEP code
-	if payload.Code == "" {
+	if orderCode == "" {
 		log.Printf("[payment] webhook: no code in payload, skipping")
 		WriteJSON(w, http.StatusOK, model.WebhookResponse{Success: true})
 		return
 	}
 
 	// 5. Credit deposit
-	result := h.webhookSvc.CreditDepositIfPaid(r.Context(), payload.Code, payload.TransferAmount, payload.ID)
+	result := h.webhookSvc.CreditDepositIfPaid(r.Context(), orderCode, payload.TransferAmount, payload.ID)
 	switch result {
 	case service.ResultCredited:
-		log.Printf("[payment] webhook: credited order %s amount=%d", payload.Code, payload.TransferAmount)
+		log.Printf("[payment] webhook: credited order %s amount=%d", orderCode, payload.TransferAmount)
 	case service.ResultAlreadyProcessed:
-		log.Printf("[payment] webhook: already processed order %s", payload.Code)
+		log.Printf("[payment] webhook: already processed order %s", orderCode)
 	case service.ResultAmountMismatch:
-		log.Printf("[payment] webhook: AMOUNT MISMATCH order %s actual=%d", payload.Code, payload.TransferAmount)
+		log.Printf("[payment] webhook: AMOUNT MISMATCH order %s actual=%d", orderCode, payload.TransferAmount)
 	case service.ResultOrderNotFound:
-		log.Printf("[payment] webhook: order not found for code %s", payload.Code)
+		log.Printf("[payment] webhook: order not found for code %s", orderCode)
 	}
 
 	// Always return 200 to prevent SePay from retrying
 	WriteJSON(w, http.StatusOK, model.WebhookResponse{Success: true})
+}
+
+var orderCodeRE = regexp.MustCompile(`DEP[A-Z0-9]+`)
+
+func extractOrderCode(payload model.SePayWebhookPayload) string {
+	if payload.Code != "" {
+		return payload.Code
+	}
+	if code := orderCodeRE.FindString(payload.Content); code != "" {
+		return code
+	}
+	return orderCodeRE.FindString(payload.Description)
 }
