@@ -218,6 +218,8 @@ function RootApp() {
       {!loadingSet && view === "class-detail" && selectedClass && (
         <ClassDetailView
           classId={selectedClass.id}
+          onStartLive={() => setView("live")}
+          onOpenSet={(id) => void handleOpenSet(id)}
           onBack={() => { setSelectedClass(null); setView("classes"); }}
           onEdit={(cls) => { setSelectedClass(cls); setView("class-edit"); }}
           onDelete={async () => {
