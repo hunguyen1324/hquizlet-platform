@@ -32,13 +32,22 @@ export function ClassList({ onCreate, onJoin, onSelect }: Props) {
   if (error) return <div className="error-state"><p>Lỗi: {error}</p></div>;
 
   return (
-    <div className="class-list-page">
-      <div className="class-list-header">
-        <h1>Lớp học</h1>
-        <div className="class-actions">
-          <button className="primary-button" onClick={onCreate}>Tạo lớp mới</button>
-          <button className="ghost-button" onClick={onJoin}>Tham gia lớp</button>
+    <div className="group-page">
+      <div className="group-page-header">
+        <div>
+          <p className="group-eyebrow">Không gian cộng tác</p>
+          <h1>Nhóm học</h1>
+          <p>Học bằng flashcard, thi quiz và theo dõi tiến độ cùng nhau.</p>
         </div>
+        <div className="group-header-actions">
+          <button className="ghost-button" onClick={onJoin}>⌁ Tham gia bằng mã</button>
+          <button className="primary-button" onClick={onCreate}>＋ Tạo nhóm</button>
+        </div>
+      </div>
+
+      <div className="group-filterbar" aria-label="Bộ lọc nhóm học">
+        <button className="active">Nhóm của tôi</button>
+        <span>{classes.length} nhóm</span>
       </div>
 
       {classes.length === 0 ? (
@@ -47,22 +56,26 @@ export function ClassList({ onCreate, onJoin, onSelect }: Props) {
           <p>Tạo lớp mới hoặc tham gia lớp bằng mã mời!</p>
         </div>
       ) : (
-        <div className="class-cards">
+        <div className="group-card-list">
           {classes.map((cls) => (
-            <div key={cls.id} className="class-card" onClick={() => onSelect(cls.id)}>
-              <h3>{cls.name}</h3>
-              {cls.description && <p className="class-desc">{cls.description}</p>}
-              <div className="class-meta">
-                <span className="role-badge" data-role={cls.myRole}>{cls.myRole}</span>
-                <span>{cls.memberCount} thành viên</span>
-                <span>{cls.studySetCount} học phần</span>
-              </div>
-              {cls.myRole === "owner" && (
-                <div className="class-invite-code">
-                  <small>Mã mời: {cls.inviteCode}</small>
-                </div>
-              )}
-            </div>
+            <button key={cls.id} className="group-card" onClick={() => onSelect(cls.id)}>
+              <span className="group-avatar" aria-hidden="true">
+                {cls.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase()}
+              </span>
+              <span className="group-card-copy">
+                <span className="group-card-title-row">
+                  <strong>{cls.name}</strong>
+                  <span className="role-badge" data-role={cls.myRole}>{cls.myRole}</span>
+                </span>
+                <span className="group-card-description">{cls.description || "Không gian học tập chung của nhóm"}</span>
+                <span className="group-card-stats">
+                  <span>♙ {cls.memberCount} thành viên</span>
+                  <span>▤ {cls.studySetCount} tài liệu</span>
+                  {cls.myRole === "owner" && <span className="group-code">{cls.inviteCode}</span>}
+                </span>
+              </span>
+              <span className="group-card-arrow" aria-hidden="true">→</span>
+            </button>
           ))}
         </div>
       )}
