@@ -1,11 +1,13 @@
 // StudySetEditor — Dev 3 [P2-WEB-02]
 // Tạo/sửa study set và flashcards qua studySetApi + transactional bulkSave.
 // Phase 10: Thêm language selector, visibility toggle, import Excel.
+// Phase UI: Quizlet-inspired redesign
 
 import React, { useState } from "react";
 import type { StudySet, DraftCard } from "../../types";
 import { useAuth } from "../auth/AuthContext";
 import { studySetApi, flashcardApi, importApi, ttsApi } from "../../lib/api";
+import "./StudySetEditor.css";
 
 const LANGUAGES = [
   { code: "en-US", name: "English (US)", flag: "🇺🇸" },
@@ -47,7 +49,6 @@ async function playTTS(token: string, text: string, lang: string) {
     audio.play();
     audio.onended = () => URL.revokeObjectURL(url);
   } catch {
-    // Fallback: use browser TTS
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
     window.speechSynthesis.speak(u);
@@ -73,6 +74,11 @@ function toDraftCards(cards: StudySet["flashcards"]): DraftCard[] {
   }));
 }
 
+function LangLabel({ code }: { code: string }) {
+  const lang = LANGUAGES.find((l) => l.code === code);
+  return <span>{lang ? `${lang.flag} ${lang.name}` : code}</span>;
+}
+
 export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   const { token } = useAuth();
   const isEditing = Boolean(existingSet);
@@ -89,7 +95,10 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   const [showImport, setShowImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; errors: Array<{ row: number; field: string; reason: string }> } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    errors: Array<{ row: number; field: string; reason: string }>;
+  } | null>(null);
 
   function updateCard(
     key: string,
@@ -125,14 +134,8 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
       }))
       .filter((c) => c.term || c.definition);
 
-    if (!title.trim()) {
-      setError("Cần nhập tiêu đề bộ thẻ.");
-      return;
-    }
-    if (cleanCards.length === 0) {
-      setError("Cần ít nhất một thẻ.");
-      return;
-    }
+    if (!title.trim()) { setError("Cần nhập tiêu đề bộ thẻ."); return; }
+    if (cleanCards.length === 0) { setError("Cần ít nhất một thẻ."); return; }
     if (cleanCards.some((c) => !c.term || !c.definition)) {
       setError("Mỗi thẻ cần có đủ thuật ngữ và định nghĩa.");
       return;
@@ -142,53 +145,29 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
     try {
       const saved = existingSet
         ? await studySetApi.update(token, existingSet.id, {
-            title: title.trim(),
-            description: description.trim(),
-            termLanguage,
-            definitionLanguage,
-            visibility,
+            title: title.trim(), description: description.trim(),
+            termLanguage, definitionLanguage, visibility,
           })
         : await studySetApi.create(token, {
-            title: title.trim(),
-            description: description.trim(),
-            contentType: "flashcard",
-            termLanguage,
-            definitionLanguage,
-            visibility,
+            title: title.trim(), description: description.trim(),
+            contentType: "flashcard", termLanguage, definitionLanguage, visibility,
           });
 
       const keepItems = cleanCards.map((card, position) => ({
         ...(card.id ? { id: card.id } : {}),
-        term: card.term,
-        definition: card.definition,
-        exampleSentence: card.exampleSentence,
-        hintExplanation: card.hintExplanation,
-        synonyms: card.synonyms,
-        imageUrl: card.imageUrl,
-        position,
+        term: card.term, definition: card.definition,
+        exampleSentence: card.exampleSentence, hintExplanation: card.hintExplanation,
+        synonyms: card.synonyms, imageUrl: card.imageUrl, position,
       }));
 
       const keptIds = new Set(
-        cleanCards
-          .map((card) => card.id)
-          .filter((id): id is number => typeof id === "number")
+        cleanCards.map((card) => card.id).filter((id): id is number => typeof id === "number")
       );
-
       const deleteItems = (existingSet?.flashcards ?? [])
         .filter((card) => !keptIds.has(card.id))
-        .map((card) => ({
-          id: card.id,
-          term: card.term,
-          definition: card.definition,
-          delete: true,
-        }));
+        .map((card) => ({ id: card.id, term: card.term, definition: card.definition, delete: true }));
 
-      await flashcardApi.bulkSave(
-        token,
-        saved.id,
-        [...keepItems, ...deleteItems]
-      );
-
+      await flashcardApi.bulkSave(token, saved.id, [...keepItems, ...deleteItems]);
       const updated = await studySetApi.get(token, saved.id);
       onSave(updated);
     } catch (err) {
@@ -199,240 +178,289 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   }
 
   return (
-    <form className="create-page" onSubmit={handleSubmit}>
-      <section className="create-header">
-        <div>
-          <p className="eyebrow">{isEditing ? "Sửa học phần" : "Tạo học phần mới"}</p>
-          <h1>{isEditing ? "Cập nhật thẻ học" : "Tạo thẻ học"}</h1>
-        </div>
-        <div className="header-actions">
-          <button className="ghost-button" type="button" onClick={onCancel}>
+    <form className="qe-page" onSubmit={handleSubmit}>
+      {/* ── Top bar ─────────────────────────────────────── */}
+      <div className="qe-topbar">
+        <span className="qe-topbar-title">
+          {isEditing ? "Chỉnh sửa học phần" : "Tạo học phần mới"}
+        </span>
+        <div className="qe-topbar-actions">
+          <button className="qe-btn qe-btn--ghost" type="button" onClick={onCancel}>
             Hủy
           </button>
-          <button className="primary-button" disabled={loading} type="submit">
-            {loading ? "Đang lưu..." : isEditing ? "Lưu thay đổi" : "Tạo học phần"}
+          <button className="qe-btn qe-btn--primary" disabled={loading} type="submit">
+            {loading ? "Đang lưu…" : isEditing ? "Lưu thay đổi" : "Tạo học phần"}
           </button>
         </div>
-      </section>
+      </div>
 
-      <section className="create-meta">
-        <label>
-          Tiêu đề
-          <input
-            autoFocus
-            placeholder="Ví dụ: English Vocabulary Unit 1"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </label>
-        <label>
-          Mô tả
-          <textarea
-            placeholder="Mô tả ngắn về nội dung bộ thẻ"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </label>
-        <div style={{ display: "flex", gap: 16 }}>
-          <label style={{ flex: 1 }}>
-            Ngôn ngữ thuật ngữ
-            <select value={termLanguage} onChange={(e) => setTermLanguage(e.target.value)}>
-              {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
-              ))}
-            </select>
-          </label>
-          <label style={{ flex: 1 }}>
-            Ngôn ngữ định nghĩa
-            <select value={definitionLanguage} onChange={(e) => setDefinitionLanguage(e.target.value)}>
-              {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
-              ))}
-            </select>
-          </label>
+      {/* ── Meta ─────────────────────────────────────────── */}
+      <div className="qe-meta">
+        {/* Title */}
+        <div className="qe-meta-row">
+          <div className="qe-field">
+            <label className="qe-field-label" htmlFor="qe-title">Tiêu đề</label>
+            <input
+              id="qe-title"
+              className="qe-title-input"
+              autoFocus
+              placeholder="Ví dụ: English Vocabulary Unit 1"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
         </div>
-        <label>
-          Chế độ hiển thị
-          <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-            <option value="public">Công khai</option>
-            <option value="private">Riêng tư</option>
-          </select>
-        </label>
-      </section>
 
-      {error && <p className="message message--error">{error}</p>}
-
-      <section style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong>📥 Nhập từ Excel (.xlsx)</strong>
-            <button className="secondary-button" type="button" onClick={() => setShowImport(!showImport)}>
-              {showImport ? "Đóng" : "Mở"}
-            </button>
+        {/* Description */}
+        <div className="qe-meta-row">
+          <div className="qe-field">
+            <label className="qe-field-label" htmlFor="qe-desc">Mô tả (tùy chọn)</label>
+            <textarea
+              id="qe-desc"
+              placeholder="Mô tả ngắn về nội dung bộ thẻ…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
-          {showImport && (
-            <div style={{ marginTop: 12 }}>
-              <p style={{ fontSize: 14, color: "var(--muted-foreground)" }}>
-                Chọn file .xlsx với cột: Term, Definition (bắt buộc), Example, Hint, Synonyms, Image URL (tùy chọn)
-              </p>
-              <input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
-              {importFile && (
-                <button
-                  className="primary-button"
-                  style={{ marginTop: 8 }}
-                  disabled={importLoading || !existingSet}
-                  type="button"
-                  onClick={async () => {
-                    if (!importFile || !existingSet) return;
-                    setImportLoading(true);
-                    setImportResult(null);
-                    try {
-                      const result = await importApi.flashcards(token, existingSet.id, importFile);
-                      setImportResult(result);
-                      if (result.errors.length === 0) {
-                        const updated = await studySetApi.get(token, existingSet.id);
-                        onSave(updated);
-                      }
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : "Import failed");
-                    } finally {
-                      setImportLoading(false);
-                    }
-                  }}
-                >
-                  {importLoading ? "Đang nhập..." : "Nhập dữ liệu"}
-                </button>
-              )}
-              {!existingSet && (
-                <p style={{ marginTop: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
-                  💡 Lưu bộ thẻ trước, sau đó quay lại để nhập dữ liệu từ Excel.
-                </p>
-              )}
-              {importResult && (
-                <div style={{ marginTop: 8 }}>
-                  <p>Đã nhập: {importResult.imported} thẻ</p>
-                  {importResult.errors.length > 0 && (
-                    <div style={{ color: "var(--destructive)" }}>
-                      <p>Lỗi:</p>
-                      <ul>
-                        {importResult.errors.map((e, i) => (
-                          <li key={i}>Dòng {e.row}: [{e.field}] {e.reason}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
+        </div>
+
+        {/* Languages */}
+        <div className="qe-meta-row qe-meta-row--2col">
+          <div className="qe-field">
+            <label className="qe-field-label" htmlFor="qe-term-lang">Ngôn ngữ — Thuật ngữ</label>
+            <select id="qe-term-lang" value={termLanguage} onChange={(e) => setTermLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="qe-field">
+            <label className="qe-field-label" htmlFor="qe-def-lang">Ngôn ngữ — Định nghĩa</label>
+            <select id="qe-def-lang" value={definitionLanguage} onChange={(e) => setDefinitionLanguage(e.target.value)}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Visibility */}
+        <div className="qe-meta-row">
+          <div className="qe-field">
+            <span className="qe-field-label">Chế độ hiển thị</span>
+            <div className="qe-vis-row">
+              <button
+                type="button"
+                className={`qe-vis-btn${visibility === "public" ? " qe-vis-btn--active" : ""}`}
+                onClick={() => setVisibility("public")}
+              >
+                🌐 Công khai
+              </button>
+              <button
+                type="button"
+                className={`qe-vis-btn${visibility === "private" ? " qe-vis-btn--active" : ""}`}
+                onClick={() => setVisibility("private")}
+              >
+                🔒 Riêng tư
+              </button>
             </div>
-          )}
-        </section>
-
-      <section className="cards-editor">
-        <div className="cards-editor-heading">
-          <div>
-            <p className="eyebrow">Cards</p>
-            <h2>Thuật ngữ và định nghĩa</h2>
           </div>
-          <button className="secondary-button" type="button" onClick={addCard}>
+        </div>
+      </div>
+
+      {/* ── Import Excel accordion ───────────────────────── */}
+      <div className="qe-import">
+        <button
+          type="button"
+          className="qe-import-toggle"
+          onClick={() => setShowImport(!showImport)}
+          aria-expanded={showImport}
+        >
+          <span>📥 Nhập từ Excel (.xlsx)</span>
+          <span className={`qe-import-toggle-icon${showImport ? " qe-import-toggle-icon--open" : ""}`}>▼</span>
+        </button>
+        {showImport && (
+          <div className="qe-import-body">
+            <p className="qe-import-hint">
+              File .xlsx cần các cột: <strong>Term</strong>, <strong>Definition</strong> (bắt buộc);
+              Example, Hint, Synonyms, Image URL (tùy chọn).
+            </p>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+            />
+            {importFile && (
+              <button
+                className="qe-btn qe-btn--primary"
+                style={{ marginTop: 10 }}
+                disabled={importLoading || !existingSet}
+                type="button"
+                onClick={async () => {
+                  if (!importFile || !existingSet) return;
+                  setImportLoading(true);
+                  setImportResult(null);
+                  try {
+                    const result = await importApi.flashcards(token, existingSet.id, importFile);
+                    setImportResult(result);
+                    if (result.errors.length === 0) {
+                      const updated = await studySetApi.get(token, existingSet.id);
+                      onSave(updated);
+                    }
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Import thất bại");
+                  } finally {
+                    setImportLoading(false);
+                  }
+                }}
+              >
+                {importLoading ? "Đang nhập…" : "Nhập dữ liệu"}
+              </button>
+            )}
+            {!existingSet && (
+              <p style={{ marginTop: 10, fontSize: "0.82rem", color: "#586380" }}>
+                💡 Lưu bộ thẻ trước, sau đó quay lại để nhập từ Excel.
+              </p>
+            )}
+            {importResult && (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ color: "#22c55e", fontWeight: 700 }}>✓ Đã nhập {importResult.imported} thẻ</p>
+                {importResult.errors.length > 0 && (
+                  <div style={{ color: "#ef4444", fontSize: "0.85rem", marginTop: 6 }}>
+                    {importResult.errors.map((e, i) => (
+                      <p key={i} style={{ margin: "2px 0" }}>Dòng {e.row}: [{e.field}] {e.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Error ────────────────────────────────────────── */}
+      {error && <div className="qe-error">⚠ {error}</div>}
+
+      {/* ── Cards section ────────────────────────────────── */}
+      <div>
+        <div className="qe-cards-header">
+          <div>
+            <span className="qe-cards-title">Thẻ học</span>
+            <span className="qe-cards-count">{draftCards.length} thẻ</span>
+          </div>
+          <button className="qe-btn qe-btn--outline qe-btn--sm" type="button" onClick={addCard}>
             + Thêm thẻ
           </button>
         </div>
 
+        {/* Column labels */}
+        <div className="qe-lang-bar">
+          <div className="qe-lang-bar-label">
+            📝 Thuật ngữ · <LangLabel code={termLanguage} />
+          </div>
+          <div className="qe-lang-bar-label">
+            💡 Định nghĩa · <LangLabel code={definitionLanguage} />
+          </div>
+        </div>
+
+        {/* Card list */}
         {draftCards.map((card, index) => (
-          <article className="draft-card" key={card.key}>
-            <div className="draft-card-header">
-              <div className="draft-title">
-                <span className="draft-number">{index + 1}</span>
-                <strong>Flashcard</strong>
+          <div className="qe-card" key={card.key}>
+            {/* Card header */}
+            <div className="qe-card-header">
+              <span className="qe-card-num">{index + 1}</span>
+              <div className="qe-card-header-right">
+                <button
+                  type="button"
+                  className="qe-card-tts"
+                  title="Phát âm thuật ngữ"
+                  onClick={() => playTTS(token, card.term, termLanguage)}
+                >
+                  🔊 Term
+                </button>
+                <button
+                  type="button"
+                  className="qe-card-tts"
+                  title="Phát âm định nghĩa"
+                  onClick={() => playTTS(token, card.definition, definitionLanguage)}
+                >
+                  🔊 Def
+                </button>
+                <button
+                  className="qe-btn qe-btn--danger"
+                  type="button"
+                  onClick={() => removeCard(card.key)}
+                  aria-label="Xóa thẻ"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => removeCard(card.key)}
-                aria-label="Xóa thẻ"
-              >
-                ×
-              </button>
             </div>
-            <div className="draft-main-fields">
-              <label>
-                Term
+
+            {/* Main term / definition */}
+            <div className="qe-card-body">
+              <div className="qe-card-col">
+                <span className="qe-card-col-label">Thuật ngữ</span>
                 <input
-                  placeholder="2+2"
+                  className="qe-card-input"
+                  placeholder="Nhập thuật ngữ…"
                   value={card.term}
                   onChange={(e) => updateCard(card.key, "term", e.target.value)}
                 />
-              </label>
-              <label>
-                Definition
+              </div>
+              <div className="qe-card-col">
+                <span className="qe-card-col-label">Định nghĩa</span>
                 <input
-                  placeholder="4"
+                  className="qe-card-input"
+                  placeholder="Nhập định nghĩa…"
                   value={card.definition}
                   onChange={(e) => updateCard(card.key, "definition", e.target.value)}
                 />
-              </label>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: 12 }}
-                onClick={() => playTTS(token, card.term, termLanguage)}
-              >
-                🔊 Term
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                style={{ fontSize: 12 }}
-                onClick={() => playTTS(token, card.definition, definitionLanguage)}
-              >
-                🔊 Definition
-              </button>
-            </div>
-            <div className="draft-extra-fields">
-              <label>
-                Example sentence
+
+            {/* Extra fields */}
+            <div className="qe-card-extras">
+              <div className="qe-card-extra-col">
+                <span className="qe-card-extra-label">Ví dụ</span>
                 <textarea
+                  className="qe-card-extra-input"
+                  rows={2}
                   placeholder="I ____ to school every day."
                   value={card.exampleSentence ?? ""}
                   onChange={(e) => updateCard(card.key, "exampleSentence", e.target.value)}
                 />
-                <span>Use a blank in the sentence for Learn mode.</span>
-              </label>
-              <label>
-                Hint / explanation
+              </div>
+              <div className="qe-card-extra-col">
+                <span className="qe-card-extra-label">Gợi ý / Giải thích</span>
                 <textarea
-                  placeholder="Giải thích ngắn bằng tiếng Việt..."
+                  className="qe-card-extra-input"
+                  rows={2}
+                  placeholder="Giải thích ngắn…"
                   value={card.hintExplanation ?? ""}
                   onChange={(e) => updateCard(card.key, "hintExplanation", e.target.value)}
                 />
-                <span>Optional explanation for the card.</span>
-              </label>
-              <label>
-                Từ đồng nghĩa (Synonyms)
+              </div>
+              <div className="qe-card-extra-col">
+                <span className="qe-card-extra-label">Từ đồng nghĩa</span>
                 <textarea
-                  placeholder="VD: happy -> joyful, cheerful, glad"
+                  className="qe-card-extra-input"
+                  rows={2}
+                  placeholder="happy → joyful, cheerful…"
                   value={card.synonyms ?? ""}
                   onChange={(e) => updateCard(card.key, "synonyms", e.target.value)}
                 />
-                <span>Từ đồng nghĩa hoặc cách diễn đạt tương đương.</span>
-              </label>
+              </div>
             </div>
-            <label className="draft-image-field">
-              Image (Optional)
-              <input
-                placeholder="/api/storage/flashcards/... or external URL"
-                value={card.imageUrl ?? ""}
-                onChange={(e) => updateCard(card.key, "imageUrl", e.target.value)}
-              />
-            </label>
-          </article>
+          </div>
         ))}
 
-        <button className="add-row" type="button" onClick={addCard}>
-          + Thêm một thẻ nữa
+        {/* Add card button */}
+        <button className="qe-add-card" type="button" onClick={addCard}>
+          <span style={{ fontSize: "1.2rem", lineHeight: 1 }}>+</span>
+          Thêm một thẻ nữa
         </button>
-      </section>
+      </div>
     </form>
   );
 }
