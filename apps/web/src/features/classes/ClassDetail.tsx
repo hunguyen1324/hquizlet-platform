@@ -11,11 +11,13 @@ type Props = {
   onBack: () => void;
   onEdit: (cls: ClassDetailType) => void;
   onDelete: () => void;
+  onStartLive?: () => void;
+  onOpenSet?: (id: number) => void;
 };
 
 type Tab = "study-sets" | "members";
 
-export function ClassDetail({ classId, onBack, onEdit, onDelete }: Props) {
+export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, onOpenSet }: Props) {
   const { token, user } = useAuth();
   const [cls, setCls] = useState<ClassDetailType | null>(null);
   const [members, setMembers] = useState<ClassMember[]>([]);
@@ -56,22 +58,28 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete }: Props) {
   if (!cls) return null;
 
   return (
-    <div className="class-detail-page">
-      <div className="class-detail-header">
-        <button className="ghost-button" onClick={onBack}>← Quay lại</button>
-        <h1>{cls.name}</h1>
-        {cls.description && <p className="class-desc">{cls.description}</p>}
-        <div className="class-meta">
+    <div className="group-detail-page">
+      <button className="ghost-button group-back" onClick={onBack}>← Nhóm học</button>
+      <div className="group-detail-hero">
+        <div className="group-avatar group-avatar-large" aria-hidden="true">
+          {cls.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase()}
+        </div>
+        <div className="group-detail-copy">
+          <h1>{cls.name}</h1>
+          <p>{cls.description || "Không gian học tập chung của nhóm"}</p>
+          <div className="class-meta">
           <span className="role-badge" data-role={cls.myRole}>{cls.myRole}</span>
           <span>{cls.memberCount} thành viên</span>
-          <span>{cls.studySetCount} học phần</span>
-          {isOwner && <span className="invite-code">Mã mời: {cls.inviteCode}</span>}
+          <span>{cls.studySetCount} tài liệu</span>
+          {isOwner && <button className="group-code" onClick={() => void navigator.clipboard?.writeText(cls.inviteCode)} title="Sao chép mã mời">⌁ {cls.inviteCode}</button>}
+          </div>
         </div>
         <div className="class-detail-actions">
+          {isTeacher && onStartLive && <button className="primary-button" onClick={onStartLive}>▶ Chạy live</button>}
           {isOwner && (
             <>
-              <button className="ghost-button" onClick={() => onEdit(cls)}>Sửa lớp</button>
-              <button className="danger-button" onClick={onDelete}>Xóa lớp</button>
+              <button className="ghost-button" onClick={() => onEdit(cls)}>Cài đặt</button>
+              <button className="danger-button" onClick={onDelete}>Xóa nhóm</button>
             </>
           )}
           {!isOwner && (
@@ -87,7 +95,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete }: Props) {
 
       <div className="class-tabs">
         <button className={tab === "study-sets" ? "active" : ""} onClick={() => setTab("study-sets")}>
-          Học phần ({studySets.length})
+          Tài liệu ({studySets.length})
         </button>
         <button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>
           Thành viên ({members.length})
@@ -102,13 +110,16 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete }: Props) {
           {studySets.length === 0 ? (
             <div className="empty-state"><p>Chưa có học phần nào trong lớp.</p></div>
           ) : (
-            <ul className="study-set-list">
+            <ul className="study-set-list group-resource-list">
               {studySets.map((ss) => (
-                <li key={ss.studySetId} className="study-set-item">
-                  <div>
+                <li key={ss.studySetId} className="study-set-item group-resource-item">
+                  <button className="group-resource-main" onClick={() => onOpenSet?.(ss.studySetId)}>
+                    <span className="group-resource-icon">▤</span>
+                    <span>
                     <strong>{ss.title || `Học phần #${ss.studySetId}`}</strong>
-                    {ss.flashcardCount != null && <span> — {ss.flashcardCount} thẻ</span>}
-                  </div>
+                    <small>{ss.flashcardCount != null ? `${ss.flashcardCount} thẻ` : "Bộ tài liệu"}</small>
+                    </span>
+                  </button>
                   {isTeacher && (
                     <button className="ghost-button danger-button small" onClick={async () => {
                       if (token && confirm("Xóa học phần khỏi lớp?")) {
