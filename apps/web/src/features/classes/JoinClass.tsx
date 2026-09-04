@@ -38,25 +38,28 @@ export function JoinClass({ onJoined, onCancel }: Props) {
   }
 
   return (
-    <div className="form-page">
-      <h1>Tham gia lớp</h1>
-      <form onSubmit={handleSubmit} className="class-form">
+    <div className="group-join-page">
+      <button className="ghost-button group-back" onClick={onCancel}>← Quay lại</button>
+      <form onSubmit={handleSubmit} className="group-join-card">
+        <div className="group-join-icon" aria-hidden="true">⌁</div>
+        <p className="group-eyebrow">Tham gia nhanh</p>
+        <h1>Nhập mã nhóm hoặc mã game</h1>
+        <p>Nhập mã được giáo viên hoặc trưởng nhóm chia sẻ để vào đúng không gian học.</p>
         <label>
-          Mã mời
+          Mã tham gia
           <input
             type="text"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="VD: Q7KM2P3R"
+            placeholder="Q7KM2P3R"
             maxLength={8}
             required
             autoFocus
           />
         </label>
         {error && <div className="error-message">{error}</div>}
-        <div className="form-actions">
-          <button type="button" className="ghost-button" onClick={onCancel} disabled={submitting}>Hủy</button>
-          <button type="submit" className="primary-button" disabled={submitting}>
+        <div className="form-actions group-join-actions">
+          <button type="submit" className="primary-button" disabled={submitting || !code.trim()}>
             {submitting ? "Đang tham gia..." : "Tham gia"}
           </button>
         </div>
