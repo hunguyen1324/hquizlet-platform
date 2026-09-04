@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 package main
@@ -75,9 +76,11 @@ func generateQuizTemplate() error {
 
 	// Example rows
 	examples := [][]string{
-		{"2+2=?", "MC", "3", "4", "5", "6", "B", "30", "", "2+2=4"},
-		{"Is the sky blue?", "TF", "", "", "", "", "True", "15", "", "The sky appears blue due to Rayleigh scattering"},
-		{"What is the capital of France?", "WR", "", "", "", "", "Paris", "60", "", "Paris is the capital and most populous city of France"},
+		{"What is the capital of Japan?", "MC", "Seoul", "Tokyo", "Bangkok", "Hanoi", "B", "30", "", "Tokyo is the capital city of Japan."},
+		{"Water boils at 100°C at sea level.", "TF", "True", "False", "", "", "True", "20", "", "At standard pressure, water boils at 100°C."},
+		{"Write the past tense of 'go'.", "WR", "", "", "", "", "went", "45", "", "The irregular past tense of 'go' is 'went'."},
+		{"Read the paragraph and answer: Linh studies English every morning. What does Linh study?", "PG", "", "", "", "", "English", "60", "https://example.com/audio/linh-english.mp3", "The paragraph says Linh studies English every morning."},
+		{"Sort these words into a correct sentence: / every day / I / English / study", "SO", "I", "study", "English", "every day", "I study English every day", "60", "", "The natural sentence order is subject, verb, object, time expression."},
 	}
 
 	for rowIdx, row := range examples {

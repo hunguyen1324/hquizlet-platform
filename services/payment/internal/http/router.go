@@ -66,6 +66,12 @@ func NewRouter(deps Deps) http.Handler {
 	mux.Handle("POST /v1/payments/orders",
 		middleware.Auth(orderH),
 	)
+	mux.Handle("GET /v1/payments/orders/pending",
+		middleware.Auth(orderH),
+	)
+	mux.Handle("DELETE /v1/payments/orders/",
+		middleware.Auth(orderH),
+	)
 	mux.Handle("GET /v1/payments/orders/",
 		middleware.Auth(orderH),
 	)

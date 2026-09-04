@@ -66,6 +66,50 @@ func (r *OrderRepo) CountPendingByUser(ctx context.Context, userID int64) (int, 
 	return count, err
 }
 
+// ListPendingByUser returns a user's PENDING deposit orders newest first.
+func (r *OrderRepo) ListPendingByUser(ctx context.Context, userID int64) ([]model.PaymentOrder, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, user_id, sepay_order_code, amount_vnd, status, COALESCE(qr_code_url,''),
+		        expired_at, webhook_received_at, created_at
+		 FROM payment_order
+		 WHERE user_id = $1 AND status = 'PENDING'
+		 ORDER BY created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []model.PaymentOrder{}
+	for rows.Next() {
+		o, err := scanOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *o)
+	}
+	return items, rows.Err()
+}
+
+// CancelPendingByID marks one owned PENDING order as CANCELLED.
+func (r *OrderRepo) CancelPendingByID(ctx context.Context, id, userID int64) (bool, error) {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE payment_order
+		 SET status = 'CANCELLED'
+		 WHERE id = $1 AND user_id = $2 AND status = 'PENDING'`,
+		id, userID,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
 // ListAllOrders returns all orders (admin only).
 func (r *OrderRepo) ListAllOrders(ctx context.Context, limit, offset int) ([]model.PaymentOrder, int, error) {
 	var total int

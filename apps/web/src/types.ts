@@ -189,6 +189,19 @@ export type DepositOrderStatus = {
   qrCodeUrl: string;
 };
 
+export type PendingDepositOrder = {
+  orderId: number;
+  orderCode: string;
+  amountVnd: number;
+  status: string;
+  createdAt: string;
+  expiredAt?: string;
+};
+
+export type PendingDepositOrderList = {
+  items: PendingDepositOrder[];
+};
+
 export type StudySetAccessInfo = {
   pricingType: string;
   priceVnd: number;

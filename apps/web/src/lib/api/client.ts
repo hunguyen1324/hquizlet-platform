@@ -14,6 +14,7 @@ import type {
   Flashcard,
   JoinClassResponse,
   PaymentOrder,
+  PendingDepositOrderList,
   PurchaseResult,
   StudySet,
   StudySetAccessInfo,
@@ -208,6 +209,10 @@ export const walletApi = {
 export const paymentApi = {
   createOrder: (token: string, amountVnd: number): Promise<PaymentOrder> =>
     apiFetch("/v1/payments/orders", token, { method: "POST", body: JSON.stringify({ amountVnd }) }),
+  listPendingOrders: (token: string): Promise<PendingDepositOrderList> =>
+    apiFetch("/v1/payments/orders/pending", token),
+  cancelOrder: (token: string, orderId: number): Promise<void> =>
+    apiFetch(`/v1/payments/orders/${orderId}`, token, { method: "DELETE" }),
   getOrderStatus: (token: string, orderId: number): Promise<DepositOrderStatus> =>
     apiFetch(`/v1/payments/orders/${orderId}`, token),
 };
@@ -268,9 +273,11 @@ async function uploadExcel(token: string, path: string, file: File): Promise<Imp
 }
 export const importApi = {
   flashcards: (token: string, studySetId: number, file: File): Promise<ImportResult> =>
-    uploadExcel(token, `/v1/study-sets/${studySetId}/flashcards/import`, file),
+    uploadExcel(token, `/v1/study-sets/${studySetId}/import/flashcards`, file),
   quiz: (token: string, studySetId: number, file: File): Promise<ImportResult> =>
-    uploadExcel(token, `/v1/study-sets/${studySetId}/quiz/import`, file),
+    uploadExcel(token, `/v1/study-sets/${studySetId}/import/quiz`, file),
+  templateUrl: (name: "flashcard_template.xlsx" | "quiz_template.xlsx"): string =>
+    `/templates/${name}`,
 };
 
 export type Language = { code: string; name: string };

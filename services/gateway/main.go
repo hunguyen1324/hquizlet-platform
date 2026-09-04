@@ -96,6 +96,8 @@ func main() {
 	mux.HandleFunc("GET /v1/wallet", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/wallet/transactions", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("POST /v1/payments/orders", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/payments/orders/pending", authenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("DELETE /v1/payments/orders/", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/payments/orders/", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("POST /v1/entitlements/purchase", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/entitlements/check", optionalAuthenticatedProxy(authURL, paymentURL))

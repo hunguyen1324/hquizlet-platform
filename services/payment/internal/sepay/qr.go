@@ -5,19 +5,15 @@ import (
 	"net/url"
 )
 
-// BuildVietQrURL returns a VietQR image URL using SePay's VietQR app format.
+// BuildVietQrURL returns a VietQR image URL using VietQR's quick link format.
 func BuildVietQrURL(accountNumber, bankCode, holderName string, amountVnd int, note string) string {
 	q := url.Values{}
-	q.Set("bank", bankCode)
-	q.Set("acc", accountNumber)
 	q.Set("amount", fmtInt(amountVnd))
-	q.Set("des", note)
-	q.Set("template", "compact")
-	q.Set("showinfo", "true")
+	q.Set("addInfo", note)
 	if holderName != "" {
-		q.Set("holder", holderName)
+		q.Set("accountName", holderName)
 	}
-	return fmt.Sprintf("https://vietqr.app/img?%s", q.Encode())
+	return fmt.Sprintf("https://img.vietqr.io/image/%s-%s-compact2.png?%s", url.PathEscape(bankCode), url.PathEscape(accountNumber), q.Encode())
 }
 
 func fmtInt(n int) string {

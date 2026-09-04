@@ -118,6 +118,13 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
     setDraftCards((prev) => (prev.length === 1 ? prev : prev.filter((c) => c.key !== key)));
   }
 
+  async function importFlashcardsIntoSet(studySetId: number, file: File) {
+    const result = await importApi.flashcards(token, studySetId, file);
+    const safeResult = { imported: result.imported, errors: result.errors ?? [] };
+    setImportResult(safeResult);
+    return safeResult;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -135,7 +142,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
       .filter((c) => c.term || c.definition);
 
     if (!title.trim()) { setError("Cần nhập tiêu đề bộ thẻ."); return; }
-    if (cleanCards.length === 0) { setError("Cần ít nhất một thẻ."); return; }
+    if (cleanCards.length === 0 && !importFile) { setError("Cần ít nhất một thẻ hoặc chọn file Excel để nhập."); return; }
     if (cleanCards.some((c) => !c.term || !c.definition)) {
       setError("Mỗi thẻ cần có đủ thuật ngữ và định nghĩa.");
       return;
@@ -153,6 +160,15 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             contentType: "flashcard", termLanguage, definitionLanguage, visibility,
           });
 
+      if (importFile) {
+        const result = await importFlashcardsIntoSet(saved.id, importFile);
+        if (result.errors.length > 0) {
+          const updated = await studySetApi.get(token, saved.id);
+          onSave(updated);
+          return;
+        }
+      }
+
       const keepItems = cleanCards.map((card, position) => ({
         ...(card.id ? { id: card.id } : {}),
         term: card.term, definition: card.definition,
@@ -167,7 +183,9 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
         .filter((card) => !keptIds.has(card.id))
         .map((card) => ({ id: card.id, term: card.term, definition: card.definition, delete: true }));
 
-      await flashcardApi.bulkSave(token, saved.id, [...keepItems, ...deleteItems]);
+      if (keepItems.length > 0 || deleteItems.length > 0) {
+        await flashcardApi.bulkSave(token, saved.id, [...keepItems, ...deleteItems]);
+      }
       const updated = await studySetApi.get(token, saved.id);
       onSave(updated);
     } catch (err) {
@@ -189,7 +207,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             Hủy
           </button>
           <button className="qe-btn qe-btn--primary" disabled={loading} type="submit">
-            {loading ? "Đang lưu…" : isEditing ? "Lưu thay đổi" : "Tạo học phần"}
+            {loading ? "Đang lưu…" : importFile && !isEditing ? "Tạo từ Excel" : isEditing ? "Lưu thay đổi" : "Tạo học phần"}
           </button>
         </div>
       </div>
@@ -281,10 +299,19 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
         </button>
         {showImport && (
           <div className="qe-import-body">
-            <p className="qe-import-hint">
-              File .xlsx cần các cột: <strong>Term</strong>, <strong>Definition</strong> (bắt buộc);
-              Example, Hint, Synonyms, Image URL (tùy chọn).
-            </p>
+            <div className="qe-import-guide">
+              <p className="qe-import-hint">
+                File .xlsx cần các cột: <strong>Term</strong>, <strong>Definition</strong> (bắt buộc);
+                Example, Hint, Synonyms, Image URL (tùy chọn).
+              </p>
+              <a
+                className="qe-btn qe-btn--outline qe-template-link"
+                href={importApi.templateUrl("flashcard_template.xlsx")}
+                download
+              >
+                Tải file mẫu
+              </a>
+            </div>
             <input
               type="file"
               accept=".xlsx,.xls"
@@ -294,15 +321,14 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
               <button
                 className="qe-btn qe-btn--primary"
                 style={{ marginTop: 10 }}
-                disabled={importLoading || !existingSet}
-                type="button"
+                disabled={importLoading || loading}
+                type={existingSet ? "button" : "submit"}
                 onClick={async () => {
                   if (!importFile || !existingSet) return;
                   setImportLoading(true);
                   setImportResult(null);
                   try {
-                    const result = await importApi.flashcards(token, existingSet.id, importFile);
-                    setImportResult(result);
+                    const result = await importFlashcardsIntoSet(existingSet.id, importFile);
                     if (result.errors.length === 0) {
                       const updated = await studySetApi.get(token, existingSet.id);
                       onSave(updated);
@@ -314,12 +340,12 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   }
                 }}
               >
-                {importLoading ? "Đang nhập…" : "Nhập dữ liệu"}
+                {importLoading || loading ? "Đang nhập…" : existingSet ? "Nhập dữ liệu" : "Tạo từ Excel"}
               </button>
             )}
             {!existingSet && (
-              <p style={{ marginTop: 10, fontSize: "0.82rem", color: "#586380" }}>
-                💡 Lưu bộ thẻ trước, sau đó quay lại để nhập từ Excel.
+              <p className="qe-import-note">
+                Chọn file rồi bấm <strong>Tạo từ Excel</strong> ở góc trên để tạo học phần và nhập thẻ cùng lúc.
               </p>
             )}
             {importResult && (

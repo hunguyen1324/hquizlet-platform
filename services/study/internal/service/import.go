@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -19,9 +20,9 @@ const (
 
 // ImportService handles Excel import operations.
 type ImportService struct {
-	flashcards  repository.Flashcards
+	flashcards    repository.Flashcards
 	quizQuestions repository.QuizQuestions
-	sets        repository.StudySets
+	sets          repository.StudySets
 }
 
 // NewImportService creates a new import service.
@@ -45,7 +46,7 @@ func (s *ImportService) ImportFlashcards(ctx context.Context, studySetID, userID
 		return model.ImportFlashcardResult{}, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	f, err := excelize.OpenReader(strings.NewReader(string(data)))
+	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
 		return model.ImportFlashcardResult{}, fmt.Errorf("failed to open Excel file: %w", err)
 	}
@@ -86,7 +87,7 @@ func (s *ImportService) ImportFlashcards(ctx context.Context, studySetID, userID
 	imgIdx := header["image url"]
 
 	var items []model.ImportFlashcardRow
-	var errors []model.ImportError
+	errors := []model.ImportError{}
 
 	for rowIdx := 1; rowIdx < len(rows); rowIdx++ {
 		row := rows[rowIdx]
@@ -176,7 +177,7 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 		return model.ImportQuizResult{}, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	f, err := excelize.OpenReader(strings.NewReader(string(data)))
+	f, err := excelize.OpenReader(bytes.NewReader(data))
 	if err != nil {
 		return model.ImportQuizResult{}, fmt.Errorf("failed to open Excel file: %w", err)
 	}
@@ -218,7 +219,7 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 	explainIdx := header["answer explanation"]
 
 	var items []model.ImportQuizRow
-	var errors []model.ImportError
+	errors := []model.ImportError{}
 
 	typeMap := map[string]string{
 		"MC": "multiple_choice",

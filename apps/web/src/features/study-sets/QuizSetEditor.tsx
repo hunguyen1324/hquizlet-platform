@@ -354,6 +354,13 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
     setQuestions((prev) => [...prev, newQuestion(prev.length)]);
   }
 
+  async function importQuizIntoSet(studySetId: number, file: File) {
+    const result = await importApi.quiz(token, studySetId, file);
+    const safeResult = { imported: result.imported, errors: result.errors ?? [] };
+    setImportResult(safeResult);
+    return safeResult;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -362,11 +369,11 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
       setError("Vui lòng nhập tiêu đề quiz.");
       return;
     }
-    if (questions.some((q) => !q.questionText.trim())) {
+    if (!importFile && questions.some((q) => !q.questionText.trim())) {
       setError("Tất cả câu hỏi cần có nội dung.");
       return;
     }
-    if (questions.some((q) => !q.correctAnswer)) {
+    if (!importFile && questions.some((q) => !q.correctAnswer)) {
       setError("Tất cả câu hỏi cần có đáp án đúng.");
       return;
     }
@@ -380,22 +387,28 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
         termLanguage,
         definitionLanguage,
         visibility,
-        questions: questions.map((q, i) => ({
-          questionText: q.questionText.trim(),
-          questionType: q.questionType,
-          correctAnswer: q.correctAnswer,
-          answerExplanation: q.answerExplanation.trim() || undefined,
-          paragraphText: q.paragraphText?.trim() || undefined,
-          position: i,
-          options:
-            q.questionType === "multiple_choice" || q.questionType === "sorting"
-              ? q.options
-                  .filter((o) => o.text.trim())
-                  .map((o, idx) => ({ text: o.text.trim(), position: idx }))
-              : [],
-        })),
+        questions: importFile
+          ? []
+          : questions.map((q, i) => ({
+              questionText: q.questionText.trim(),
+              questionType: q.questionType,
+              correctAnswer: q.correctAnswer,
+              answerExplanation: q.answerExplanation.trim() || undefined,
+              paragraphText: q.paragraphText?.trim() || undefined,
+              position: i,
+              options:
+                q.questionType === "multiple_choice" || q.questionType === "sorting"
+                  ? q.options
+                      .filter((o) => o.text.trim())
+                      .map((o, idx) => ({ text: o.text.trim(), position: idx }))
+                  : [],
+            })),
       };
-      await quizApi.create(token, payload);
+      const saved = await quizApi.create(token, payload);
+      if (importFile) {
+        const result = await importQuizIntoSet(saved.id, importFile);
+        if (result.errors.length > 0) return;
+      }
       onSave();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tạo quiz. Vui lòng thử lại.");
@@ -416,7 +429,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
             Hủy
           </button>
           <button className="primary-button" type="submit" disabled={loading}>
-            {loading ? "Đang lưu..." : "Tạo Quiz"}
+            {loading ? "Đang lưu..." : importFile ? "Tạo từ Excel" : "Tạo Quiz"}
           </button>
         </div>
       </section>        <section className="create-meta">
@@ -478,23 +491,27 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
           </div>
           {showImport && (
             <div style={{ marginTop: 12 }}>
-              <p style={{ fontSize: 14, color: "var(--muted-foreground)" }}>
-                Chọn file .xlsx với cột: Question, Type, Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation
-              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "space-between", alignItems: "center" }}>
+                <p style={{ fontSize: 14, color: "var(--muted-foreground)", margin: 0 }}>
+                  Chọn file .xlsx với cột: Question, Type, Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation
+                </p>
+                <a className="secondary-button" href={importApi.templateUrl("quiz_template.xlsx")} download style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+                  Tải file mẫu
+                </a>
+              </div>
               <input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
               {importFile && (
                 <button
                   className="primary-button"
                   style={{ marginTop: 8 }}
-                  disabled={importLoading || !existingSetId}
-                  type="button"
+                  disabled={importLoading || loading}
+                  type={existingSetId ? "button" : "submit"}
                   onClick={async () => {
                     if (!importFile || !existingSetId) return;
                     setImportLoading(true);
                     setImportResult(null);
                     try {
-                      const result = await importApi.quiz(token, existingSetId, importFile);
-                      setImportResult(result);
+                      const result = await importQuizIntoSet(existingSetId, importFile);
                       if (result.errors.length === 0) onSave();
                     } catch (err) {
                       setError(err instanceof Error ? err.message : "Import failed");
@@ -503,12 +520,12 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
                     }
                   }}
                 >
-                  {importLoading ? "Đang nhập..." : "Nhập dữ liệu"}
+                  {importLoading || loading ? "Đang nhập..." : existingSetId ? "Nhập dữ liệu" : "Tạo từ Excel"}
                 </button>
               )}
               {!existingSetId && (
                 <p style={{ marginTop: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
-                  💡 Lưu quiz trước, sau đó quay lại để nhập dữ liệu từ Excel.
+                  Chọn file rồi bấm <strong>Tạo từ Excel</strong> để tạo quiz và nhập câu hỏi cùng lúc.
                 </p>
               )}
               {importResult && (

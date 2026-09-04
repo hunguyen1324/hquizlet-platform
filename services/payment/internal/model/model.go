@@ -93,6 +93,15 @@ type DepositOrderStatusResponse struct {
 	QRCodeURL string `json:"qrCodeUrl"`
 }
 
+type PendingDepositOrderResponse struct {
+	OrderID   int64  `json:"orderId"`
+	OrderCode string `json:"orderCode"`
+	AmountVnd int    `json:"amountVnd"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"createdAt"`
+	ExpiredAt string `json:"expiredAt,omitempty"`
+}
+
 type WalletBalanceResponse struct {
 	Balance int `json:"balance"`
 }

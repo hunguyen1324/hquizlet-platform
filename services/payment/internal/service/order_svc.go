@@ -24,6 +24,7 @@ var (
 	ErrRateLimitExceeded = errors.New("too many pending orders")
 	ErrInvalidAmount     = errors.New("amount must be between 10,000 and 50,000,000 VND")
 	ErrOrderNotFound     = errors.New("order not found")
+	ErrOrderNotPending   = errors.New("order is not pending")
 )
 
 type OrderService struct {
@@ -137,6 +138,49 @@ func (s *OrderService) GetOrderStatus(ctx context.Context, orderID, userID int64
 		CreatedAt: order.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		QRCodeURL: order.QRCodeURL,
 	}, nil
+}
+
+// ListPendingOrders returns pending deposit orders that the user can cancel.
+func (s *OrderService) ListPendingOrders(ctx context.Context, userID int64) ([]model.PendingDepositOrderResponse, error) {
+	orders, err := s.orderRepo.ListPendingByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list pending orders: %w", err)
+	}
+	items := make([]model.PendingDepositOrderResponse, 0, len(orders))
+	for _, order := range orders {
+		expiredAt := ""
+		if order.ExpiredAt != nil {
+			expiredAt = order.ExpiredAt.Format("2006-01-02T15:04:05Z")
+		}
+		items = append(items, model.PendingDepositOrderResponse{
+			OrderID:   order.ID,
+			OrderCode: order.SepayOrderCode,
+			AmountVnd: order.AmountVnd,
+			Status:    order.Status,
+			CreatedAt: order.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			ExpiredAt: expiredAt,
+		})
+	}
+	return items, nil
+}
+
+// CancelPendingOrder cancels one owned pending deposit order.
+func (s *OrderService) CancelPendingOrder(ctx context.Context, orderID, userID int64) error {
+	order, err := s.orderRepo.GetOrderByID(ctx, orderID)
+	if err != nil || order.UserID != userID {
+		return ErrOrderNotFound
+	}
+	if order.Status != "PENDING" {
+		return ErrOrderNotPending
+	}
+	ok, err := s.orderRepo.CancelPendingByID(ctx, orderID, userID)
+	if err != nil {
+		return fmt.Errorf("cancel pending order: %w", err)
+	}
+	if !ok {
+		return ErrOrderNotPending
+	}
+	return nil
 }
 
 func (s *OrderService) reconcilePendingOrder(ctx context.Context, order *model.PaymentOrder) {

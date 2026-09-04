@@ -23,10 +23,21 @@ func (h *OrderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.createOrder(w, r)
 		return
 	}
+	if r.Method == http.MethodGet && r.URL.Path == "/v1/payments/orders/pending" {
+		h.listPendingOrders(w, r)
+		return
+	}
 	if r.Method == http.MethodGet {
 		parts := PathParts(r.URL.Path, "/v1/payments/orders/")
 		if len(parts) > 0 {
 			h.getOrderStatus(w, r)
+			return
+		}
+	}
+	if r.Method == http.MethodDelete {
+		parts := PathParts(r.URL.Path, "/v1/payments/orders/")
+		if len(parts) > 0 {
+			h.cancelOrder(w, r)
 			return
 		}
 	}
@@ -83,4 +94,42 @@ func (h *OrderHandler) getOrderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, resp)
+}
+
+// GET /v1/payments/orders/pending
+func (h *OrderHandler) listPendingOrders(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	resp, err := h.orderSvc.ListPendingOrders(r.Context(), userID)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"items": resp})
+}
+
+// DELETE /v1/payments/orders/{id}
+func (h *OrderHandler) cancelOrder(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	parts := PathParts(r.URL.Path, "/v1/payments/orders/")
+	if len(parts) == 0 {
+		WriteError(w, http.StatusBadRequest, "order id required")
+		return
+	}
+	orderID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid order id")
+		return
+	}
+	if err := h.orderSvc.CancelPendingOrder(r.Context(), orderID, userID); err != nil {
+		switch err {
+		case service.ErrOrderNotFound:
+			WriteError(w, http.StatusNotFound, "order not found")
+		case service.ErrOrderNotPending:
+			WriteError(w, http.StatusConflict, "order is not pending")
+		default:
+			WriteError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

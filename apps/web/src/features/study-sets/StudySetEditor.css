@@ -237,6 +237,24 @@
   margin: 12px 0;
 }
 
+.qe-import-guide {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.qe-template-link {
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.qe-import-note {
+  color: #586380;
+  font-size: 0.82rem;
+  margin-top: 10px;
+}
+
 /* ── Cards section ───────────────────────────────────────────── */
 .qe-cards-header {
   display: flex;
@@ -524,6 +542,8 @@
   .qe-lang-bar { display: none; }
   .qe-topbar { padding: 12px 0; }
   .qe-vis-row { gap: 6px; }
+  .qe-import-guide { align-items: stretch; flex-direction: column; }
+  .qe-template-link { text-align: center; }
 }
 
 @media (max-width: 480px) {
