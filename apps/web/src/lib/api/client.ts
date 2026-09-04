@@ -158,10 +158,29 @@ export const quizApi = {
     const set = await studySetApi.create(token, payload);
     if (payload.questions?.length) {
       await quizQuestionApi.bulkSave(token, set.id, payload.questions);
+      await flashcardApi.bulkSave(token, set.id, payload.questions.map(quizQuestionToFlashcard));
     }
     return studySetApi.get(token, set.id);
   },
 };
+
+function quizQuestionToFlashcard(question: QuizQuestionPayload): BulkFlashcardItem {
+  return {
+    term: question.questionText,
+    definition: quizQuestionDefinition(question),
+    position: question.position,
+  };
+}
+
+function quizQuestionDefinition(question: QuizQuestionPayload): string {
+  const correct = question.correctAnswer?.trim() ?? "";
+  const matchingOption = question.options?.find((option, index) =>
+    option.isCorrect ||
+    option.text.trim().toLowerCase() === correct.toLowerCase() ||
+    String.fromCharCode(65 + index).toLowerCase() === correct.toLowerCase()
+  );
+  return matchingOption?.text.trim() || correct;
+}
 
 export type ServiceHealth = { name: string; url: string; status: string };
 export async function fetchHealth(): Promise<ServiceHealth[]> { const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", ""); return data.services ?? []; }

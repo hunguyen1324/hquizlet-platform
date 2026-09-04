@@ -334,11 +334,51 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 	if err := s.quizQuestions.BulkSave(ctx, studySetID, questions); err != nil {
 		return model.ImportQuizResult{}, err
 	}
+	existingCards, err := s.flashcards.ListByStudySet(ctx, studySetID)
+	if err != nil {
+		return model.ImportQuizResult{}, err
+	}
+	if _, err := s.flashcards.BulkSave(ctx, studySetID, quizRowsToFlashcards(items, existingCards)); err != nil {
+		return model.ImportQuizResult{}, err
+	}
 
 	return model.ImportQuizResult{
 		Imported: len(questions),
 		Errors:   errors,
 	}, nil
+}
+
+func quizRowsToFlashcards(items []model.ImportQuizRow, existing []model.Flashcard) []model.BulkFlashcardItem {
+	cards := make([]model.BulkFlashcardItem, 0, len(existing)+len(items))
+	for _, card := range existing {
+		cards = append(cards, model.BulkFlashcardItem{
+			ID:         card.ID,
+			Term:       card.Term,
+			Definition: card.Definition,
+			Delete:     true,
+		})
+	}
+	for i, item := range items {
+		cards = append(cards, model.BulkFlashcardItem{
+			Term:       item.Question,
+			Definition: quizDefinition(item),
+			Position:   i,
+		})
+	}
+	return cards
+}
+
+func quizDefinition(item model.ImportQuizRow) string {
+	for i, opt := range []string{item.OptionA, item.OptionB, item.OptionC, item.OptionD} {
+		if opt == "" {
+			continue
+		}
+		if strings.EqualFold(opt, item.CorrectAnswer) ||
+			strings.EqualFold(fmt.Sprintf("%c", 'A'+i), item.CorrectAnswer) {
+			return opt
+		}
+	}
+	return item.CorrectAnswer
 }
 
 // getCell safely returns a cell value, returning "" if out of bounds.
