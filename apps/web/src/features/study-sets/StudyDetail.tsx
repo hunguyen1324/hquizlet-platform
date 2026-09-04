@@ -11,6 +11,14 @@ import { ProgressPanel, type ProgressPanelStatus } from "../../components/progre
 
 type StudyMode = "dashboard" | LearningMode;
 
+const studyModeLabels: Record<StudyMode, string> = {
+  dashboard: "☰ Tổng quan",
+  flashcards: "▤ Thẻ ghi nhớ",
+  learn: "✦ Học",
+  test: "✓ Kiểm tra",
+  match: "⌘ Ghép thẻ",
+};
+
 type Props = {
   set: StudySet;
   onEdit: () => void;
@@ -73,7 +81,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               key={mode}
               onClick={() => setStudyMode(mode)}
             >
-              {mode}
+              {studyModeLabels[mode]}
             </button>
           ))}
         </div>
