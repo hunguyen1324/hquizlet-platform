@@ -43,16 +43,18 @@ export function CreateClass({ onCreated, onCancel }: Props) {
   }
 
   return (
-    <div className="form-page">
-      <h1>Tạo lớp mới</h1>
-      <form onSubmit={handleSubmit} className="class-form">
+    <div className="form-page group-form-page">
+      <p className="group-eyebrow">Nhóm học mới</p>
+      <h1>Tạo không gian học tập</h1>
+      <p className="group-form-intro">Dùng một nhóm cho flashcard, quiz và các phiên thi trực tiếp.</p>
+      <form onSubmit={handleSubmit} className="class-form group-form">
         <label>
-          Tên lớp *
+          Tên nhóm *
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="VD: English A1"
+            placeholder="VD: TOEIC 900 — Buổi tối"
             maxLength={120}
             required
           />
@@ -62,7 +64,7 @@ export function CreateClass({ onCreated, onCancel }: Props) {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Mô tả ngắn gọn về lớp..."
+            placeholder="Mục tiêu và nội dung học chính của nhóm..."
             rows={3}
           />
         </label>
@@ -80,7 +82,7 @@ export function CreateClass({ onCreated, onCancel }: Props) {
         <div className="form-actions">
           <button type="button" className="ghost-button" onClick={onCancel} disabled={submitting}>Hủy</button>
           <button type="submit" className="primary-button" disabled={submitting}>
-            {submitting ? "Đang tạo..." : "Tạo lớp"}
+            {submitting ? "Đang tạo..." : "Tạo nhóm"}
           </button>
         </div>
       </form>
