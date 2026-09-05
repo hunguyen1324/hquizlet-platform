@@ -1,0 +1,401 @@
+/* ── StudyDetail — Quizlet-inspired overview UI ─────────────────────────── */
+
+/* Page wrapper */
+.sd-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px 28px 64px;
+}
+
+/* ── Back button ── */
+.sd-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: #586380;
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: 0;
+  margin-bottom: 20px;
+  cursor: pointer;
+  transition: color 0.14s;
+}
+.sd-back:hover { color: #2e3856; }
+
+/* ── Header ── */
+.sd-header {
+  margin-bottom: 32px;
+}
+
+.sd-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.sd-title-copy { flex: 1; min-width: 0; }
+
+.sd-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #586380;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.sd-dot { color: #bfc7d9; }
+.sd-private-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+.sd-title {
+  font-size: clamp(1.6rem, 3vw, 2.25rem);
+  font-weight: 900;
+  color: #2e3856;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  margin: 0 0 10px;
+}
+
+.sd-description {
+  color: #586380;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Header action buttons */
+.sd-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sd-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 800;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.14s, transform 0.1s;
+}
+.sd-action-btn:hover { transform: translateY(-1px); }
+.sd-action-btn--secondary { background: #f0f2ff; color: #4255ff; }
+.sd-action-btn--secondary:hover { background: #e5e8ff; }
+.sd-action-btn--danger { background: #fee2e2; color: #991b1b; }
+.sd-action-btn--danger:hover { background: #fecaca; }
+
+/* ── Mode button grid (Quizlet style) ── */
+.sd-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.sd-mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 2px solid #d9dde8;
+  border-radius: 14px;
+  padding: 22px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+  color: #2e3856;
+}
+.sd-mode-btn:hover {
+  border-color: #4255ff;
+  box-shadow: 0 4px 16px rgba(66, 85, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.sd-mode-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.sd-mode-label {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #2e3856;
+}
+
+/* ── Sub-nav tabs (when in learning mode) ── */
+.sd-subnav {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 24px;
+}
+
+.sd-subnav-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: #586380;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: -2px;
+  padding: 12px 18px;
+  transition: color 0.14s, border-color 0.14s;
+}
+.sd-subnav-tab:hover { color: #2e3856; }
+.sd-subnav-tab.active {
+  border-bottom-color: #4255ff;
+  color: #4255ff;
+}
+
+/* ── Learning mode wrapper ── */
+.sd-learning-wrapper {
+  margin-top: 8px;
+}
+
+/* ── Overview section ── */
+.sd-overview {
+  display: grid;
+  gap: 28px;
+}
+
+/* ── Term list ── */
+.sd-termlist {
+  margin-top: 8px;
+}
+
+.sd-termlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.sd-termlist-title {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #2e3856;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sd-termlist-count {
+  color: #586380;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.sd-termlist-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sd-sort-select {
+  appearance: none;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23586380' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid #d9dde8;
+  border-radius: 8px;
+  color: #2e3856;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: 8px 32px 8px 12px;
+  transition: border-color 0.14s;
+  width: auto;
+}
+.sd-sort-select:focus { border-color: #4255ff; outline: none; }
+
+/* ── Cards ── */
+.sd-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.sd-card {
+  display: flex;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid #d9dde8;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  min-height: 64px;
+}
+.sd-card:hover {
+  border-color: #8b97ff;
+  box-shadow: 0 4px 14px rgba(66, 85, 255, 0.08);
+}
+
+.sd-card-image {
+  flex: 0 0 120px;
+  background: #f3f4f6;
+  overflow: hidden;
+}
+.sd-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sd-card-body {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.sd-card-term {
+  flex: 0 0 36%;
+  padding: 16px 20px;
+  font-size: 0.975rem;
+  font-weight: 700;
+  color: #2e3856;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.sd-card-divider {
+  width: 1px;
+  background: #e2e8f0;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.sd-card-definition {
+  flex: 1;
+  padding: 16px 20px;
+  font-size: 0.95rem;
+  color: #3d4966;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sd-card-example {
+  padding: 0 20px 14px;
+  font-size: 0.82rem;
+  color: #586380;
+  font-style: italic;
+  line-height: 1.5;
+  border-top: 1px solid #f0f2f8;
+  margin-top: -4px;
+  padding-top: 8px;
+}
+
+.sd-card-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+
+.sd-star-btn {
+  background: transparent;
+  border: 0;
+  color: #bfc7d9;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.14s, background 0.14s;
+}
+.sd-star-btn:hover { color: #f59e0b; background: #fef3c7; }
+.sd-star-btn.starred { color: #f59e0b; }
+
+/* Quiz type badge */
+.sd-quiz-type-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #f0f2ff;
+  border-radius: 999px;
+  color: #4255ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  letter-spacing: 0.03em;
+}
+
+/* ── Empty state ── */
+.sd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 20px;
+  background: #f8fafc;
+  border: 2px dashed #d9dde8;
+  border-radius: 12px;
+  color: #586380;
+  text-align: center;
+}
+.sd-empty span { font-size: 2rem; }
+.sd-empty p { margin: 0; font-weight: 600; }
+
+/* ── Dark mode ── */
+.dark .sd-title,
+.dark .sd-mode-label,
+.dark .sd-termlist-title { color: #e2e8f0; }
+.dark .sd-eyebrow,
+.dark .sd-description,
+.dark .sd-termlist-count { color: #8896b3; }
+.dark .sd-mode-btn {
+  background: #1e293b;
+  border-color: #334155;
+}
+.dark .sd-mode-btn:hover {
+  border-color: #6575ff;
+  box-shadow: 0 4px 16px rgba(100, 116, 255, 0.2);
+}
+.dark .sd-card {
+  background: #1e293b;
+  border-color: #334155;
+}
+.dark .sd-card:hover { border-color: #6575ff; }
+.dark .sd-card-term { color: #e2e8f0; }
+.dark .sd-card-definition { color: #cbd5e1; }
+.dark .sd-card-divider { background: #334155; }
+.dark .sd-card-example { color: #8896b3; border-color: #2d3a52; }
+.dark .sd-sort-select {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+.dark .sd-subnav { border-color: #334155; }
+.dark .sd-subnav-tab { color: #8896b3; }
+.dark .sd-subnav-tab:hover { color: #e2e8f0; }
+.dark .sd-action-btn--secondary { background: #1e2d5a; color: #7b93ff; }
+.dark .sd-action-btn--danger { background: #3b1a1a; color: #fca5a5; }
+.dark .sd-empty { background: #151e2e; border-color: #334155; }
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .sd-page { padding: 16px 16px 48px; }
+  .sd-mode-grid { grid-template-columns: repeat(2, 1fr); }
+  .sd-title-row { flex-direction: column; }
+  .sd-header-actions { flex-direction: row; }
+  .sd-card-term { flex: 0 0 42%; }
+}
+
+@media (max-width: 480px) {
+  .sd-card-body { flex-direction: column; align-items: stretch; }
+  .sd-card-term { padding: 14px 16px 8px; }
+  .sd-card-divider { width: auto; height: 1px; }
+  .sd-card-definition { padding: 8px 16px 14px; }
+}
