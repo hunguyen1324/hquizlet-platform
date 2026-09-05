@@ -25,12 +25,15 @@ func NewStudySetRepository(db *sql.DB) *StudySetRepository {
 // List returns all study sets for a user ordered by last updated.
 func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, user_id, title, description, thumbnail_url,
-		       content_type, term_language, definition_language, visibility,
-		       created_at, updated_at
-		FROM study_sets
-		WHERE user_id = $1
-		ORDER BY updated_at DESC, id DESC
+		SELECT ss.id, ss.user_id, ss.title, ss.description, ss.thumbnail_url,
+		       ss.content_type, ss.term_language, ss.definition_language, ss.visibility,
+		       ss.created_at, ss.updated_at,
+		       COUNT(f.id) AS flashcard_count
+		FROM study_sets ss
+		LEFT JOIN flashcards f ON f.study_set_id = ss.id
+		WHERE ss.user_id = $1
+		GROUP BY ss.id
+		ORDER BY ss.updated_at DESC, ss.id DESC
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -42,7 +45,7 @@ func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.St
 		var s model.StudySet
 		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
 			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
-			&s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.CreatedAt, &s.UpdatedAt, &s.FlashcardCount); err != nil {
 			return nil, err
 		}
 		sets = append(sets, s)
@@ -54,11 +57,14 @@ func (r *StudySetRepository) List(ctx context.Context, userID int64) ([]model.St
 // Authenticated Study API operations must always be user-scoped.
 func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, user_id, title, description, thumbnail_url,
-		       content_type, term_language, definition_language, visibility,
-		       created_at, updated_at
-		FROM study_sets
-		ORDER BY updated_at DESC, id DESC
+		SELECT ss.id, ss.user_id, ss.title, ss.description, ss.thumbnail_url,
+		       ss.content_type, ss.term_language, ss.definition_language, ss.visibility,
+		       ss.created_at, ss.updated_at,
+		       COUNT(f.id) AS flashcard_count
+		FROM study_sets ss
+		LEFT JOIN flashcards f ON f.study_set_id = ss.id
+		GROUP BY ss.id
+		ORDER BY ss.updated_at DESC, ss.id DESC
 	`)
 	if err != nil {
 		return nil, err
@@ -70,7 +76,7 @@ func (r *StudySetRepository) ListAll(ctx context.Context) ([]model.StudySet, err
 		var s model.StudySet
 		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
 			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
-			&s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.CreatedAt, &s.UpdatedAt, &s.FlashcardCount); err != nil {
 			return nil, err
 		}
 		sets = append(sets, s)
@@ -117,12 +123,15 @@ func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f
 	args = append(args, perPage, offset)
 	limitN := itoa(len(args) - 1)
 	offsetN := itoa(len(args))
-	q := `SELECT id, user_id, title, description, thumbnail_url,
-		       content_type, term_language, definition_language, visibility,
-		       created_at, updated_at
-		FROM study_sets
-		WHERE user_id = $1` + whereExtra +
-		` ORDER BY ` + orderCol + ` DESC, id DESC
+	q := `SELECT ss.id, ss.user_id, ss.title, ss.description, ss.thumbnail_url,
+		       ss.content_type, ss.term_language, ss.definition_language, ss.visibility,
+		       ss.created_at, ss.updated_at,
+		       COUNT(f.id) AS flashcard_count
+		FROM study_sets ss
+		LEFT JOIN flashcards f ON f.study_set_id = ss.id
+		WHERE ss.user_id = $1` + whereExtra +
+		` GROUP BY ss.id
+		ORDER BY ss.` + orderCol + ` DESC, ss.id DESC
 		LIMIT $` + limitN + ` OFFSET $` + offsetN
 
 	rows, err := r.db.QueryContext(ctx, q, args...)
@@ -136,7 +145,7 @@ func (r *StudySetRepository) ListWithFilter(ctx context.Context, userID int64, f
 		var s model.StudySet
 		if err := rows.Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
 			&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
-			&s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.CreatedAt, &s.UpdatedAt, &s.FlashcardCount); err != nil {
 			return model.StudySetListResult{}, err
 		}
 		sets = append(sets, s)

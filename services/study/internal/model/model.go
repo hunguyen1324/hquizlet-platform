@@ -18,7 +18,7 @@ type StudySet struct {
 	Visibility         string            `json:"visibility"`
 	CreatedAt          time.Time         `json:"createdAt"`
 	UpdatedAt          time.Time         `json:"updatedAt"`
-	FlashcardCount     int               `json:"flashcardCount,omitempty"`
+	FlashcardCount     int               `json:"flashcardCount"`
 	Flashcards         []Flashcard       `json:"flashcards,omitempty"`
 	QuizQuestions      []QuizQuestion    `json:"quizQuestions,omitempty"`
 }
