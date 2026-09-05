@@ -34,6 +34,20 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [progress, setProgress] = React.useState<ProgressListResponse | null>(null);
   const [progressError, setProgressError] = React.useState("");
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   const cards = set.flashcards ?? [];
   const progressHistory = progress?.history ?? [];
@@ -88,15 +102,39 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             <h1 className="sd-title">{set.title}</h1>
             {set.description && <p className="sd-description">{set.description}</p>}
           </div>
-          <div className="sd-header-actions">
-            <button className="sd-action-btn sd-action-btn--secondary" onClick={onEdit}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Sửa thẻ
+
+          {/* ── More (···) menu ── */}
+          <div className="sd-more-wrap" ref={menuRef}>
+            <button
+              className="sd-more-btn"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Xem thêm"
+              title="Xem thêm"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+              </svg>
             </button>
-            <button className="sd-action-btn sd-action-btn--danger" onClick={onDelete}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-              Xóa
-            </button>
+
+            {menuOpen && (
+              <div className="sd-dropdown">
+                <button
+                  className="sd-dropdown-item"
+                  onClick={() => { setMenuOpen(false); onEdit(); }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Sửa
+                </button>
+                <div className="sd-dropdown-divider" />
+                <button
+                  className="sd-dropdown-item sd-dropdown-item--danger"
+                  onClick={() => { setMenuOpen(false); onDelete(); }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  Xóa
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -120,7 +158,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
         {studyMode !== "dashboard" && (
           <div className="sd-subnav">
             <button
-              className={`sd-subnav-tab ${studyMode === "dashboard" ? "active" : ""}`}
+              className="sd-subnav-tab"
               onClick={() => setStudyMode("dashboard")}
             >
               Tổng quan
@@ -149,7 +187,6 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
       {studyMode === "dashboard" && (
         <div className="sd-overview">
 
-          {/* Progress panel */}
           <ProgressPanel
             status={progressStatus}
             errorMessage={progressError}
@@ -166,7 +203,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             }))}
           />
 
-          {/* ── Flashcard term list ── */}
+          {/* Flashcard term list */}
           {(set.contentType === "flashcard" || !set.contentType) && (
             <div className="sd-termlist">
               <div className="sd-termlist-header">
@@ -226,7 +263,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             </div>
           )}
 
-          {/* ── Quiz question list ── */}
+          {/* Quiz question list */}
           {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
             <div className="sd-termlist">
               <div className="sd-termlist-header">

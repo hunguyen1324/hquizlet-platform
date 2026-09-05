@@ -399,3 +399,94 @@
   .sd-card-divider { width: auto; height: 1px; }
   .sd-card-definition { padding: 8px 16px 14px; }
 }
+
+/* ── More (···) dropdown menu ────────────────────────────────────────────── */
+.sd-more-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sd-more-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: #fff;
+  border: 1px solid #d9dde8;
+  border-radius: 50%;
+  color: #586380;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+.sd-more-btn:hover {
+  background: #f0f2ff;
+  border-color: #8b97ff;
+  color: #4255ff;
+}
+
+.sd-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 200;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #d9dde8;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(46, 56, 86, 0.14);
+  padding: 6px;
+  animation: sd-dropdown-in 0.12s ease;
+}
+
+@keyframes sd-dropdown-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sd-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #2e3856;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 10px 12px;
+  text-align: left;
+  transition: background 0.12s;
+}
+.sd-dropdown-item:hover { background: #f4f5f9; }
+.sd-dropdown-item--danger { color: #dc2626; }
+.sd-dropdown-item--danger:hover { background: #fee2e2; }
+
+.sd-dropdown-divider {
+  height: 1px;
+  background: #e9ecf1;
+  margin: 4px 0;
+}
+
+/* dark mode for dropdown */
+.dark .sd-more-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #8896b3;
+}
+.dark .sd-more-btn:hover {
+  background: #1e2d5a;
+  border-color: #6575ff;
+  color: #7b93ff;
+}
+.dark .sd-dropdown {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.dark .sd-dropdown-item { color: #e2e8f0; }
+.dark .sd-dropdown-item:hover { background: #263248; }
+.dark .sd-dropdown-item--danger { color: #fca5a5; }
+.dark .sd-dropdown-item--danger:hover { background: #3b1a1a; }
+.dark .sd-dropdown-divider { background: #334155; }
