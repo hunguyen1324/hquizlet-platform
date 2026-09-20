@@ -28,6 +28,14 @@ func (s *FolderService) List(ctx context.Context, userID int64) ([]model.Folder,
 	return s.folders.List(ctx, userID)
 }
 
+// ListWithFilter returns paginated folders for a user with optional search/sort.
+func (s *FolderService) ListWithFilter(ctx context.Context, userID int64, f model.FolderFilter) (model.FolderListResult, error) {
+	if userID <= 0 {
+		return model.FolderListResult{}, ErrUnauthorized
+	}
+	return s.folders.ListWithFilter(ctx, userID, f)
+}
+
 // GetWithStudySets returns a folder with its study sets, verifying ownership.
 func (s *FolderService) GetWithStudySets(ctx context.Context, id, userID int64) (model.Folder, error) {
 	if err := requireUserID(userID); err != nil {

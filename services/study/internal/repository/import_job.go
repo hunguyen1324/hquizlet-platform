@@ -133,3 +133,77 @@ func scanJobRow(rows *sql.Rows) (model.ImportJob, error) {
 	}
 	return j, nil
 }
+
+// ---------------------------------------------------------------------------
+// Paginated import job list with filtering
+// ---------------------------------------------------------------------------
+
+// ListWithFilter returns paginated import jobs for a user with optional filters.
+// Filters: StudySetID (0 = all), Kind ("" = all), Status ("" = all).
+func (r *ImportJobRepository) ListWithFilter(ctx context.Context, userID int64, f model.ImportJobFilter) (model.ImportJobListResult, error) {
+	page, perPage := model.ClampPage(f.Page, f.PerPage, 100)
+	offset := (page - 1) * perPage
+
+	args := []any{userID}
+	whereExtra := ""
+
+	if f.StudySetID > 0 {
+		args = append(args, f.StudySetID)
+		whereExtra += " AND study_set_id = $" + itoa(len(args))
+	}
+	if f.Kind != "" {
+		args = append(args, f.Kind)
+		whereExtra += " AND kind = $" + itoa(len(args))
+	}
+	if f.Status != "" {
+		args = append(args, f.Status)
+		whereExtra += " AND status = $" + itoa(len(args))
+	}
+
+	var total int
+	countQ := `SELECT COUNT(*) FROM import_jobs WHERE user_id = $1` + whereExtra
+	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
+		return model.ImportJobListResult{}, err
+	}
+
+	args = append(args, perPage, offset)
+	limitN := itoa(len(args) - 1)
+	offsetN := itoa(len(args))
+
+	q := `SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, created_at, updated_at
+		FROM import_jobs
+		WHERE user_id = $1` + whereExtra + `
+		ORDER BY created_at DESC
+		LIMIT $` + limitN + ` OFFSET $` + offsetN
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return model.ImportJobListResult{}, err
+	}
+	defer rows.Close()
+
+	var jobs []model.ImportJob
+	for rows.Next() {
+		j, err := scanJobRow(rows)
+		if err != nil {
+			return model.ImportJobListResult{}, err
+		}
+		jobs = append(jobs, j)
+	}
+	if err := rows.Err(); err != nil {
+		return model.ImportJobListResult{}, err
+	}
+	if jobs == nil {
+		jobs = []model.ImportJob{}
+	}
+
+	return model.ImportJobListResult{
+		Items: jobs,
+		PageMeta: model.PageMeta{
+			Page:       page,
+			PerPage:    perPage,
+			Total:      total,
+			TotalPages: model.CalcTotalPages(total, perPage),
+		},
+	}, nil
+}

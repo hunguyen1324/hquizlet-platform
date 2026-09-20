@@ -98,9 +98,17 @@ func (s *ImportJobService) GetJob(ctx context.Context, jobID int64) (model.Impor
 	return s.jobs.Get(ctx, jobID)
 }
 
-// ListJobs returns recent jobs for a user.
+// ListJobs returns recent jobs for a user (legacy, no pagination).
 func (s *ImportJobService) ListJobs(ctx context.Context, userID int64) ([]model.ImportJob, error) {
 	return s.jobs.ListByUser(ctx, userID, 20)
+}
+
+// ListJobsWithFilter returns paginated import jobs for a user with optional filters.
+func (s *ImportJobService) ListJobsWithFilter(ctx context.Context, userID int64, f model.ImportJobFilter) (model.ImportJobListResult, error) {
+	if userID <= 0 {
+		return model.ImportJobListResult{}, ErrUnauthorized
+	}
+	return s.jobs.ListWithFilter(ctx, userID, f)
 }
 
 // ---------------------------------------------------------------------------
