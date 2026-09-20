@@ -202,7 +202,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
           className="ql-progress-bar"
           role="progressbar"
           aria-valuenow={index + 1}
-          aria-valuemax={total}
+          aria-valuemax={cards.length}
           style={{ width: `${progressPct}%` }}
         />
       </div>
@@ -210,7 +210,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
       {/* ── Counter + toolbar ── */}
       <div className="ql-topbar">
         <span className="ql-counter" aria-live="polite">
-          <strong>{index + 1}</strong> / {total}
+          <strong>{index + 1}</strong> / {cards.length}
         </span>
 
         <div className="ql-actions">
@@ -390,7 +390,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
               tabIndex={-1}
             />
           )) : (
-            <span className="ql-nav-count">{index + 1} / {total}</span>
+            <span className="ql-nav-count">{index + 1} / {cards.length}</span>
           )}
         </div>
 
