@@ -36,6 +36,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const PRELOAD_THRESHOLD = 20; // fetch thêm khi còn cách cuối 20 thẻ
 
   const generation = useQuizGeneration(studySetId, "flashcards", BATCH);
+  // Lưu seed của batch đầu để dùng lại khi preload batch tiếp theo.
+  // Cùng seed + tăng offset → deck shuffle giống nhau, không bao giờ trùng thẻ.
+  const initialSeedRef = React.useRef<number | null>(null);
+  const nextOffsetRef = React.useRef<number>(BATCH); // offset của batch tiếp theo
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
@@ -52,7 +56,6 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     autoPlay: false,
   });
   const [loadingMore, setLoadingMore] = React.useState(false);
-  const loadedSeeds = React.useRef<Set<number>>(new Set());
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -91,30 +94,35 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generation.state, starredOnly, studySetId, resetSave, cardById]);
 
-  // Track seed của generation đầu để không load lại
+  // Ghi nhớ seed của batch đầu để các batch tiếp theo dùng cùng seed + offset tăng dần
   React.useEffect(() => {
     if (generation.state.state === "ready") {
-      loadedSeeds.current.add(generation.state.data.seed);
+      initialSeedRef.current = generation.state.data.seed;
+      nextOffsetRef.current = BATCH; // reset offset khi generation mới (shuffle/restart)
     }
   }, [generation.state]);
 
-  // Lazy load thêm khi user gần đến cuối deck
+  // Preload batch tiếp theo khi user gần đến cuối deck hiện tại.
+  // Dùng seed cố định (từ batch đầu) + offset tăng dần → đảm bảo không trùng thẻ.
   React.useEffect(() => {
     const remaining = deck.length - index - 1;
     if (
       remaining > PRELOAD_THRESHOLD ||
       deck.length === 0 ||
       loadingMore ||
-      deck.length >= displayTotal
+      deck.length >= displayTotal ||
+      initialSeedRef.current === null
     ) return;
 
+    const seedToUse = initialSeedRef.current;
+    const offsetToUse = nextOffsetRef.current;
+
     setLoadingMore(true);
-    const newSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
     quizApi
-      .generate(token, studySetId, { mode: "flashcards", seed: newSeed, limit: BATCH })
+      .generate(token, studySetId, { mode: "flashcards", seed: seedToUse, limit: BATCH, offset: offsetToUse })
       .then((data) => {
-        if (loadedSeeds.current.has(data.seed)) return;
-        loadedSeeds.current.add(data.seed);
+        if (data.items.length === 0) return; // đã hết thẻ
+        nextOffsetRef.current = offsetToUse + BATCH; // chuẩn bị offset cho batch kế tiếp
         const newCards = data.items.map((item) => ({
           id: item.flashcardId,
           studySetId,
@@ -126,7 +134,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
           hintExplanation: (item as { hintExplanation?: string | null }).hintExplanation ?? null,
         }));
         const filtered = starredOnly ? newCards.filter((c) => c.starred) : newCards;
-        // Loại trùng
+        // Dedup phòng thủ (offset đảm bảo không trùng nhưng phòng race condition)
         setDeck((prev) => {
           const existingIds = new Set(prev.map((c) => c.id));
           const unique = filtered.filter((c) => !existingIds.has(c.id));
@@ -211,7 +219,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   const starredCount = cards.filter((c) => c.starred).length;
   const allSeen = seenCardIds.size >= total && total > 0;
-  const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
+  // Dùng displayTotal (tổng thẻ thật từ server) để progress phản ánh toàn bộ set,
+  // không bị kẹt ở 50% khi deck chỉ load batch 100/3188 thẻ.
+  const progressPct = displayTotal > 0 ? ((index + 1) / displayTotal) * 100 : 0;
 
   if (cards.length === 0) return <LearningEmptyState />;
 

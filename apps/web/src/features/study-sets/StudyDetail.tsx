@@ -237,7 +237,9 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
 
       {isFlashcardSet && (
         <div className="sd-learning-wrapper">
-          <LearningContainer set={set} mode={studyMode} />
+          {/* Truyền allCards (đã infinite-scroll đầy đủ) và cardTotal thật từ server.
+              set.flashcards chỉ là initial payload bị giới hạn trang đầu — không dùng trực tiếp. */}
+          <LearningContainer set={set} mode={studyMode} cards={allCards} totalCount={cardTotal} />
         </div>
       )}
 

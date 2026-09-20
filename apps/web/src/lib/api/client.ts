@@ -152,7 +152,7 @@ export type QuizEvaluateResponse = {
   contractVersion: string;
 };
 export const quizApi = {
-  generate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit?: number; options?: Record<string, unknown> }, signal?: AbortSignal): Promise<QuizGenerateResponse> =>
+  generate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit?: number; offset?: number; options?: Record<string, unknown> }, signal?: AbortSignal): Promise<QuizGenerateResponse> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz/generate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
   evaluate: (token: string, studySetId: number, payload: { mode: LearningMode; seed: number; limit: number; answers: QuizAnswer[] }, signal?: AbortSignal): Promise<QuizEvaluateResponse> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz/evaluate`, token, { method: "POST", body: JSON.stringify(payload), signal }),
