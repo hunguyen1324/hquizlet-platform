@@ -104,6 +104,7 @@ type generateRequest struct {
 	Mode    string         `json:"mode"`
 	Seed    uint64         `json:"seed"`
 	Limit   int            `json:"limit"`
+	Offset  int            `json:"offset,omitempty"` // vị trí bắt đầu trong deck đã shuffle (dùng cho preload batching)
 	Options map[string]any `json:"options,omitempty"`
 }
 
@@ -385,9 +386,9 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	defer func() {
 		s.met.observe("generate", req.Mode, status, time.Since(start))
-		log.Printf("[generate] request_id=%s uid=%s set=%d mode=%s seed=%d status=%d duration_ms=%d", reqID, userID, set.ID, req.Mode, req.Seed, status, time.Since(start).Milliseconds())
+		log.Printf("[generate] request_id=%s uid=%s set=%d mode=%s seed=%d offset=%d status=%d duration_ms=%d", reqID, userID, set.ID, req.Mode, req.Seed, req.Offset, status, time.Since(start).Milliseconds())
 	}()
-	items, err := engine.Generate(set.Flashcards, req.Mode, req.Seed, req.Limit)
+	items, err := engine.Generate(set.Flashcards, req.Mode, req.Seed, req.Limit, req.Offset)
 	if err != nil {
 		status = http.StatusUnprocessableEntity
 		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid mode, seed, or limit")
