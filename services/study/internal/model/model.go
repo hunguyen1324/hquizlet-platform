@@ -402,3 +402,94 @@ type UpdateFolderInput struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 }
+
+// ---------------------------------------------------------------------------
+// Shared pagination primitives
+// ---------------------------------------------------------------------------
+
+// PageMeta holds pagination metadata returned in every paginated response.
+// All paginated list endpoints share this exact JSON shape so the frontend
+// can use a single helper to extract cursor state.
+type PageMeta struct {
+	Page       int `json:"page"`
+	PerPage    int `json:"perPage"`
+	Total      int `json:"total"`
+	TotalPages int `json:"totalPages"`
+}
+
+// ClampPage normalises page/perPage values.
+//   - page:    min 1
+//   - perPage: clamped to [1, max]
+func ClampPage(page, perPage, maxPerPage int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 20
+	}
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+	return page, perPage
+}
+
+// CalcTotalPages computes total pages from total records and perPage.
+func CalcTotalPages(total, perPage int) int {
+	if perPage <= 0 {
+		return 0
+	}
+	pages := total / perPage
+	if total%perPage != 0 {
+		pages++
+	}
+	return pages
+}
+
+// ---------------------------------------------------------------------------
+// Folder pagination
+// ---------------------------------------------------------------------------
+
+// FolderFilter holds optional filter/sort/pagination params for listing folders.
+type FolderFilter struct {
+	Search  string // title substring search (optional)
+	SortBy  string // "updated" | "created" | "title" (default: updated)
+	Page    int    // 1-based
+	PerPage int    // default 20, max 100
+}
+
+// FolderListResult is the paginated response for GET /v1/folders.
+type FolderListResult struct {
+	Items    []Folder `json:"items"`
+	PageMeta          // inlined: page, perPage, total, totalPages
+}
+
+// ---------------------------------------------------------------------------
+// ImportJob pagination
+// ---------------------------------------------------------------------------
+
+// ImportJobFilter holds pagination/filter params for GET /v1/import/jobs.
+type ImportJobFilter struct {
+	StudySetID int64  // 0 = all sets
+	Kind       string // "" | "flashcard" | "quiz"
+	Status     string // "" | "pending" | "running" | "done" | "failed"
+	Page       int    // 1-based
+	PerPage    int    // default 20, max 100
+}
+
+// ImportJobListResult is the paginated response for GET /v1/import/jobs.
+type ImportJobListResult struct {
+	Items    []ImportJob `json:"items"`
+	PageMeta             // inlined
+}
+
+// FlashcardFilter holds pagination params for listing flashcards under a study set.
+type FlashcardFilter struct {
+	Page    int // 1-based, default 1
+	PerPage int // default 50, max 200
+}
+
+// FlashcardListResult is the paginated response for GET /v1/study-sets/{id}/flashcards.
+type FlashcardListResult struct {
+	Items    []Flashcard `json:"items"`
+	PageMeta             // inlined: page, perPage, total, totalPages
+}

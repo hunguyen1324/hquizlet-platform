@@ -5,3 +5,4 @@ export {
   type ProgressPanelStatus,
   type ProgressSummaryView,
 } from "./ProgressPanel";
+export { SpacedRepetitionPanel, type SRStats } from "./SpacedRepetitionPanel";

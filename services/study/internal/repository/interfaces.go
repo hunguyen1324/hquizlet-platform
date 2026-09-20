@@ -26,6 +26,7 @@ type StudySets interface {
 // Flashcards is the interface for flashcard data access.
 type Flashcards interface {
 	ListByStudySet(ctx context.Context, studySetID int64) ([]model.Flashcard, error)
+	ListByStudySetPaged(ctx context.Context, studySetID int64, page, perPage int) (items []model.Flashcard, total int, err error)
 	Get(ctx context.Context, id int64) (model.Flashcard, error)
 	Create(ctx context.Context, studySetID int64, in model.CreateFlashcardInput) (model.Flashcard, error)
 	Update(ctx context.Context, id int64, in model.UpdateFlashcardInput) (model.Flashcard, error)
@@ -37,6 +38,7 @@ type Flashcards interface {
 // Folders is the interface for folder data access.
 type Folders interface {
 	List(ctx context.Context, userID int64) ([]model.Folder, error)
+	ListWithFilter(ctx context.Context, userID int64, f model.FolderFilter) (model.FolderListResult, error)
 	Get(ctx context.Context, id int64) (model.Folder, error)
 	Create(ctx context.Context, userID int64, in model.CreateFolderInput) (model.Folder, error)
 	Update(ctx context.Context, id int64, in model.UpdateFolderInput) (model.Folder, error)
@@ -74,6 +76,7 @@ type ImportJobs interface {
 	Get(ctx context.Context, id int64) (model.ImportJob, error)
 	Update(ctx context.Context, id int64, in model.UpdateImportJobInput) (model.ImportJob, error)
 	ListByUser(ctx context.Context, userID int64, limit int) ([]model.ImportJob, error)
+	ListWithFilter(ctx context.Context, userID int64, f model.ImportJobFilter) (model.ImportJobListResult, error)
 }
 
 // ErrDuplicateIdempotencyKey is returned when a retry uses the same idempotency key.

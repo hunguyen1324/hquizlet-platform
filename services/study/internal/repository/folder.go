@@ -162,3 +162,74 @@ func (r *FolderRepository) RemoveStudySet(ctx context.Context, folderID, studySe
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// Paginated folder list
+// ---------------------------------------------------------------------------
+
+// ListWithFilter returns paginated folders for a user with optional search and sort.
+// It mirrors the pattern used by StudySetRepository.ListWithFilter.
+func (r *FolderRepository) ListWithFilter(ctx context.Context, userID int64, f model.FolderFilter) (model.FolderListResult, error) {
+	page, perPage := model.ClampPage(f.Page, f.PerPage, 100)
+	offset := (page - 1) * perPage
+
+	orderCol := "updated_at"
+	switch f.SortBy {
+	case "created":
+		orderCol = "created_at"
+	case "title":
+		orderCol = "title"
+	}
+
+	args := []any{userID}
+	whereExtra := ""
+	if f.Search != "" {
+		args = append(args, "%"+f.Search+"%")
+		whereExtra = " AND title ILIKE $" + itoa(len(args))
+	}
+
+	var total int
+	countQ := `SELECT COUNT(*) FROM folders WHERE user_id = $1` + whereExtra
+	if err := r.db.QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
+		return model.FolderListResult{}, err
+	}
+
+	args = append(args, perPage, offset)
+	limitN := itoa(len(args) - 1)
+	offsetN := itoa(len(args))
+
+	q := `SELECT ` + folderCols + `, (SELECT COUNT(*) FROM folder_to_study_sets fs WHERE fs.folder_id = folders.id)
+		FROM folders
+		WHERE user_id = $1` + whereExtra + `
+		ORDER BY ` + orderCol + ` DESC, id DESC
+		LIMIT $` + limitN + ` OFFSET $` + offsetN
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return model.FolderListResult{}, err
+	}
+	defer rows.Close()
+
+	folders := []model.Folder{}
+	for rows.Next() {
+		var fld model.Folder
+		if err := rows.Scan(&fld.ID, &fld.UserID, &fld.Title, &fld.Description,
+			&fld.CreatedAt, &fld.UpdatedAt, &fld.StudySetCount); err != nil {
+			return model.FolderListResult{}, err
+		}
+		folders = append(folders, fld)
+	}
+	if err := rows.Err(); err != nil {
+		return model.FolderListResult{}, err
+	}
+
+	return model.FolderListResult{
+		Items: folders,
+		PageMeta: model.PageMeta{
+			Page:       page,
+			PerPage:    perPage,
+			Total:      total,
+			TotalPages: model.CalcTotalPages(total, perPage),
+		},
+	}, nil
+}

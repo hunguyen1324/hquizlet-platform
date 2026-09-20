@@ -98,9 +98,17 @@ func (s *ImportJobService) GetJob(ctx context.Context, jobID int64) (model.Impor
 	return s.jobs.Get(ctx, jobID)
 }
 
-// ListJobs returns recent jobs for a user.
+// ListJobs returns recent jobs for a user (legacy, no pagination).
 func (s *ImportJobService) ListJobs(ctx context.Context, userID int64) ([]model.ImportJob, error) {
 	return s.jobs.ListByUser(ctx, userID, 20)
+}
+
+// ListJobsWithFilter returns paginated import jobs for a user with optional filters.
+func (s *ImportJobService) ListJobsWithFilter(ctx context.Context, userID int64, f model.ImportJobFilter) (model.ImportJobListResult, error) {
+	if userID <= 0 {
+		return model.ImportJobListResult{}, ErrUnauthorized
+	}
+	return s.jobs.ListWithFilter(ctx, userID, f)
 }
 
 // ---------------------------------------------------------------------------
@@ -123,16 +131,7 @@ func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, data []by
 		return
 	}
 
-	if len(parseErrors) > 0 {
-		// Validation errors: mark done immediately with 0 imports and the errors.
-		_, _ = s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
-			Status:   model.ImportStatusDone,
-			Total:    len(items) + len(parseErrors),
-			Imported: 0,
-			Errors:   parseErrors,
-		})
-		return
-	}
+	// Tiếp tục import các dòng hợp lệ, bỏ qua dòng lỗi
 
 	// Determine start position
 	existing, err := s.flashcards.ListByStudySet(ctx, studySetID)
@@ -190,10 +189,11 @@ func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, data []by
 
 	_, _ = s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
 		Status:   model.ImportStatusDone,
-		Total:    total,
+		Total:    total + len(parseErrors),
 		Imported: imported,
+		Errors:   parseErrors,
 	})
-	log.Info("flashcard import done", "imported", imported, "total", total)
+	log.Info("flashcard import done", "imported", imported, "total", total, "skipped", len(parseErrors))
 }
 
 func (s *ImportJobService) runQuizImport(jobID, studySetID int64, data []byte) {

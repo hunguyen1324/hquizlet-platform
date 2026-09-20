@@ -110,6 +110,8 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 && parts[1] == "flashcards" {
 		if r.Method == http.MethodPost {
 			h.createFlashcard(w, r, setID)
+		} else if r.Method == http.MethodGet {
+			h.listFlashcardsPaged(w, r, setID)
 		} else {
 			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -236,6 +238,21 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// listFlashcardsPaged handles GET /v1/study-sets/{id}/flashcards?page=1&per_page=50
+func (h *Handler) listFlashcardsPaged(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	q := r.URL.Query()
+	filter := model.FlashcardFilter{
+		Page:    intQueryParam(q.Get("page"), 1),
+		PerPage: intQueryParam(q.Get("per_page"), 50),
+	}
+	result, err := h.sets.GetFlashcardsPaged(r.Context(), studySetID, userIDFromHeader(r), filter)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, result)
+}
+
 func (h *Handler) createFlashcard(w http.ResponseWriter, r *http.Request, studySetID int64) {
 	var in model.CreateFlashcardInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -322,12 +339,24 @@ func (h *Handler) flashcardRouter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listFolders(w http.ResponseWriter, r *http.Request) {
-	folders, err := h.folders.List(r.Context(), userIDFromHeader(r))
+	userID := userIDFromHeader(r)
+	q := r.URL.Query()
+	filter := model.FolderFilter{
+		Search:  strings.TrimSpace(q.Get("search")),
+		SortBy:  q.Get("sort"),
+		Page:    intQueryParam(q.Get("page"), 1),
+		PerPage: intQueryParam(q.Get("per_page"), 20),
+	}
+	// If no pagination params were passed at all, keep backward-compat: any
+	// client that expects a flat array will now get { items, page, perPage,
+	// total, totalPages } – this is an intentional breaking change aligned
+	// with the roadmap standard.
+	result, err := h.folders.ListWithFilter(r.Context(), userID, filter)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
-	WriteJSON(w, http.StatusOK, folders)
+	WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) createFolder(w http.ResponseWriter, r *http.Request) {
@@ -614,19 +643,32 @@ func (h *Handler) importQuizAsync(w http.ResponseWriter, r *http.Request, studyS
 	WriteJSON(w, http.StatusAccepted, job)
 }
 
-// GET /v1/import/jobs — list recent jobs for the authenticated user.
+// GET /v1/import/jobs — list paginated jobs for the authenticated user.
+// Query params: page, per_page, study_set_id, kind, status.
 func (h *Handler) listImportJobs(w http.ResponseWriter, r *http.Request) {
 	userID := userIDFromHeader(r)
 	if userID == 0 {
 		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	jobs, err := h.importJobSvc.ListJobs(r.Context(), userID)
+	q := r.URL.Query()
+	filter := model.ImportJobFilter{
+		Page:    intQueryParam(q.Get("page"), 1),
+		PerPage: intQueryParam(q.Get("per_page"), 20),
+		Kind:    q.Get("kind"),
+		Status:  q.Get("status"),
+	}
+	if rawSetID := q.Get("study_set_id"); rawSetID != "" {
+		if id, err := strconv.ParseInt(rawSetID, 10, 64); err == nil && id > 0 {
+			filter.StudySetID = id
+		}
+	}
+	result, err := h.importJobSvc.ListJobsWithFilter(r.Context(), userID, filter)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
-	WriteJSON(w, http.StatusOK, jobs)
+	WriteJSON(w, http.StatusOK, result)
 }
 
 // GET /v1/import/jobs/{id} — get a single job's current state.

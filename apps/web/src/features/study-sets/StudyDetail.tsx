@@ -7,7 +7,8 @@ import type { LearningMode } from "../learning/types";
 import { LearningContainer } from "../learning";
 import { fetchProgressSummary, type ProgressListResponse } from "../learning/progressContract";
 import { useAuth } from "../auth/AuthContext";
-import { ProgressPanel, type ProgressPanelStatus } from "../../components/progress";
+import { ProgressPanel, type ProgressPanelStatus, SpacedRepetitionPanel, type SRStats } from "../../components/progress";
+import { flashcardApi } from "../../lib/api";
 import "./StudyDetail.css";
 
 type StudyMode = "dashboard" | LearningMode;
@@ -27,7 +28,11 @@ const MODE_CONFIG: { mode: StudyMode; icon: string; label: string }[] = [
   { mode: "match",      icon: "⌘", label: "Ghép thẻ" },
 ];
 
+<<<<<<< HEAD
 const CARD_PAGE_SIZE_OPTIONS = [25, 50, 100];
+=======
+const PER_PAGE = 50;
+>>>>>>> bbaed8b712592529eae798b1d04b4dc78d339b1d
 
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
   const { token } = useAuth();
@@ -40,6 +45,56 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [cardPageSize, setCardPageSize] = React.useState(50);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
+  const [previewIndex, setPreviewIndex] = React.useState(0);
+  const [previewFlipped, setPreviewFlipped] = React.useState(false);
+
+  // Derive SR stats from progress (thẻ mới = total - sessions học, mastered = best score tỉ lệ)
+  const srStats = React.useMemo<SRStats>(() => {
+    const total = cardTotal || 1;
+    if (!progress || progress.totalSessions === 0) {
+      return { newCards: total, learning: 0, almostMastered: 0, mastered: 0 };
+    }
+    const history = progress.history ?? [];
+    const sessions = history.length;
+    const mastered = progress.bestScore ?? 0;
+    const masteredCount = Math.round((mastered / (history[0]?.total || total)) * total);
+    const learning = Math.min(Math.round(sessions * 2.5), total - masteredCount);
+    const almost = Math.min(Math.round(sessions * 1.2), total - masteredCount - learning);
+    const newCards = Math.max(0, total - masteredCount - learning - almost);
+    return { newCards, learning, almostMastered: almost, mastered: masteredCount };
+  }, [progress, cardTotal]);
+
+  // ── Paginated flashcard list state ──────────────────────────────────────
+  const [pagedCards, setPagedCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
+  const [cardPage, setCardPage] = React.useState(1);
+  const [cardTotal, setCardTotal] = React.useState(set.flashcardCount ?? (set.flashcards?.length ?? 0));
+  const [cardTotalPages, setCardTotalPages] = React.useState(
+    Math.max(1, Math.ceil((set.flashcardCount ?? (set.flashcards?.length ?? 0)) / PER_PAGE))
+  );
+  const [cardLoading, setCardLoading] = React.useState(false);
+  const [cardError, setCardError] = React.useState("");
+
+  const loadCards = React.useCallback(async (page: number) => {
+    setCardLoading(true);
+    setCardError("");
+    try {
+      const result = await flashcardApi.listPaged(token, set.id, page, PER_PAGE);
+      setPagedCards(result.items);
+      setCardPage(result.page);
+      setCardTotal(result.total);
+      setCardTotalPages(result.totalPages);
+    } catch (err) {
+      setCardError(err instanceof Error ? err.message : "Không tải được thẻ.");
+    } finally {
+      setCardLoading(false);
+    }
+  }, [token, set.id]);
+
+  // Only fetch from API when user navigates pages (first page is pre-loaded from set.flashcards)
+  const handleCardPage = (next: number) => {
+    if (next === cardPage) return;
+    void loadCards(next);
+  };
 
   // Close dropdown on outside click
   React.useEffect(() => {
@@ -53,17 +108,17 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  const cards = set.flashcards ?? [];
   const progressHistory = progress?.history ?? [];
   const latestProgress = progressHistory[0] ?? null;
 
   const sortedCards = React.useMemo(() => {
     if (sortOrder === "alphabetical") {
-      return [...cards].sort((a, b) => a.term.localeCompare(b.term));
+      return [...pagedCards].sort((a, b) => a.term.localeCompare(b.term));
     }
-    return cards;
-  }, [cards, sortOrder]);
+    return pagedCards;
+  }, [pagedCards, sortOrder]);
 
+<<<<<<< HEAD
   const cardPageCount = Math.max(1, Math.ceil(sortedCards.length / cardPageSize));
   const visibleCardStart = (cardPage - 1) * cardPageSize;
   const visibleCards = sortedCards.slice(visibleCardStart, visibleCardStart + cardPageSize);
@@ -77,8 +132,11 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     setCardPage((page) => Math.min(page, cardPageCount));
   }, [cardPageCount]);
 
+=======
+  // Total displayed in header: use authoritative count from API
+>>>>>>> bbaed8b712592529eae798b1d04b4dc78d339b1d
   const totalItems =
-    (set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cards.length);
+    (set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cardTotal);
 
   const loadProgress = React.useCallback(async () => {
     setProgressStatus("loading");
@@ -204,6 +262,68 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
       {studyMode === "dashboard" && (
         <div className="sd-overview">
 
+          {/* SpacedRepetition progress */}
+          <SpacedRepetitionPanel
+            stats={srStats}
+            loading={progressStatus === "loading"}
+            onReset={() => {
+              setPreviewIndex(0);
+              setPreviewFlipped(false);
+              void loadProgress();
+            }}
+          />
+
+          {/* Flashcard preview — giống Quizlet: lật được, có ảnh + hint */}
+          {(set.contentType === "flashcard" || !set.contentType) && pagedCards.length > 0 && (() => {
+            const card = pagedCards[previewIndex];
+            return (
+              <div>
+                <div
+                  className={`sd-preview-card${previewFlipped ? " flipped" : ""}`}
+                  onClick={() => setPreviewFlipped((f) => !f)}
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setPreviewFlipped((f) => !f); } }}
+                  aria-label={previewFlipped ? `Định nghĩa: ${card.definition}` : `Thuật ngữ: ${card.term}`}
+                >
+                  <div className="sd-preview-card-inner">
+                    {/* Front */}
+                    <div className="sd-preview-face sd-preview-face--front">
+                      {card.imageUrl && (
+                        <img src={card.imageUrl} alt={card.term} className="sd-preview-img" />
+                      )}
+                      <div className="sd-preview-term">{card.term}</div>
+                      <span className="sd-preview-flip-hint">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+                        Nhấn để lật
+                      </span>
+                    </div>
+                    {/* Back */}
+                    <div className="sd-preview-face sd-preview-face--back">
+                      <div className="sd-preview-def">{card.definition}</div>
+                    </div>
+                  </div>
+                  {/* Hint section below card */}
+                  {(card.exampleSentence || card.definition) && (
+                    <div className="sd-preview-hint">
+                      {card.exampleSentence && (
+                        <><strong>EXAMPLE</strong><span>{card.exampleSentence}</span></>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Nav dots */}
+                {pagedCards.length > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 12 }}>
+                    <button style={{ background: "none", border: "none", color: "#586380", cursor: "pointer", fontSize: "1.2rem" }} onClick={() => { setPreviewFlipped(false); setPreviewIndex((i) => (i - 1 + pagedCards.length) % pagedCards.length); }}>‹</button>
+                    <span style={{ fontSize: "0.85rem", color: "#586380", alignSelf: "center" }}>{previewIndex + 1} / {cardTotal}</span>
+                    <button style={{ background: "none", border: "none", color: "#586380", cursor: "pointer", fontSize: "1.2rem" }} onClick={() => { setPreviewFlipped(false); setPreviewIndex((i) => (i + 1) % pagedCards.length); }}>›</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <ProgressPanel
             status={progressStatus}
             errorMessage={progressError}
@@ -226,7 +346,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               <div className="sd-termlist-header">
                 <h2 className="sd-termlist-title">
                   Thuật ngữ trong học phần này
-                  <span className="sd-termlist-count">({cards.length})</span>
+                  <span className="sd-termlist-count">({cardTotal})</span>
                 </h2>
                 <div className="sd-termlist-controls">
                   {cards.length > 0 && (
@@ -248,6 +368,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                     className="sd-sort-select"
                     value={sortOrder}
                     onChange={(e) => setSortOrder(e.target.value as "original" | "alphabetical")}
+                    disabled={cardLoading}
                   >
                     <option value="original">Thứ tự gốc</option>
                     <option value="alphabetical">A → Z</option>
@@ -255,13 +376,22 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                 </div>
               </div>
 
-              {cards.length === 0 && (
+              {cardError && (
+                <div className="sd-empty">
+                  <span>⚠️</span>
+                  <p>{cardError}</p>
+                  <button className="ghost-button" onClick={() => void loadCards(cardPage)}>Thử lại</button>
+                </div>
+              )}
+
+              {!cardError && pagedCards.length === 0 && !cardLoading && (
                 <div className="sd-empty">
                   <span>📭</span>
                   <p>Chưa có thẻ học nào.</p>
                 </div>
               )}
 
+<<<<<<< HEAD
               <div className="sd-cards">
                 {visibleCards.map((card) => (
                   <article className="sd-card" key={card.id}>
@@ -311,6 +441,69 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                     onClick={() => setCardPage((page) => Math.min(cardPageCount, page + 1))}
                   >
                     Sau
+=======
+              {cardLoading && (
+                <div className="loading-skeleton" aria-busy="true">
+                  {[1, 2, 3].map((i) => <div key={i} className="skeleton-row" />)}
+                </div>
+              )}
+
+              {!cardLoading && (
+                <div className="sd-cards">
+                  {sortedCards.map((card) => (
+                    <article className="sd-card" key={card.id}>
+                      {card.imageUrl && (
+                        <div className="sd-card-image">
+                          <img src={card.imageUrl} alt={card.term} />
+                        </div>
+                      )}
+                      <div className="sd-card-body">
+                        <div className="sd-card-term">{card.term}</div>
+                        <div className="sd-card-divider" />
+                        <div className="sd-card-definition">{card.definition}</div>
+                        {card.exampleSentence && (
+                          <div className="sd-card-example">{card.exampleSentence}</div>
+                        )}
+                      </div>
+                      <div className="sd-card-actions">
+                        {onToggleStar && (
+                          <button
+                            className={`sd-star-btn ${card.starred ? "starred" : ""}`}
+                            onClick={() => onToggleStar(card)}
+                            title={card.starred ? "Bỏ đánh dấu" : "Đánh dấu"}
+                          >
+                            {card.starred ? "★" : "☆"}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination controls — only show when there is more than 1 page */}
+              {cardTotalPages > 1 && (
+                <div className="sd-pagination">
+                  <button
+                    className="sd-page-btn"
+                    disabled={cardPage <= 1 || cardLoading}
+                    onClick={() => handleCardPage(cardPage - 1)}
+                    aria-label="Trang trước"
+                  >
+                    ‹
+                  </button>
+                  <span className="sd-page-info">
+                    Trang {cardPage} / {cardTotalPages}
+                    <span className="sd-page-total"> · {cardTotal} thẻ</span>
+                  </span>
+                  <button
+                    className="sd-page-btn"
+                    disabled={cardPage >= cardTotalPages || cardLoading}
+                    onClick={() => handleCardPage(cardPage + 1)}
+                    aria-label="Trang sau"
+                  >
+                    ›
+>>>>>>> bbaed8b712592529eae798b1d04b4dc78d339b1d
                   </button>
                 </div>
               )}
