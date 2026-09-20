@@ -230,4 +230,21 @@ var migrations = []string{
 		is_correct  BOOLEAN NOT NULL DEFAULT false
 	)`,
 	`CREATE INDEX IF NOT EXISTS quiz_question_option_question_id_idx ON quiz_question_option(question_id)`,
+
+	// 022 – async import jobs
+	`CREATE TABLE IF NOT EXISTS import_jobs (
+		id          BIGSERIAL PRIMARY KEY,
+		user_id     BIGINT NOT NULL,
+		study_set_id BIGINT NOT NULL REFERENCES study_sets(id) ON DELETE CASCADE,
+		kind        TEXT NOT NULL CHECK (kind IN ('flashcard','quiz')),
+		status      TEXT NOT NULL DEFAULT 'pending'
+			CHECK (status IN ('pending','running','done','failed')),
+		total       INT NOT NULL DEFAULT 0,
+		imported    INT NOT NULL DEFAULT 0,
+		errors      JSONB NOT NULL DEFAULT '[]',
+		error_msg   TEXT NOT NULL DEFAULT '',
+		created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	)`,
+	`CREATE INDEX IF NOT EXISTS import_jobs_user_id_created_idx ON import_jobs(user_id, created_at DESC)`,
 }

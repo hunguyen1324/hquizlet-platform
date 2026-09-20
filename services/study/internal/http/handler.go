@@ -23,11 +23,12 @@ type Handler struct {
 	progress      *service.ProgressService
 	quizQuestions *service.QuizQuestionService
 	importSvc     *service.ImportService
+	importJobSvc  *service.ImportJobService
 	db            *sql.DB
 }
 
-func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, quizQuestions *service.QuizQuestionService, importSvc *service.ImportService, db *sql.DB) *Handler {
-	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, quizQuestions: quizQuestions, importSvc: importSvc, db: db}
+func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, quizQuestions *service.QuizQuestionService, importSvc *service.ImportService, importJobSvc *service.ImportJobService, db *sql.DB) *Handler {
+	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, quizQuestions: quizQuestions, importSvc: importSvc, importJobSvc: importJobSvc, db: db}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -44,6 +45,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Progress routes – handled within studySetRouter via path inspection.
 	// Phase 4 internal API: Quiz service fetches flashcards by ownership.
 	mux.HandleFunc("/internal/study-sets/", h.internalRouter)
+
+	// Async import job polling
+	mux.HandleFunc("GET /v1/import/jobs", h.listImportJobs)
+	mux.HandleFunc("GET /v1/import/jobs/", h.getImportJob)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +138,7 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 10: Import routes
+	// Phase 10: Import routes (sync — blocks until complete)
 	if len(parts) == 3 && parts[1] == "import" && parts[2] == "flashcards" {
 		if r.Method == http.MethodPost {
 			h.importFlashcards(w, r, setID)
@@ -145,6 +150,25 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 3 && parts[1] == "import" && parts[2] == "quiz" {
 		if r.Method == http.MethodPost {
 			h.importQuiz(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+	// Async import routes — returns job immediately, worker runs in background.
+	// POST /v1/study-sets/{id}/import/flashcards/async
+	if len(parts) == 4 && parts[1] == "import" && parts[2] == "flashcards" && parts[3] == "async" {
+		if r.Method == http.MethodPost {
+			h.importFlashcardsAsync(w, r, setID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+	// POST /v1/study-sets/{id}/import/quiz/async
+	if len(parts) == 4 && parts[1] == "import" && parts[2] == "quiz" && parts[3] == "async" {
+		if r.Method == http.MethodPost {
+			h.importQuizAsync(w, r, setID)
 		} else {
 			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -545,6 +569,95 @@ func (h *Handler) importQuiz(w http.ResponseWriter, r *http.Request, studySetID 
 		return
 	}
 	WriteJSON(w, http.StatusOK, result)
+}
+
+// ---------------------------------------------------------------------------
+// Async import handlers (returns job immediately; worker runs in background)
+
+func (h *Handler) importFlashcardsAsync(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	job, err := h.importJobSvc.EnqueueFlashcards(r.Context(), studySetID, userIDFromHeader(r), file)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusAccepted, job)
+}
+
+func (h *Handler) importQuizAsync(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	job, err := h.importJobSvc.EnqueueQuiz(r.Context(), studySetID, userIDFromHeader(r), file)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusAccepted, job)
+}
+
+// GET /v1/import/jobs — list recent jobs for the authenticated user.
+func (h *Handler) listImportJobs(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFromHeader(r)
+	if userID == 0 {
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	jobs, err := h.importJobSvc.ListJobs(r.Context(), userID)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, jobs)
+}
+
+// GET /v1/import/jobs/{id} — get a single job's current state.
+func (h *Handler) getImportJob(w http.ResponseWriter, r *http.Request) {
+	parts := PathParts(r.URL.Path, "/v1/import/jobs/")
+	if len(parts) == 0 {
+		WriteError(w, http.StatusNotFound, "not found")
+		return
+	}
+	jobID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid job id")
+		return
+	}
+
+	job, err := h.importJobSvc.GetJob(r.Context(), jobID)
+	if errors.Is(err, repository.ErrNotFound) {
+		WriteError(w, http.StatusNotFound, "job not found")
+		return
+	}
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+
+	// Ownership check: only the job owner can see it.
+	if job.UserID != userIDFromHeader(r) {
+		WriteError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	WriteJSON(w, http.StatusOK, job)
 }
 
 // ---------------------------------------------------------------------------

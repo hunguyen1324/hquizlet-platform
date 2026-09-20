@@ -68,14 +68,23 @@ type QuizQuestions interface {
 	DeleteByStudySet(ctx context.Context, studySetID int64) error
 }
 
+// ImportJobs is the interface for async import job data access.
+type ImportJobs interface {
+	Create(ctx context.Context, in model.CreateImportJobInput) (model.ImportJob, error)
+	Get(ctx context.Context, id int64) (model.ImportJob, error)
+	Update(ctx context.Context, id int64, in model.UpdateImportJobInput) (model.ImportJob, error)
+	ListByUser(ctx context.Context, userID int64, limit int) ([]model.ImportJob, error)
+}
+
 // ErrDuplicateIdempotencyKey is returned when a retry uses the same idempotency key.
 var ErrDuplicateIdempotencyKey = errors.New("duplicate idempotency key")
 
 // Compile-time interface checks.
 var (
-	_ StudySets       = (*StudySetRepository)(nil)
-	_ Flashcards      = (*FlashcardRepository)(nil)
-	_ Folders         = (*FolderRepository)(nil)
+	_ StudySets        = (*StudySetRepository)(nil)
+	_ Flashcards       = (*FlashcardRepository)(nil)
+	_ Folders          = (*FolderRepository)(nil)
 	_ LearningProgress = (*LearningProgressRepository)(nil)
-	_ QuizQuestions   = (*QuizQuestionRepository)(nil)
+	_ QuizQuestions    = (*QuizQuestionRepository)(nil)
+	_ ImportJobs       = (*ImportJobRepository)(nil)
 )

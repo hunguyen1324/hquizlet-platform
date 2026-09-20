@@ -307,6 +307,61 @@ type ImportQuizResult struct {
 	Errors   []ImportError `json:"errors"`
 }
 
+// ---------------------------------------------------------------------------
+// Async Import Job domain
+// ---------------------------------------------------------------------------
+
+// ImportJobKind is the type of import: flashcard or quiz.
+type ImportJobKind string
+
+const (
+	ImportKindFlashcard ImportJobKind = "flashcard"
+	ImportKindQuiz      ImportJobKind = "quiz"
+)
+
+// ImportJobStatus is the lifecycle state of an async import job.
+type ImportJobStatus string
+
+const (
+	ImportStatusPending   ImportJobStatus = "pending"
+	ImportStatusRunning   ImportJobStatus = "running"
+	ImportStatusDone      ImportJobStatus = "done"
+	ImportStatusFailed    ImportJobStatus = "failed"
+)
+
+// ImportJob is the persistent record of one async import operation.
+type ImportJob struct {
+	ID         int64           `json:"id"`
+	UserID     int64           `json:"userId"`
+	StudySetID int64           `json:"studySetId"`
+	Kind       ImportJobKind   `json:"kind"`
+	Status     ImportJobStatus `json:"status"`
+	// Progress counters (updated as chunks are saved)
+	Total     int `json:"total"`     // total rows parsed
+	Imported  int `json:"imported"`  // rows successfully saved so far
+	// Result (populated on done/failed)
+	Errors    []ImportError `json:"errors,omitempty"`
+	ErrorMsg  string        `json:"errorMsg,omitempty"` // fatal error message
+	CreatedAt time.Time     `json:"createdAt"`
+	UpdatedAt time.Time     `json:"updatedAt"`
+}
+
+// CreateImportJobInput is the payload to create a pending job.
+type CreateImportJobInput struct {
+	UserID     int64
+	StudySetID int64
+	Kind       ImportJobKind
+}
+
+// UpdateImportJobInput carries the mutable fields for an in-progress/finished job.
+type UpdateImportJobInput struct {
+	Status   ImportJobStatus
+	Total    int
+	Imported int
+	Errors   []ImportError
+	ErrorMsg string
+}
+
 // StudySetFilter holds optional search/filter/sort params for listing.
 type StudySetFilter struct {
 	Search  string // title substring search

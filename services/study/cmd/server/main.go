@@ -35,6 +35,7 @@ func main() {
 	folderRepo := repository.NewFolderRepository(db)
 	progressRepo := repository.NewLearningProgressRepository(db)
 	quizRepo := repository.NewQuizQuestionRepository(db)
+	importJobRepo := repository.NewImportJobRepository(db)
 
 	// Services
 	setSvc := service.NewStudySetService(setRepo, cardRepo)
@@ -43,10 +44,11 @@ func main() {
 	progressSvc := service.NewProgressService(progressRepo, setRepo, cardRepo)
 	quizSvc := service.NewQuizQuestionService(quizRepo, setRepo)
 	importSvc := service.NewImportService(cardRepo, quizRepo, setRepo)
+	importJobSvc := service.NewImportJobService(importJobRepo, cardRepo, quizRepo, setRepo)
 
 	// HTTP
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, db).Register(mux)
+	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).Register(mux)
 
 	// All /v1 study resources require a user identity. Health remains public.
 	handler := middleware.Chain(mux,
