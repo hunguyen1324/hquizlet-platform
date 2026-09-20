@@ -74,7 +74,7 @@ func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (
 	if seed == 0 {
 		seed = time.Now().UnixNano()
 	}
-	items, err := engine.Generate(set.Flashcards, "test", uint64(seed), req.QuestionCount)
+	items, err := engine.Generate(set.Flashcards, "test", uint64(seed), req.QuestionCount, 0)
 	if err != nil {
 		return nil, fmt.Errorf("generate questions: %w", err)
 	}
