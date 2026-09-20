@@ -288,7 +288,7 @@ export type ImportResult = { imported: number; errors: Array<{ row: number; fiel
 async function uploadExcel(token: string, path: string, file: File): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", file);
-  return apiFetch(path, token, { method: "POST", body: form, headers: {} });
+  return apiFetch(path, token, { method: "POST", body: form });
 }
 export const importApi = {
   flashcards: (token: string, studySetId: number, file: File): Promise<ImportResult> =>
