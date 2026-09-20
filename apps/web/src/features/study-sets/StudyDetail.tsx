@@ -7,7 +7,7 @@ import type { LearningMode } from "../learning/types";
 import { LearningContainer } from "../learning";
 import { fetchProgressSummary, type ProgressListResponse } from "../learning/progressContract";
 import { useAuth } from "../auth/AuthContext";
-import { ProgressPanel, type ProgressPanelStatus } from "../../components/progress";
+import { ProgressPanel, type ProgressPanelStatus, SpacedRepetitionPanel, type SRStats } from "../../components/progress";
 import { flashcardApi } from "../../lib/api";
 import "./StudyDetail.css";
 
@@ -39,6 +39,24 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
+  const [previewIndex, setPreviewIndex] = React.useState(0);
+  const [previewFlipped, setPreviewFlipped] = React.useState(false);
+
+  // Derive SR stats from progress (thẻ mới = total - sessions học, mastered = best score tỉ lệ)
+  const srStats = React.useMemo<SRStats>(() => {
+    const total = cardTotal || 1;
+    if (!progress || progress.totalSessions === 0) {
+      return { newCards: total, learning: 0, almostMastered: 0, mastered: 0 };
+    }
+    const history = progress.history ?? [];
+    const sessions = history.length;
+    const mastered = progress.bestScore ?? 0;
+    const masteredCount = Math.round((mastered / (history[0]?.total || total)) * total);
+    const learning = Math.min(Math.round(sessions * 2.5), total - masteredCount);
+    const almost = Math.min(Math.round(sessions * 1.2), total - masteredCount - learning);
+    const newCards = Math.max(0, total - masteredCount - learning - almost);
+    return { newCards, learning, almostMastered: almost, mastered: masteredCount };
+  }, [progress, cardTotal]);
 
   // ── Paginated flashcard list state ──────────────────────────────────────
   const [pagedCards, setPagedCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
@@ -221,6 +239,68 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
       {/* ── Overview / Dashboard ── */}
       {studyMode === "dashboard" && (
         <div className="sd-overview">
+
+          {/* SpacedRepetition progress */}
+          <SpacedRepetitionPanel
+            stats={srStats}
+            loading={progressStatus === "loading"}
+            onReset={() => {
+              setPreviewIndex(0);
+              setPreviewFlipped(false);
+              void loadProgress();
+            }}
+          />
+
+          {/* Flashcard preview — giống Quizlet: lật được, có ảnh + hint */}
+          {(set.contentType === "flashcard" || !set.contentType) && pagedCards.length > 0 && (() => {
+            const card = pagedCards[previewIndex];
+            return (
+              <div>
+                <div
+                  className={`sd-preview-card${previewFlipped ? " flipped" : ""}`}
+                  onClick={() => setPreviewFlipped((f) => !f)}
+                  tabIndex={0}
+                  role="button"
+                  onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setPreviewFlipped((f) => !f); } }}
+                  aria-label={previewFlipped ? `Định nghĩa: ${card.definition}` : `Thuật ngữ: ${card.term}`}
+                >
+                  <div className="sd-preview-card-inner">
+                    {/* Front */}
+                    <div className="sd-preview-face sd-preview-face--front">
+                      {card.imageUrl && (
+                        <img src={card.imageUrl} alt={card.term} className="sd-preview-img" />
+                      )}
+                      <div className="sd-preview-term">{card.term}</div>
+                      <span className="sd-preview-flip-hint">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+                        Nhấn để lật
+                      </span>
+                    </div>
+                    {/* Back */}
+                    <div className="sd-preview-face sd-preview-face--back">
+                      <div className="sd-preview-def">{card.definition}</div>
+                    </div>
+                  </div>
+                  {/* Hint section below card */}
+                  {(card.exampleSentence || card.definition) && (
+                    <div className="sd-preview-hint">
+                      {card.exampleSentence && (
+                        <><strong>EXAMPLE</strong><span>{card.exampleSentence}</span></>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Nav dots */}
+                {pagedCards.length > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 12 }}>
+                    <button style={{ background: "none", border: "none", color: "#586380", cursor: "pointer", fontSize: "1.2rem" }} onClick={() => { setPreviewFlipped(false); setPreviewIndex((i) => (i - 1 + pagedCards.length) % pagedCards.length); }}>‹</button>
+                    <span style={{ fontSize: "0.85rem", color: "#586380", alignSelf: "center" }}>{previewIndex + 1} / {cardTotal}</span>
+                    <button style={{ background: "none", border: "none", color: "#586380", cursor: "pointer", fontSize: "1.2rem" }} onClick={() => { setPreviewFlipped(false); setPreviewIndex((i) => (i + 1) % pagedCards.length); }}>›</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <ProgressPanel
             status={progressStatus}
