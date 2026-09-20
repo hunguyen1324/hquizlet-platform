@@ -166,6 +166,61 @@
   cursor: not-allowed;
 }
 
+/* ── Shared mode progress (quizlet-clone style) ── */
+.mode-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+.mode-progress-label {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.mode-progress-row .progress-bar-track {
+  flex: 1;
+  margin: 0;
+}
+
+.learn-session-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 2rem 1.5rem;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  text-align: center;
+}
+
+.test-mode--form {
+  gap: 1.5rem;
+}
+.test-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.test-question-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.test-submit-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(transparent, #fff 30%);
+  padding-bottom: 0.5rem;
+}
+
+.learn-mcq {
+  margin-top: 0.25rem;
+}
+
 /* ── Learn Mode ── */
 .learn-mode {
   display: flex;
@@ -351,6 +406,10 @@
   outline-offset: 2px;
 }
 .test-choice:disabled { cursor: default; }
+.test-choice.selected {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
 .test-choice.choice-correct {
   border-color: #10b981;
   background: #ecfdf5;
@@ -1063,7 +1122,7 @@
   cursor: pointer;
   border-radius: var(--ql-radius);
   outline: none;
-  min-height: 320px;
+  min-height: 28rem;
   user-select: none;
   -webkit-user-select: none;
   margin-bottom: 1.25rem;
@@ -1076,12 +1135,12 @@
 .ql-card-inner {
   position: relative;
   width: 100%;
-  min-height: 320px;
+  min-height: 28rem;
   transform-style: preserve-3d;
   transition: transform 0.52s cubic-bezier(0.34, 1.15, 0.64, 1);
 }
 .ql-card--flipped .ql-card-inner {
-  transform: rotateY(180deg);
+  transform: rotateX(180deg);
 }
 
 /* Faces */
@@ -1096,14 +1155,52 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   text-align: center;
   background: var(--ql-card-bg);
   box-shadow: var(--ql-card-shadow);
+  gap: 0.75rem;
+}
+
+.ql-face-main {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 1rem;
+  min-height: 0;
+}
+
+.ql-face-extra {
+  width: 100%;
+  max-width: 36rem;
+  border-top: 1px solid var(--ql-card-border);
+  padding-top: 0.85rem;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.ql-face-extra-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ql-card-label);
+  margin-bottom: 0.35rem;
+}
+
+.ql-face-extra-text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--ql-card-sub);
+  word-break: break-word;
 }
 .ql-face--back {
-  transform: rotateY(180deg);
+  transform: rotateX(180deg);
   background: var(--ql-back-bg);
   border-color: var(--ql-back-border);
 }
@@ -1300,7 +1397,7 @@
   .ql-face {
     padding: 2rem 1.25rem 1.75rem;
   }
-  .ql-card, .ql-card-inner { min-height: 260px; }
+  .ql-card, .ql-card-inner { min-height: 22rem; }
   .ql-card-text { font-size: clamp(1.1rem, 5vw, 1.5rem); }
   .ql-face-label { top: 0.85rem; left: 1rem; }
   .ql-flip-hint { bottom: 0.75rem; }

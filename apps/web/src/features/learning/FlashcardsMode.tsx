@@ -32,15 +32,26 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     mode: "flashcards",
   });
 
+  const cardById = React.useMemo(
+    () => new Map(cards.map((c) => [c.id, c])),
+    [cards],
+  );
+
   React.useEffect(() => {
     if (generation.state.state !== "ready") return;
-    const generated = generation.state.data.items.map((item) => ({
-      id: item.flashcardId,
-      studySetId,
-      term: item.term ?? "",
-      definition: item.definition ?? "",
-      starred: item.starred ?? false,
-    }));
+    const generated = generation.state.data.items.map((item) => {
+      const full = cardById.get(item.flashcardId);
+      return {
+        id: item.flashcardId,
+        studySetId,
+        term: item.term ?? full?.term ?? "",
+        definition: item.definition ?? full?.definition ?? "",
+        starred: item.starred ?? full?.starred ?? false,
+        imageUrl: full?.imageUrl,
+        exampleSentence: full?.exampleSentence,
+        hintExplanation: full?.hintExplanation,
+      };
+    });
     const base = starredOnly ? generated.filter((c) => c.starred) : generated;
     setDeck(base);
     setIndex(0);
@@ -49,7 +60,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     completionTriggered.current = false;
     resetSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generation.state, starredOnly, studySetId, resetSave]);
+  }, [generation.state, starredOnly, studySetId, resetSave, cardById]);
 
   const current = deck[index];
   const total = deck.length;
@@ -133,7 +144,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     return (
       <LearningEmptyState
         message="Chưa có thẻ nào được đánh dấu sao."
-        hint="Quay về tab Overview để đánh dấu thẻ, rồi bật lọc lại."
+        hint="Đánh dấu sao trong danh sách thuật ngữ bên dưới, rồi bật lọc lại."
       />
     );
   }
@@ -247,12 +258,20 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
             {/* Front */}
             <div className="ql-face ql-face--front">
               <span className="ql-face-label">Thuật ngữ</span>
-              {current.imageUrl && (
-                <div className="ql-img-wrap">
-                  <img src={current.imageUrl} alt={current.term} className="ql-img" />
+              <div className="ql-face-main">
+                {current.imageUrl && (
+                  <div className="ql-img-wrap">
+                    <img src={current.imageUrl} alt={current.term} className="ql-img" />
+                  </div>
+                )}
+                <p className="ql-card-text">{current.term}</p>
+              </div>
+              {current.exampleSentence && (
+                <div className="ql-face-extra">
+                  <span className="ql-face-extra-label">Example</span>
+                  <p className="ql-face-extra-text">{current.exampleSentence}</p>
                 </div>
               )}
-              <p className="ql-card-text">{current.term}</p>
               <span className="ql-flip-hint">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 12h10M12 7v10"/></svg>
                 Nhấn để lật
@@ -262,7 +281,15 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
             {/* Back */}
             <div className="ql-face ql-face--back">
               <span className="ql-face-label">Định nghĩa</span>
-              <p className="ql-card-text ql-card-text--def">{current.definition}</p>
+              <div className="ql-face-main">
+                <p className="ql-card-text ql-card-text--def">{current.definition}</p>
+              </div>
+              {current.hintExplanation && (
+                <div className="ql-face-extra">
+                  <span className="ql-face-extra-label">Hint</span>
+                  <p className="ql-face-extra-text">{current.hintExplanation}</p>
+                </div>
+              )}
               {current.starred && (
                 <span className="ql-starred">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
