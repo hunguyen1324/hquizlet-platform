@@ -24,7 +24,8 @@ function formatTime(ms: number) {
 
 export function MatchMode({ cards, studySetId }: Props) {
   const { token } = useAuth();
-  const generation = useQuizGeneration(studySetId, "match", 6);
+  const [pairCount, setPairCount] = React.useState(Math.min(cards.length, 6));
+  const generation = useQuizGeneration(studySetId, "match", pairCount);
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "match" });
 
   const [phase, setPhase] = React.useState<Phase>("start");
@@ -91,8 +92,9 @@ export function MatchMode({ cards, studySetId }: Props) {
   if (phase === "start") {
     return (
       <MatchStartScreen
-        totalPairs={totalPairs}
-        onStart={() => {
+        totalCards={cards.length}
+        onStart={(count) => {
+          setPairCount(count);
           setStartedAt(new Date());
           setElapsed(0);
           setPhase("playing");
@@ -114,6 +116,7 @@ export function MatchMode({ cards, studySetId }: Props) {
           if (result) onSessionComplete({ score: result.score, total: result.total, cardResults: result.cardResults, startedAt });
         }}
         onRestart={restart}
+        onNewRound={newRound}
       />
     );
   }
@@ -157,6 +160,21 @@ export function MatchMode({ cards, studySetId }: Props) {
   }
 
   function restart() {
+    resetSave();
+    setStartedAt(new Date());
+    setElapsed(0);
+    setSelectedId(null);
+    setMatched(new Set());
+    setWrongTileIds(new Set());
+    setWrongCount(0);
+    setAnswers([]);
+    setAttemptsByCard({});
+    setResult(null);
+    setError(null);
+    setPhase("playing");
+  }
+
+  function newRound() {
     resetSave();
     setStartedAt(new Date());
     setElapsed(0);

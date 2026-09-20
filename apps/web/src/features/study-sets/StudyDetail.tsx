@@ -30,7 +30,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  const [pagedCards, setPagedCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
+  const [allCards, setAllCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
   const [cardPage, setCardPage] = React.useState(1);
   const [cardTotal, setCardTotal] = React.useState(set.flashcardCount ?? (set.flashcards?.length ?? 0));
   const [cardTotalPages, setCardTotalPages] = React.useState(
@@ -41,6 +41,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
 
   // Search state
   const [searchQuery, setSearchQuery] = React.useState("");
+
+  const observerRef = React.useRef<IntersectionObserver | null>(null);
 
   // Inline edit state
   const [editingCardId, setEditingCardId] = React.useState<number | null>(null);
@@ -54,7 +56,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     setCardError("");
     try {
       const result = await flashcardApi.listPaged(token, set.id, page, perPage);
-      setPagedCards(result.items);
+      setAllCards(prev => page === 1 ? result.items : [...prev, ...result.items]);
       setCardPage(result.page);
       setCardTotal(result.total);
       setCardTotalPages(result.totalPages);
@@ -70,10 +72,21 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     void loadCards(1, cardPageSize);
   }, [set.id, sortOrder, cardPageSize, loadCards]);
 
-  const handleCardPage = (next: number) => {
-    if (next === cardPage) return;
-    void loadCards(next);
-  };
+  const sentinelRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      if (cardLoading) return;
+      if (observerRef.current) observerRef.current.disconnect();
+
+      observerRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && cardPage < cardTotalPages) {
+          void loadCards(cardPage + 1);
+        }
+      });
+
+      if (node) observerRef.current.observe(node);
+    },
+    [cardLoading, cardPage, cardTotalPages, loadCards]
+  );
 
   React.useEffect(() => {
     if (!menuOpen) return;
@@ -95,18 +108,15 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const filteredCards = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const base = q
-      ? pagedCards.filter(
+      ? allCards.filter(
           (c) => c.term.toLowerCase().includes(q) || c.definition.toLowerCase().includes(q),
         )
-      : pagedCards;
+      : allCards;
     if (sortOrder === "alphabetical") {
       return [...base].sort((a, b) => a.term.localeCompare(b.term));
     }
     return base;
-  }, [pagedCards, searchQuery, sortOrder]);
-
-  const cardRangeStart = cardTotal === 0 ? 0 : (cardPage - 1) * cardPageSize + 1;
-  const cardRangeEnd = cardTotal === 0 ? 0 : Math.min(cardPage * cardPageSize, cardTotal);
+  }, [allCards, searchQuery, sortOrder]);
 
   const totalItems =
     set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cardTotal;
@@ -118,7 +128,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     setActionError(null);
     await flashcardApi.update(token, card.id, { term, definition });
     // Optimistic update
-    setPagedCards((prev) =>
+    setAllCards((prev) =>
       prev.map((c) => (c.id === card.id ? { ...c, term, definition } : c)),
     );
     setEditingCardId(null);
@@ -129,7 +139,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     setActionError(null);
     try {
       await flashcardApi.delete(token, card.id);
-      setPagedCards((prev) => prev.filter((c) => c.id !== card.id));
+      setAllCards((prev) => prev.filter((c) => c.id !== card.id));
       setCardTotal((t) => t - 1);
       setDeleteConfirmId(null);
       showToast("Đã xóa thẻ");
@@ -142,7 +152,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   async function handleAddCard(term: string, definition: string) {
     setActionError(null);
     const newCard = await flashcardApi.add(token, set.id, { term, definition });
-    setPagedCards((prev) => [...prev, newCard]);
+    setAllCards((prev) => [...prev, newCard]);
     setCardTotal((t) => t + 1);
     setAddingCard(false);
     showToast("Đã thêm thẻ mới");
@@ -231,7 +241,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             <div className="sd-termlist-controls">
               {cardTotal > 0 && (
                 <span className="sd-page-range">
-                  {cardRangeStart}-{cardRangeEnd} / {cardTotal}
+                  Hiển thị {allCards.length} / {cardTotal}
                 </span>
               )}
               <select
@@ -260,7 +270,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
           <FlashcardSearchBar
             value={searchQuery}
             resultCount={filteredCards.length}
-            totalCount={pagedCards.length}
+            totalCount={allCards.length}
             onChange={setSearchQuery}
             onClear={() => setSearchQuery("")}
           />
@@ -276,14 +286,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             </div>
           )}
 
-          {!cardError && pagedCards.length === 0 && !cardLoading && (
+          {!cardError && allCards.length === 0 && !cardLoading && (
             <div className="sd-empty"><p>Chưa có thẻ học nào.</p></div>
-          )}
-
-          {cardLoading && (
-            <div className="loading-skeleton" aria-busy="true">
-              {[1, 2, 3].map((i) => <div key={i} className="skeleton-row" />)}
-            </div>
           )}
 
           {!cardLoading && !cardError && (
@@ -314,57 +318,26 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                     />
                   ) : (
                     /* Normal display */
-                    <article className="sd-fc-row ql-card-row">
-                      <div className="sd-fc-row-main">
-                        {card.imageUrl && (
-                          <div className="sd-fc-row-thumb">
-                            <img src={card.imageUrl} alt="" />
-                          </div>
-                        )}
-                        <div className="sd-fc-row-term">{card.term}</div>
-                        <div className="sd-fc-row-sep" aria-hidden />
-                        <div className="sd-fc-row-def">{card.definition}</div>
-                        <div className="sd-fc-row-actions">
-                          {onToggleStar && (
-                            <button
-                              type="button"
-                              className={`sd-star-btn ${card.starred ? "starred" : ""}`}
-                              onClick={() => onToggleStar(card)}
-                              title={card.starred ? "Bỏ đánh dấu" : "Đánh dấu"}
-                            >
-                              {card.starred ? "★" : "☆"}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="sd-edit-btn"
-                            onClick={() => { setEditingCardId(card.id); setAddingCard(false); }}
-                            title="Sửa thẻ"
-                            aria-label={`Sửa thẻ "${card.term}"`}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="sd-delete-btn"
-                            onClick={() => setDeleteConfirmId(card.id)}
-                            title="Xóa thẻ"
-                            aria-label={`Xóa thẻ "${card.term}"`}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                              <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </article>
+                    <FlashcardListCard
+                      card={card}
+                      onToggleStar={onToggleStar}
+                      onEdit={() => { setEditingCardId(card.id); setAddingCard(false); }}
+                      onDelete={() => setDeleteConfirmId(card.id)}
+                    />
                   )}
                 </div>
               ))}
+
+              {cardLoading && (
+                <div className="loading-skeleton" aria-busy="true">
+                  {[1, 2, 3].map((i) => <div key={i} className="skeleton-row" />)}
+                </div>
+              )}
+
+              {/* Sentinel for infinite scroll */}
+              {cardPage < cardTotalPages && !cardLoading && (
+                <div ref={sentinelRef} style={{ height: "1px" }} />
+              )}
 
               {searchQuery && filteredCards.length === 0 && (
                 <div className="sd-empty">
@@ -393,14 +366,6 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                   Thêm thẻ mới
                 </button>
               )}
-            </div>
-          )}
-
-          {cardTotalPages > 1 && (
-            <div className="sd-pagination" aria-label="Phân trang thuật ngữ">
-              <button type="button" className="sd-page-btn" disabled={cardPage <= 1 || cardLoading} onClick={() => handleCardPage(cardPage - 1)} aria-label="Trang trước">‹</button>
-              <span className="sd-page-info">Trang {cardPage} / {cardTotalPages}<span className="sd-page-total"> · {cardTotal} thẻ</span></span>
-              <button type="button" className="sd-page-btn" disabled={cardPage >= cardTotalPages || cardLoading} onClick={() => handleCardPage(cardPage + 1)} aria-label="Trang sau">›</button>
             </div>
           )}
         </div>

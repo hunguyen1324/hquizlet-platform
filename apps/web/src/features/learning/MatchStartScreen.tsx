@@ -3,11 +3,14 @@ import React from "react";
 import "./learning.css";
 
 type Props = {
-  totalPairs: number;
-  onStart: () => void;
+  totalCards: number;
+  onStart: (pairCount: number) => void;
 };
 
-export function MatchStartScreen({ totalPairs, onStart }: Props) {
+export function MatchStartScreen({ totalCards, onStart }: Props) {
+  const maxPairs = Math.min(totalCards, 20);
+  const [pairCount, setPairCount] = React.useState(Math.min(maxPairs, 6));
+
   return (
     <div className="ql-match-start-screen">
       <div className="ql-match-start-icon" aria-hidden="true">
@@ -21,9 +24,24 @@ export function MatchStartScreen({ totalPairs, onStart }: Props) {
       </div>
       <h2 className="ql-match-start-title">Ghép cặp</h2>
       <p className="ql-match-start-desc">
-        Ghép <strong>{totalPairs}</strong> thuật ngữ với định nghĩa tương ứng.
-        Nhanh tay xem bạn mất bao lâu!
+        Ghép các thuật ngữ với định nghĩa tương ứng. Nhanh tay xem bạn mất bao lâu!
       </p>
+
+      <div className="match-start-slider-wrap">
+        <label htmlFor="pair-slider" className="match-start-slider-label">
+          Số cặp: <strong>{pairCount}</strong>
+        </label>
+        <input
+          id="pair-slider"
+          type="range"
+          min={Math.min(4, maxPairs)}
+          max={maxPairs}
+          value={pairCount}
+          onChange={(e) => setPairCount(parseInt(e.target.value, 10))}
+          className="match-start-slider"
+        />
+      </div>
+
       <ul className="ql-match-start-rules">
         <li>Click một thẻ, rồi click thẻ khớp của nó</li>
         <li>Ghép sai → thẻ rung và không bị xóa</li>
@@ -33,7 +51,7 @@ export function MatchStartScreen({ totalPairs, onStart }: Props) {
         id="match-start-btn"
         type="button"
         className="primary-button ql-match-start-btn"
-        onClick={onStart}
+        onClick={() => onStart(pairCount)}
         autoFocus
       >
         Bắt đầu

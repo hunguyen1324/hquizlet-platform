@@ -268,6 +268,10 @@ export function TestMode({ cards, studySetId }: Props) {
       <div className="learn-done">
         <div className="test-result-header">
           <div className={`test-result-score-ring ${pct >= 80 ? "ring--green" : pct >= 50 ? "ring--yellow" : "ring--red"}`}>
+            <svg viewBox="0 0 100 100" className="score-ring-svg" style={{ "--pct": pct } as React.CSSProperties}>
+              <circle className="score-ring-bg" cx="50" cy="50" r="45"></circle>
+              <circle className="score-ring-progress" cx="50" cy="50" r="45"></circle>
+            </svg>
             <span className="test-result-pct">{pct}%</span>
           </div>
           <div>

@@ -12,6 +12,7 @@ type Props = {
   saveStatus: SaveStatus;
   onRetry: () => void;
   onRestart: () => void;
+  onNewRound: () => void;
   onBack?: () => void;
 };
 
@@ -30,6 +31,7 @@ export function MatchEndScreen({
   saveStatus,
   onRetry,
   onRestart,
+  onNewRound,
 }: Props) {
   const pct = total > 0 ? Math.round((score / total) * 100) : 100;
   const accuracy = wrongCount === 0 ? "Hoàn hảo! 🎉" : wrongCount <= 2 ? "Rất tốt! 👍" : "Cố lên! 💪";
@@ -58,8 +60,11 @@ export function MatchEndScreen({
       <ProgressSaveStatus status={saveStatus} onRetry={onRetry} />
 
       <div className="ql-match-end-actions">
-        <button type="button" className="primary-button" id="match-replay-btn" onClick={onRestart}>
-          Chơi lại
+        <button type="button" className="secondary-button" onClick={onRestart}>
+          Chơi lại (cùng thẻ)
+        </button>
+        <button type="button" className="primary-button" onClick={onNewRound}>
+          Lượt mới
         </button>
       </div>
     </div>

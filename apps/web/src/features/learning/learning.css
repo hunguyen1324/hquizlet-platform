@@ -1978,3 +1978,342 @@
   animation: ql-spin 0.7s linear infinite;
 }
 
+/* ══════════════════════════════════════════════
+   NEW — TestSettingsForm Redesign (Task 3)
+   ══════════════════════════════════════════════ */
+
+.tsf-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.tsf-panel {
+  background: var(--ql-card-bg, #fff);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.tsf-header {
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--ql-card-border, #e5e7eb);
+}
+
+.tsf-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ql-text-primary, #111827);
+}
+
+.tsf-section {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--ql-card-border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tsf-section-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ql-text-primary, #111827);
+}
+
+.tsf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tsf-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tsf-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ql-text-primary, #111827);
+}
+
+.tsf-sublabel {
+  font-size: 0.8rem;
+  color: var(--ql-text-secondary, #6b7280);
+}
+
+.tsf-number-wrap {
+  width: 80px;
+}
+
+.tsf-number-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s;
+  background: transparent;
+  color: inherit;
+}
+.tsf-number-input:focus { border-color: #6366f1; }
+.tsf-number-input--err { border-color: #ef4444; }
+
+.tsf-field-error {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.8rem;
+  color: #ef4444;
+}
+
+/* Toggle Switch */
+.ql-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  cursor: pointer;
+}
+
+.ql-toggle-label {
+  font-size: 0.95rem;
+  color: var(--ql-text-primary, #111827);
+  display: flex;
+  flex-direction: column;
+}
+
+.ql-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: #d1d5db;
+  border-radius: 99px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.ql-toggle--on {
+  background: #4f46e5;
+}
+.ql-toggle:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.ql-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.ql-toggle--on .ql-toggle-thumb {
+  transform: translateX(20px);
+}
+
+.ql-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Accordion */
+.tsf-accordion {
+  padding: 0;
+}
+.tsf-accordion-trigger {
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ql-text-primary, #111827);
+  cursor: pointer;
+}
+.tsf-accordion-trigger:hover {
+  background: rgba(0,0,0,0.02);
+}
+.tsf-accordion-chevron {
+  color: var(--ql-text-secondary, #6b7280);
+  transition: transform 0.2s;
+}
+.tsf-accordion-chevron--open {
+  transform: rotate(180deg);
+}
+
+.tsf-accordion-body {
+  padding: 0 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.tsf-format-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ql-text-secondary, #6b7280);
+  background: var(--ql-bg, #f3f4f6);
+  padding: 0.6rem;
+  border-radius: 8px;
+}
+
+/* Actions */
+.tsf-actions {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+.tsf-start-btn {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  border-radius: 99px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tsf-start-btn:hover:not(:disabled) {
+  background: #4338ca;
+}
+.tsf-start-btn:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.tsf-cancel-link {
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ql-text-secondary, #6b7280);
+  cursor: pointer;
+}
+.tsf-cancel-link:hover {
+  color: var(--ql-text-primary, #111827);
+  text-decoration: underline;
+}
+
+/* Dark mode overrides for TestSettingsForm */
+.dark .tsf-number-input { border-color: #4b5563; }
+.dark .ql-toggle { background: #4b5563; }
+.dark .tsf-accordion-trigger:hover { background: rgba(255,255,255,0.05); }
+.dark .tsf-format-note { background: #1e293b; }
+
+/* ── MatchStartScreen Slider ── */
+.match-start-slider-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 250px;
+  margin: 0.5rem 0;
+}
+.match-start-slider-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ql-text-primary, #111827);
+  text-align: left;
+}
+.match-start-slider {
+  width: 100%;
+  accent-color: #6366f1;
+}
+
+/* ── TestMode Score Ring SVG ── */
+.test-result-score-ring {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent; /* Remove old background */
+}
+.score-ring-svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.score-ring-bg, .score-ring-progress {
+  fill: transparent;
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+.score-ring-bg {
+  stroke: var(--ql-card-border, #e5e7eb);
+}
+.score-ring-progress {
+  stroke: currentColor;
+  stroke-dasharray: 283; /* 2 * PI * 45 ≈ 283 */
+  /* --pct passed from React */
+  stroke-dashoffset: calc(283 - (283 * var(--pct)) / 100);
+  transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ring--green { color: #10b981; }
+.ring--yellow { color: #f59e0b; }
+.ring--red { color: #ef4444; }
+
+.test-result-pct {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ql-text-primary, #111827);
+  z-index: 1;
+}
+
+/* ── Test Question Block Polish ── */
+.test-question-block {
+  background: var(--ql-card-bg, #fff);
+  border: 1px solid var(--ql-card-border, #e5e7eb);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s;
+}
+.test-question-block:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+.test-qnum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}

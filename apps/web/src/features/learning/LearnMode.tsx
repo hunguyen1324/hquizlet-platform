@@ -51,6 +51,7 @@ export function LearnMode({ cards, studySetId }: Props) {
     swapSides: false,
   });
   const [showSettings, setShowSettings] = React.useState(false);
+  const [restartKey, setRestartKey] = React.useState(0);
   const [queue, setQueue] = React.useState<number[]>([]);
   const [prevStack, setPrevStack] = React.useState<{ queueSnapshot: number[]; answersSnapshot: Record<number, AnswerState> }[]>([]);
   const [answers, setAnswers] = React.useState<Record<number, AnswerState>>({});
@@ -92,8 +93,10 @@ export function LearnMode({ cards, studySetId }: Props) {
   }, [rawItems, settings]);
 
   React.useEffect(() => {
-    if (items.length && queue.length === 0 && !done) setQueue(items.map((_, i) => i));
-  }, [items, queue.length, done]);
+    if (items.length && !done) setQueue(items.map((_, i) => i));
+  // restartKey: incrementing this triggers re-init even when items hasn't changed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, restartKey]);
 
   const currentIndex = queue[0];
   const current = currentIndex === undefined ? undefined : items[currentIndex];
@@ -233,16 +236,17 @@ export function LearnMode({ cards, studySetId }: Props) {
 
   function restart() {
     resetSave();
-    setQueue([]);
+    setDone(false);
     setAnswers({});
     setPrevStack([]);
     setInput("");
     setFeedback(null);
     setTfAnswer(null);
-    setDone(false);
     setError(null);
     setStartedAt(new Date());
     setQuestionStartedAt(Date.now());
+    // Increment restartKey BEFORE clearing queue so useEffect fires with fresh items
+    setRestartKey((k) => k + 1);
     generation.regenerate();
   }
 
