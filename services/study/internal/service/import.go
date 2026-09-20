@@ -128,37 +128,44 @@ func (s *ImportService) ImportFlashcards(ctx context.Context, studySetID, userID
 		items = append(items, item)
 	}
 
-	// Get current max position
+	// Nếu đã có lỗi parse thì trả về sớm, không insert gì
+	if len(errors) > 0 {
+		return model.ImportFlashcardResult{Errors: errors}, nil
+	}
+
+	// Lấy max position hiện tại để append đúng thứ tự
 	existing, err := s.flashcards.ListByStudySet(ctx, studySetID)
 	if err != nil {
 		return model.ImportFlashcardResult{}, err
 	}
 	startPos := len(existing)
 
-	// Batch create flashcards
+	// Chuyển toàn bộ items thành BulkFlashcardItem rồi insert 1 transaction duy nhất
+	// Trước đây: 1 INSERT/row → N round-trips DB
+	// Sau: tất cả trong 1 transaction, tránh timeout và giảm latency đáng kể
+	bulk := make([]model.BulkFlashcardItem, 0, len(items))
 	for i, item := range items {
-		in := model.CreateFlashcardInput{
+		bi := model.BulkFlashcardItem{
 			Term:            item.Term,
 			Definition:      item.Definition,
 			ExampleSentence: item.ExampleSentence,
 			HintExplanation: item.HintExplanation,
 			Synonyms:        item.Synonyms,
+			Position:        startPos + i,
 		}
 		if item.ImageURL != "" {
-			in.ImageURL = &item.ImageURL
+			bi.ImageURL = &item.ImageURL
 		}
-		_ = startPos + i // position tracking
-		if _, err := s.flashcards.Create(ctx, studySetID, in); err != nil {
-			errors = append(errors, model.ImportError{
-				Row:    item.Row,
-				Field:  "create",
-				Reason: err.Error(),
-			})
-		}
+		bulk = append(bulk, bi)
+	}
+
+	result, err := s.flashcards.BulkSave(ctx, studySetID, bulk)
+	if err != nil {
+		return model.ImportFlashcardResult{}, err
 	}
 
 	return model.ImportFlashcardResult{
-		Imported: len(items) - countErrors(errors, "create"),
+		Imported: len(result.Created),
 		Errors:   errors,
 	}, nil
 }
