@@ -2,11 +2,13 @@
 // Unified design system: ql-* classes, full Quizlet parity
 
 import React from "react";
+import { useAuth } from "../auth/AuthContext";
 import type { Flashcard } from "./types";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
 import { ProgressSaveStatus } from "./ProgressSaveStatus";
 import { useQuizGeneration } from "./useQuizGeneration";
+import { quizApi } from "../../lib/api/client";
 import { FlashcardsSettingsDialog } from "./FlashcardsSettingsDialog";
 import type { FlashcardsSettings } from "./FlashcardsSettingsDialog";
 import "./learning.css";
@@ -28,8 +30,12 @@ type Props = {
 };
 
 export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
+  const { token } = useAuth();
   const displayTotal = totalCount ?? cards.length;
-  const generation = useQuizGeneration(studySetId, "flashcards", Math.min(cards.length, 100));
+  const BATCH = 100; // thẻ mỗi lần fetch
+  const PRELOAD_THRESHOLD = 20; // fetch thêm khi còn cách cuối 20 thẻ
+
+  const generation = useQuizGeneration(studySetId, "flashcards", BATCH);
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
@@ -45,6 +51,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     startFromDefinition: false,
     autoPlay: false,
   });
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const loadedSeeds = React.useRef<Set<number>>(new Set());
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -82,6 +90,53 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     resetSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generation.state, starredOnly, studySetId, resetSave, cardById]);
+
+  // Track seed của generation đầu để không load lại
+  React.useEffect(() => {
+    if (generation.state.state === "ready") {
+      loadedSeeds.current.add(generation.state.data.seed);
+    }
+  }, [generation.state]);
+
+  // Lazy load thêm khi user gần đến cuối deck
+  React.useEffect(() => {
+    const remaining = deck.length - index - 1;
+    if (
+      remaining > PRELOAD_THRESHOLD ||
+      deck.length === 0 ||
+      loadingMore ||
+      deck.length >= displayTotal
+    ) return;
+
+    setLoadingMore(true);
+    const newSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+    quizApi
+      .generate(token, studySetId, { mode: "flashcards", seed: newSeed, limit: BATCH })
+      .then((data) => {
+        if (loadedSeeds.current.has(data.seed)) return;
+        loadedSeeds.current.add(data.seed);
+        const newCards = data.items.map((item) => ({
+          id: item.flashcardId,
+          studySetId,
+          term: item.term ?? "",
+          definition: item.definition ?? "",
+          starred: item.starred ?? false,
+          imageUrl: (item as { imageUrl?: string | null }).imageUrl ?? null,
+          exampleSentence: (item as { exampleSentence?: string | null }).exampleSentence ?? null,
+          hintExplanation: (item as { hintExplanation?: string | null }).hintExplanation ?? null,
+        }));
+        const filtered = starredOnly ? newCards.filter((c) => c.starred) : newCards;
+        // Loại trùng
+        setDeck((prev) => {
+          const existingIds = new Set(prev.map((c) => c.id));
+          const unique = filtered.filter((c) => !existingIds.has(c.id));
+          return unique.length > 0 ? [...prev, ...unique] : prev;
+        });
+      })
+      .catch(() => { /* silent fail — user vẫn lướt được trong deck hiện tại */ })
+      .finally(() => setLoadingMore(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, deck.length]);
 
   const current = deck[index];
   const total = deck.length;
@@ -412,7 +467,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         </div>
       )}
 
-      <p className="ql-kbd-hint" aria-hidden="true">← → điều hướng · Space lật thẻ · vuốt trên mobile</p>
+      <p className="ql-kbd-hint" aria-hidden="true">
+        ← → điều hướng · Space lật thẻ · vuốt trên mobile
+        {loadingMore && <span className="ql-loading-more"> · Đang tải thêm…</span>}
+      </p>
     </div>
   );
 }
