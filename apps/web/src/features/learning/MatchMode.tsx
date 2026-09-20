@@ -23,15 +23,11 @@ function formatTime(ms: number) {
 
 export function MatchMode({ cards, studySetId }: Props) {
   const { token } = useAuth();
-<<<<<<< HEAD
-  const [pairCount, setPairCount] = React.useState(Math.min(cards.length, 6));
-=======
   const maxPairs = Math.min(cards.length, 20);
   const defaultPairs = Math.min(cards.length, 6);
 
   const [pairCount, setPairCount] = React.useState(defaultPairs);
   const [pendingPairCount, setPendingPairCount] = React.useState(defaultPairs);
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
   const generation = useQuizGeneration(studySetId, "match", pairCount);
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "match" });
 
@@ -97,17 +93,6 @@ export function MatchMode({ cards, studySetId }: Props) {
   /* ── Start screen ── */
   if (phase === "start") {
     return (
-<<<<<<< HEAD
-      <MatchStartScreen
-        totalCards={cards.length}
-        onStart={(count) => {
-          setPairCount(count);
-          setStartedAt(new Date());
-          setElapsed(0);
-          setPhase("playing");
-        }}
-      />
-=======
       <div className="ql-match-start-screen">
         <div className="ql-match-start-icon" aria-hidden="true">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -121,7 +106,7 @@ export function MatchMode({ cards, studySetId }: Props) {
           Ghép thuật ngữ với định nghĩa tương ứng. Nhanh tay xem bạn mất bao lâu!
         </p>
 
-        {/* Chọn số cặp */}
+        {/* Chọn số cặp — tối đa 20 */}
         {maxPairs > 2 && (
           <div className="ql-match-count-wrap">
             <label className="ql-match-count-label" htmlFor="match-pair-count">
@@ -153,8 +138,6 @@ export function MatchMode({ cards, studySetId }: Props) {
             const newCount = pendingPairCount;
             if (newCount !== pairCount) {
               setPairCount(newCount);
-              // generation sẽ re-trigger tự động vì limit thay đổi
-              // nhưng cần delay một chút để generation hook cập nhật
               window.setTimeout(() => {
                 setStartedAt(new Date());
                 setElapsed(0);
@@ -172,7 +155,6 @@ export function MatchMode({ cards, studySetId }: Props) {
           Bắt đầu
         </button>
       </div>
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
     );
   }
 

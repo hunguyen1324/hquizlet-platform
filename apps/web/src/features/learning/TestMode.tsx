@@ -430,17 +430,12 @@ export function TestMode({ cards, studySetId }: Props) {
     const ringClass = pct >= 80 ? "ring--green" : pct >= 50 ? "ring--yellow" : "ring--red";
     return (
       <div className="learn-done">
-<<<<<<< HEAD
-        <div className="test-result-header">
-          <div className={`test-result-score-ring ${pct >= 80 ? "ring--green" : pct >= 50 ? "ring--yellow" : "ring--red"}`}>
+        <div className="test-result-hero">
+          <div className={`test-result-score-ring ${ringClass}`}>
             <svg viewBox="0 0 100 100" className="score-ring-svg" style={{ "--pct": pct } as React.CSSProperties}>
               <circle className="score-ring-bg" cx="50" cy="50" r="45"></circle>
               <circle className="score-ring-progress" cx="50" cy="50" r="45"></circle>
             </svg>
-=======
-        <div className="test-result-hero">
-          <div className={`test-result-score-ring ${ringClass}`}>
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
             <span className="test-result-pct">{pct}%</span>
           </div>
           <div>

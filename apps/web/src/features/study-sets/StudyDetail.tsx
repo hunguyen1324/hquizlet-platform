@@ -29,10 +29,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-<<<<<<< HEAD
-=======
   // Infinite scroll state — allCards accumulates pages
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
   const [allCards, setAllCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
   const [cardPage, setCardPage] = React.useState(1);
   const [cardTotal, setCardTotal] = React.useState(set.flashcardCount ?? (set.flashcards?.length ?? 0));
@@ -64,13 +61,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     setCardLoading(true);
     setCardError("");
     try {
-<<<<<<< HEAD
-      const result = await flashcardApi.listPaged(token, set.id, page, perPage);
-      setAllCards(prev => page === 1 ? result.items : [...prev, ...result.items]);
-=======
       const result = await flashcardApi.listPaged(token, set.id, page, INFINITE_PAGE_SIZE);
       setAllCards((prev) => reset ? result.items : [...prev, ...result.items.filter((r) => !prev.some((p) => p.id === r.id))]);
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
       setCardPage(result.page);
       setCardTotal(result.total);
       setCardTotalPages(result.totalPages);
@@ -90,23 +82,6 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [set.id, sortOrder]);
 
-<<<<<<< HEAD
-  const sentinelRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      if (cardLoading) return;
-      if (observerRef.current) observerRef.current.disconnect();
-
-      observerRef.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && cardPage < cardTotalPages) {
-          void loadCards(cardPage + 1);
-        }
-      });
-
-      if (node) observerRef.current.observe(node);
-    },
-    [cardLoading, cardPage, cardTotalPages, loadCards]
-  );
-=======
   // Infinite scroll observer
   React.useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -122,10 +97,6 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, cardPage, cardLoading, loadNextPage]);
-
-  // Keep backward compat — no-op
-  const handleCardPage = (_next: number) => {};
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
 
   React.useEffect(() => {
     if (!menuOpen) return;
@@ -280,24 +251,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               </span>
             </h2>
             <div className="sd-termlist-controls">
-<<<<<<< HEAD
-              {cardTotal > 0 && (
-                <span className="sd-page-range">
-                  Hiển thị {allCards.length} / {cardTotal}
-                </span>
-              )}
-              <select
-                className="sd-sort-select"
-                value={cardPageSize}
-                aria-label="Số thẻ mỗi trang"
-                onChange={(e) => setCardPageSize(Number(e.target.value))}
-              >
-                {CARD_PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>{size}/trang</option>
-                ))}
-              </select>
-=======
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
+
               <select
                 className="sd-sort-select"
                 value={sortOrder}
@@ -412,24 +366,10 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               )}
             </div>
           )}
-<<<<<<< HEAD
-=======
 
-          {/* Infinite scroll sentinel */}
-          {hasMore && (
-            <div ref={sentinelRef} className="sd-infinite-sentinel" aria-hidden="true">
-              {cardLoading && (
-                <div className="sd-infinite-loading">
-                  <div className="ql-spinner-sm" />
-                  <span>Đang tải thêm…</span>
-                </div>
-              )}
-            </div>
-          )}
           {!hasMore && allCards.length > 0 && !searchQuery && (
             <p className="sd-all-loaded">Đã hiển thị tất cả {cardTotal} thẻ</p>
           )}
->>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
         </div>
       )}
 
