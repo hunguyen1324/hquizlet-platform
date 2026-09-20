@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -17,11 +18,11 @@ func testCards() []studyclient.Flashcard {
 }
 
 func TestGenerateDeterministicAndDoesNotLeakTestAnswer(t *testing.T) {
-	a, err := Generate(testCards(), "test", 42, 100)
+	a, err := Generate(testCards(), "test", 42, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := Generate(testCards(), "test", 42, 100)
+	b, _ := Generate(testCards(), "test", 42, 100, 0)
 	if !reflect.DeepEqual(a, b) {
 		t.Fatal("same seed produced different questions")
 	}
@@ -47,7 +48,7 @@ func TestEvaluateLearnNormalizesAndRejectsForeignCard(t *testing.T) {
 }
 
 func TestEvaluateTestUsesGeneratedChoiceIndex(t *testing.T) {
-	items, _ := Generate(testCards(), "test", 42, 100)
+	items, _ := Generate(testCards(), "test", 42, 100, 0)
 	item := items[0]
 	card := map[int64]string{1: "One", 2: "Two", 3: "Three", 4: "Four"}[item.FlashcardID]
 	selected := -1
@@ -83,7 +84,7 @@ func TestEvaluateRejectsDuplicateFlashcardID(t *testing.T) {
 func TestMatchEvaluateRejectsSpoofedPair(t *testing.T) {
 	// Card exists in study set but pairId is wrong
 	cards := testCards()
-	items, err := Generate(cards, "match", 42, 1)
+	items, err := Generate(cards, "match", 42, 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,7 @@ func TestMatchEvaluateRejectsSpoofedPair(t *testing.T) {
 
 func TestEvaluateRejectsAnswerOutsideGeneratedSubset(t *testing.T) {
 	cards := testCards()
-	items, err := Generate(cards, "match", 42, 1)
+	items, err := Generate(cards, "match", 42, 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,5 +116,54 @@ func TestEvaluateRejectsAnswerOutsideGeneratedSubset(t *testing.T) {
 	})
 	if !errorsIsInvalid(err) {
 		t.Fatalf("expected invalid answer outside generated subset, got %v", err)
+	}
+}
+
+func TestGenerateOffsetBatching(t *testing.T) {
+	// Tạo 10 thẻ giả
+	cards := make([]studyclient.Flashcard, 10)
+	for i := range cards {
+		cards[i] = studyclient.Flashcard{ID: int64(i + 1), Term: fmt.Sprintf("Term%d", i+1), Definition: fmt.Sprintf("Def%d", i+1)}
+	}
+
+	seed := uint64(12345)
+	batch1, err := Generate(cards, "flashcards", seed, 5, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch2, err := Generate(cards, "flashcards", seed, 5, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Hai batch không được có thẻ trùng
+	ids1 := make(map[int64]bool)
+	for _, item := range batch1 {
+		ids1[item.FlashcardID] = true
+	}
+	for _, item := range batch2 {
+		if ids1[item.FlashcardID] {
+			t.Fatalf("batch2 chứa thẻ trùng với batch1: flashcardId=%d", item.FlashcardID)
+		}
+	}
+
+	// Tổng cộng phải cover toàn bộ 10 thẻ
+	if len(batch1)+len(batch2) != 10 {
+		t.Fatalf("expected 10 total items, got %d+%d", len(batch1), len(batch2))
+	}
+
+	// Deterministic: cùng seed+offset cho cùng kết quả
+	batch1b, _ := Generate(cards, "flashcards", seed, 5, 0)
+	if !reflect.DeepEqual(batch1, batch1b) {
+		t.Fatal("offset=0 không deterministic với cùng seed")
+	}
+
+	// Offset vượt quá deck → trả rỗng, không lỗi
+	empty, err := Generate(cards, "flashcards", seed, 5, 999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Fatal("expected empty slice khi offset >= len(cards)")
 	}
 }

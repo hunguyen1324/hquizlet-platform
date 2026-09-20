@@ -16,7 +16,7 @@ func BenchmarkGenerate(b *testing.B) {
 		}
 		b.Run(fmt.Sprintf("%d_cards_limit_%d", size, limit), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				items, err := Generate(cards, "test", 42, limit)
+				items, err := Generate(cards, "test", 42, limit, 0)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -35,7 +35,7 @@ func BenchmarkEvaluate(b *testing.B) {
 		if limit > 100 {
 			limit = 100
 		}
-		items, err := Generate(cards, "match", 42, limit)
+		items, err := Generate(cards, "match", 42, limit, 0)
 		if err != nil {
 			b.Fatal(err)
 		}

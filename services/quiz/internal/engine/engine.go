@@ -7,7 +7,7 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/quiz/internal/studyclient"
 )
 
-const ContractVersion = "1.4.0"
+const ContractVersion = "1.5.0"
 
 type Item struct {
 	ID          string   `json:"id"`
@@ -44,11 +44,24 @@ var (
 	ErrDuplicate = errors.New("duplicate flashcardId in answers")
 )
 
-func Generate(cards []studyclient.Flashcard, mode string, seed uint64, limit int) ([]Item, error) {
-	if !validMode(mode) || limit < 1 || limit > 100 {
+// Generate tạo quiz items từ cards.
+// seed + offset cho phép phân trang deterministic:
+//   - seed cố định xác định thứ tự shuffle
+//   - offset là vị trí bắt đầu trong deck đã shuffle
+//   - limit là số thẻ muốn lấy
+//
+// Ví dụ: batch 1 → offset=0,limit=100; batch 2 → offset=100,limit=100
+// Cùng seed đảm bảo không trùng giữa các batch.
+func Generate(cards []studyclient.Flashcard, mode string, seed uint64, limit int, offset int) ([]Item, error) {
+	if !validMode(mode) || limit < 1 || limit > 500 || offset < 0 {
 		return nil, ErrInvalid
 	}
 	deck := shuffle(cards, seed)
+	// Áp dụng offset — nếu offset vượt quá deck thì trả rỗng (đã hết thẻ)
+	if offset >= len(deck) {
+		return []Item{}, nil
+	}
+	deck = deck[offset:]
 	if len(deck) > limit {
 		deck = deck[:limit]
 	}
@@ -82,7 +95,7 @@ func Evaluate(cards []studyclient.Flashcard, mode string, seed uint64, limit int
 		return nil, ErrInvalid
 	}
 
-	generated, err := Generate(cards, mode, seed, limit)
+	generated, err := Generate(cards, mode, seed, limit, 0)
 	if err != nil {
 		return nil, err
 	}
