@@ -31,7 +31,14 @@ type Props = {
 
 export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const { token } = useAuth();
-  const displayTotal = totalCount ?? cards.length;
+  // Nếu totalCount không được truyền hoặc nhỏ hơn cards.length (race condition),
+  // dùng giá trị lớn hơn để tránh trigger completion sớm
+  const displayTotal = Math.max(totalCount ?? cards.length, cards.length);
+  // DEBUG — xoá sau khi xác nhận fix
+  React.useEffect(() => {
+    console.debug("[FC] totalCount=", totalCount, "cards.length=", cards.length, "displayTotal=", displayTotal);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalCount, cards.length]);
   const BATCH = 100; // thẻ mỗi lần fetch
   const PRELOAD_THRESHOLD = 40; // fetch thêm khi còn cách cuối 40 thẻ
 
@@ -242,6 +249,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // allSeen chỉ true khi đã load đủ tất cả thẻ thật VÀ đã xem hết
   const allLoadedAndSeen = deck.length >= displayTotal && seenCardIds.size >= total && total > 0;
   const allSeen = allLoadedAndSeen;
+  // DEBUG — xoá sau khi xác nhận fix
+  if (allSeen) console.debug("[FC] allSeen=true", { deckLen: deck.length, displayTotal, seenSize: seenCardIds.size, total });
   // Dùng displayTotal (tổng thẻ thật từ server) để progress phản ánh toàn bộ set,
   // không bị kẹt ở 50% khi deck chỉ load batch 100/3188 thẻ.
   const progressPct = displayTotal > 0 ? ((index + 1) / displayTotal) * 100 : 0;
