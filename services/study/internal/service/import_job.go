@@ -123,16 +123,7 @@ func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, data []by
 		return
 	}
 
-	if len(parseErrors) > 0 {
-		// Validation errors: mark done immediately with 0 imports and the errors.
-		_, _ = s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
-			Status:   model.ImportStatusDone,
-			Total:    len(items) + len(parseErrors),
-			Imported: 0,
-			Errors:   parseErrors,
-		})
-		return
-	}
+	// Tiếp tục import các dòng hợp lệ, bỏ qua dòng lỗi
 
 	// Determine start position
 	existing, err := s.flashcards.ListByStudySet(ctx, studySetID)
@@ -190,10 +181,11 @@ func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, data []by
 
 	_, _ = s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
 		Status:   model.ImportStatusDone,
-		Total:    total,
+		Total:    total + len(parseErrors),
 		Imported: imported,
+		Errors:   parseErrors,
 	})
-	log.Info("flashcard import done", "imported", imported, "total", total)
+	log.Info("flashcard import done", "imported", imported, "total", total, "skipped", len(parseErrors))
 }
 
 func (s *ImportJobService) runQuizImport(jobID, studySetID int64, data []byte) {

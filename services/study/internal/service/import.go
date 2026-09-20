@@ -128,10 +128,7 @@ func (s *ImportService) ImportFlashcards(ctx context.Context, studySetID, userID
 		items = append(items, item)
 	}
 
-	// Nếu đã có lỗi parse thì trả về sớm, không insert gì
-	if len(errors) > 0 {
-		return model.ImportFlashcardResult{Errors: errors}, nil
-	}
+	// Bỏ qua dòng lỗi, vẫn import các dòng hợp lệ
 
 	// Lấy max position hiện tại để append đúng thứ tự
 	existing, err := s.flashcards.ListByStudySet(ctx, studySetID)
