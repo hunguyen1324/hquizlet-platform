@@ -53,7 +53,13 @@ var (
 // Ví dụ: batch 1 → offset=0,limit=100; batch 2 → offset=100,limit=100
 // Cùng seed đảm bảo không trùng giữa các batch.
 func Generate(cards []studyclient.Flashcard, mode string, seed uint64, limit int, offset int) ([]Item, error) {
-	if !validMode(mode) || limit < 1 || limit > 500 || offset < 0 {
+	maxLimit := 500
+	if mode == "flashcards" {
+		// Flashcards mode tải toàn bộ bộ thẻ trong 1 lần, không phân trang trên UI,
+		// nên cần cho phép limit lớn hơn 500 khi set có nhiều thẻ.
+		maxLimit = 5000
+	}
+	if !validMode(mode) || limit < 1 || limit > maxLimit || offset < 0 {
 		return nil, ErrInvalid
 	}
 	deck := shuffle(cards, seed)
