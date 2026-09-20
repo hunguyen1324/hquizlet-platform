@@ -36,8 +36,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // 2. totalCount prop từ StudyDetail (fallback khi batch đầu chưa ready)
   // 3. cards.length (last resort)
   const [apiTotal, setApiTotal] = React.useState<number | null>(null);
-  const BATCH = 100; // thẻ mỗi lần fetch
-  const PRELOAD_THRESHOLD = 40; // fetch thêm khi còn cách cuối 40 thẻ
+  const BATCH = 50; // thẻ mỗi lần fetch
+  const PRELOAD_THRESHOLD = 20; // fetch thêm khi còn cách cuối 20 thẻ
 
   const generation = useQuizGeneration(studySetId, "flashcards", BATCH);
 
@@ -54,7 +54,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // Lưu seed của batch đầu để dùng lại khi preload batch tiếp theo.
   // Cùng seed + tăng offset → deck shuffle giống nhau, không bao giờ trùng thẻ.
   const initialSeedRef = React.useRef<number | null>(null);
-  const nextOffsetRef = React.useRef<number>(BATCH); // offset của batch tiếp theo
+  const nextOffsetRef = React.useRef<number>(0); // offset của batch tiếp theo = số thẻ đã nhận thực tế
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
@@ -114,11 +114,13 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // cardByIdRef là ref, không cần trong deps — chỉ reset khi generation thật sự đổi
   }, [generation.state, starredOnly, studySetId, resetSave]);
 
-  // Ghi nhớ seed của batch đầu để các batch tiếp theo dùng cùng seed + offset tăng dần
+  // Ghi nhớ seed của batch đầu và set nextOffset = số thẻ thực tế đã nhận
   React.useEffect(() => {
     if (generation.state.state === "ready") {
       initialSeedRef.current = generation.state.data.seed;
-      nextOffsetRef.current = BATCH; // reset offset khi generation mới (shuffle/restart)
+      // offset tiếp theo = số items thực nhận (không phải BATCH cố định)
+      // tránh bỏ sót thẻ khi server trả về ít hơn limit
+      nextOffsetRef.current = generation.state.data.items.length;
     }
   }, [generation.state]);
 
@@ -144,7 +146,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       .generate(token, studySetId, { mode: "flashcards", seed: seedToUse, limit: BATCH, offset: offsetToUse })
       .then((data) => {
         if (data.items.length === 0) return; // đã hết thẻ
-        nextOffsetRef.current = offsetToUse + BATCH; // chuẩn bị offset cho batch kế tiếp
+        nextOffsetRef.current = offsetToUse + data.items.length; // tăng theo số thẻ thực nhận
         const newCards = data.items.map((item) => ({
           id: item.flashcardId,
           studySetId,
