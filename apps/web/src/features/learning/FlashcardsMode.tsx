@@ -56,6 +56,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     autoPlay: false,
   });
   const [loadingMore, setLoadingMore] = React.useState(false);
+  // Ref để handleNext luôn đọc được deck.length mới nhất trong setTimeout closure
+  const deckLengthRef = React.useRef<number>(cards.length);
+  const displayTotalRef = React.useRef<number>(totalCount ?? cards.length);
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -148,6 +151,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   const current = deck[index];
   const total = deck.length;
+  // Đồng bộ refs để closure trong setTimeout luôn có giá trị mới nhất
+  deckLengthRef.current = total;
+  displayTotalRef.current = displayTotal;
 
   React.useEffect(() => {
     if (!current) return;
@@ -195,11 +201,14 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     setFlipped(false);
     setTimeout(() => setIndex((i) => {
       const nextIdx = i + 1;
-      // Nếu còn thẻ trong deck hoặc còn thẻ chưa load → tiến thẳng, không wrap
-      if (nextIdx < total) return nextIdx;
-      // Nếu đã xem hết tất cả thẻ thật → wrap về 0 (restart)
-      if (i + 1 >= displayTotal) return 0;
-      // Đang chờ load batch mới → giữ nguyên vị trí cuối
+      // Đọc từ ref để luôn có giá trị mới nhất, tránh stale closure
+      const currentDeckLen = deckLengthRef.current;
+      const currentDisplayTotal = displayTotalRef.current;
+      // Nếu còn thẻ trong deck → tiến thẳng, không wrap
+      if (nextIdx < currentDeckLen) return nextIdx;
+      // Nếu đã xem hết tất cả thẻ thật (không còn batch nào để load) → wrap về 0
+      if (currentDeckLen >= currentDisplayTotal) return 0;
+      // Đang chờ load batch mới → giữ nguyên vị trí cuối, KHÔNG wrap về 0
       return i;
     }), 60);
   }
