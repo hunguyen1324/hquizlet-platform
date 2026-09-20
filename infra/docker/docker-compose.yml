@@ -1,7 +1,38 @@
-# HQuizlet Platform – Docker Compose (Phase 9)
+# HQuizlet Platform – Docker Compose (Phase 9 + Nginx)
 # Chạy: docker compose -f infra/docker/docker-compose.yml up --build
+#
+# Luồng traffic:
+#   Browser → nginx:80
+#     /api/*            → gateway:8080  (REST)
+#     /api/*/events     → gateway:8080  (SSE – live quiz, buffering off)
+#     /files/*          → minio:9000    (static assets)
+#     /*                → web:5173      (Vite SPA + HMR WebSocket)
+#
+# Các service Go KHÔNG expose port ra host nữa – chỉ liên lạc qua Docker network nội bộ.
 
 services:
+
+  # ── Nginx (entry point duy nhất) ──────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/nginx-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ── Go Gateway ────────────────────────────────────────────────────────
   gateway:
     build:
       context: ../..
@@ -10,27 +41,22 @@ services:
         SERVICE: gateway
     environment:
       PORT: "8080"
-      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
-      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
-      QUIZ_SERVICE_URL: "${QUIZ_SERVICE_URL:-http://quiz:8083}"
-      CLASS_SERVICE_URL: "${CLASS_SERVICE_URL:-http://class:8084}"
+      AUTH_SERVICE_URL:    "${AUTH_SERVICE_URL:-http://auth:8081}"
+      STUDY_SERVICE_URL:   "${STUDY_SERVICE_URL:-http://study:8082}"
+      QUIZ_SERVICE_URL:    "${QUIZ_SERVICE_URL:-http://quiz:8083}"
+      CLASS_SERVICE_URL:   "${CLASS_SERVICE_URL:-http://class:8084}"
       PAYMENT_SERVICE_URL: "${PAYMENT_SERVICE_URL:-http://payment:8085}"
-      FILE_SERVICE_URL: "${FILE_SERVICE_URL:-http://file:8086}"
-    ports:
-      - "${GATEWAY_PORT:-8080}:8080"
+      FILE_SERVICE_URL:    "${FILE_SERVICE_URL:-http://file:8086}"
+    # Không expose port ra host – nginx gọi qua Docker network
+    expose:
+      - "8080"
     depends_on:
-      auth:
-        condition: service_healthy
-      study:
-        condition: service_healthy
-      quiz:
-        condition: service_healthy
-      class:
-        condition: service_healthy
-      payment:
-        condition: service_healthy
-      file:
-        condition: service_healthy
+      auth:    { condition: service_healthy }
+      study:   { condition: service_healthy }
+      quiz:    { condition: service_healthy }
+      class:   { condition: service_healthy }
+      payment: { condition: service_healthy }
+      file:    { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
@@ -39,6 +65,7 @@ services:
       retries: 5
       start_period: 10s
 
+  # ── Auth Service ──────────────────────────────────────────────────────
   auth:
     build:
       context: ../..
@@ -48,13 +75,12 @@ services:
     environment:
       PORT: "8081"
       DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
-      SESSION_TTL: "${SESSION_TTL:-1h}"
-      JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-prod}"
-    ports:
-      - "${AUTH_PORT:-8081}:8081"
+      SESSION_TTL:  "${SESSION_TTL:-1h}"
+      JWT_SECRET:   "${JWT_SECRET:-dev-secret-change-in-prod}"
+    expose:
+      - "8081"
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
@@ -63,6 +89,7 @@ services:
       retries: 5
       start_period: 15s
 
+  # ── Study Service ─────────────────────────────────────────────────────
   study:
     build:
       context: ../..
@@ -71,15 +98,13 @@ services:
         SERVICE: study
     environment:
       PORT: "8082"
-      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      DATABASE_URL:     "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
-    ports:
-      - "${STUDY_PORT:-8082}:8082"
+    expose:
+      - "8082"
     depends_on:
-      postgres:
-        condition: service_healthy
-      auth:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
+      auth:     { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
@@ -88,6 +113,7 @@ services:
       retries: 5
       start_period: 15s
 
+  # ── Quiz Service (Live Quiz + SSE) ────────────────────────────────────
   quiz:
     build:
       context: ../..
@@ -96,22 +122,18 @@ services:
         SERVICE: quiz
     environment:
       PORT: "8083"
-      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
-      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      DATABASE_URL:      "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      AUTH_SERVICE_URL:  "${AUTH_SERVICE_URL:-http://auth:8081}"
       STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
-      REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
-      NATS_URL: "${NATS_URL:-nats://nats:4222}"
-    ports:
-      - "${QUIZ_PORT:-8083}:8083"
+      REDIS_URL:         "${REDIS_URL:-redis://redis:6379}"
+      NATS_URL:          "${NATS_URL:-nats://nats:4222}"
+    expose:
+      - "8083"
     depends_on:
-      postgres:
-        condition: service_healthy
-      auth:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
+      auth:     { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      nats:     { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8083/readyz"]
@@ -120,6 +142,35 @@ services:
       retries: 5
       start_period: 15s
 
+  # ── Class Service ─────────────────────────────────────────────────────
+  class:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: class
+    environment:
+      PORT: "8084"
+      DATABASE_URL:          "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      AUTH_SERVICE_URL:      "${AUTH_SERVICE_URL:-http://auth:8081}"
+      STUDY_SERVICE_URL:     "${STUDY_SERVICE_URL:-http://study:8082}"
+      NATS_URL:              "${NATS_URL:-nats://nats:4222}"
+      CLASS_INTERNAL_TOKEN:  "${CLASS_INTERNAL_TOKEN:-dev-internal-token}"
+    expose:
+      - "8084"
+    depends_on:
+      postgres: { condition: service_healthy }
+      auth:     { condition: service_healthy }
+      nats:     { condition: service_started }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Payment Service ───────────────────────────────────────────────────
   payment:
     build:
       context: ../..
@@ -131,20 +182,18 @@ services:
         required: false
     environment:
       PORT: "8085"
-      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
-      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
-      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
-      ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
-      SEPAY_API_TOKEN: "${SEPAY_API_TOKEN:-}"
+      DATABASE_URL:               "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      STUDY_SERVICE_URL:          "${STUDY_SERVICE_URL:-http://study:8082}"
+      AUTH_SERVICE_URL:           "${AUTH_SERVICE_URL:-http://auth:8081}"
+      ADMIN_TOKEN:                "${ADMIN_TOKEN:-dev-admin-token}"
+      SEPAY_API_TOKEN:            "${SEPAY_API_TOKEN:-}"
       SEPAY_BIDV_BANK_ACCOUNT_ID: "${SEPAY_BIDV_BANK_ACCOUNT_ID:-}"
-      SEPAY_WEBHOOK_API_KEY: "${SEPAY_WEBHOOK_API_KEY:-}"
-    ports:
-      - "${PAYMENT_PORT:-8085}:8085"
+      SEPAY_WEBHOOK_API_KEY:      "${SEPAY_WEBHOOK_API_KEY:-}"
+    expose:
+      - "8085"
     depends_on:
-      postgres:
-        condition: service_healthy
-      auth:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
+      auth:     { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8085/healthz"]
@@ -153,54 +202,83 @@ services:
       retries: 5
       start_period: 15s
 
+  # ── File Service ──────────────────────────────────────────────────────
+  file:
+    build:
+      context: ../..
+      dockerfile: infra/docker/go-service.Dockerfile
+      args:
+        SERVICE: file
+    environment:
+      PORT: "8086"
+      DATABASE_URL:          "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
+      STORAGE_PROVIDER:      "${STORAGE_PROVIDER:-minio}"
+      STORAGE_ENDPOINT:      "${STORAGE_ENDPOINT:-http://minio:9000}"
+      STORAGE_BUCKET:        "${STORAGE_BUCKET:-hquizlet}"
+      STORAGE_ACCESS_KEY:    "${STORAGE_ACCESS_KEY:-minioadmin}"
+      STORAGE_SECRET_KEY:    "${STORAGE_SECRET_KEY:-minioadmin}"
+      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-http://localhost/files}"
+      STORAGE_REGION:        "${STORAGE_REGION:-us-east-1}"
+      STORAGE_PATH_STYLE:    "${STORAGE_PATH_STYLE:-true}"
+    expose:
+      - "8086"
+    depends_on:
+      postgres:   { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Frontend (Vite dev server) ────────────────────────────────────────
   web:
     build:
       context: ../..
       dockerfile: infra/docker/web.Dockerfile
     environment:
-      VITE_GATEWAY_URL: "${VITE_GATEWAY_URL:-http://localhost:8080}"
-    ports:
-      - "${WEB_PORT:-5173}:5173"
+      # Frontend gọi API qua nginx (không gọi thẳng gateway nữa)
+      VITE_GATEWAY_URL: "${VITE_GATEWAY_URL:-http://localhost/api}"
+    expose:
+      - "5173"
     volumes:
       - ../../apps/web:/app
       - web-node-modules:/app/node_modules
     depends_on:
-      gateway:
-        condition: service_healthy
+      gateway: { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://localhost:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
-        ]
+        ["CMD-SHELL",
+         "node -e \"fetch('http://localhost:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 20s
 
+  # ── PostgreSQL ────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: "${POSTGRES_DB:-hquizlet}"
-      POSTGRES_USER: "${POSTGRES_USER:-hquizlet}"
+      POSTGRES_DB:       "${POSTGRES_DB:-hquizlet}"
+      POSTGRES_USER:     "${POSTGRES_USER:-hquizlet}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-hquizlet}"
     ports:
+      # Vẫn expose để dev dùng TablePlus / psql trực tiếp
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-hquizlet} -d ${POSTGRES_DB:-hquizlet}"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hquizlet} -d ${POSTGRES_DB:-hquizlet}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     restart: unless-stopped
 
+  # ── Redis ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     ports:
@@ -212,77 +290,19 @@ services:
       retries: 3
     restart: unless-stopped
 
-  class:
-    build:
-      context: ../..
-      dockerfile: infra/docker/go-service.Dockerfile
-      args:
-        SERVICE: class
-    environment:
-      PORT: "8084"
-      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
-      AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
-      STUDY_SERVICE_URL: "${STUDY_SERVICE_URL:-http://study:8082}"
-      NATS_URL: "${NATS_URL:-nats://nats:4222}"
-      CLASS_INTERNAL_TOKEN: "${CLASS_INTERNAL_TOKEN:-dev-internal-token}"
-    ports:
-      - "${CLASS_PORT:-8084}:8084"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      auth:
-        condition: service_healthy
-      nats:
-        condition: service_started
-    restart: on-failure
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-
-  file:
-    build:
-      context: ../..
-      dockerfile: infra/docker/go-service.Dockerfile
-      args:
-        SERVICE: file
-    environment:
-      PORT: "8086"
-      DATABASE_URL: "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
-      STORAGE_PROVIDER: "${STORAGE_PROVIDER:-minio}"
-      STORAGE_ENDPOINT: "${STORAGE_ENDPOINT:-http://minio:9000}"
-      STORAGE_BUCKET: "${STORAGE_BUCKET:-hquizlet}"
-      STORAGE_ACCESS_KEY: "${STORAGE_ACCESS_KEY:-minioadmin}"
-      STORAGE_SECRET_KEY: "${STORAGE_SECRET_KEY:-minioadmin}"
-      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-http://localhost:9000/hquizlet}"
-      STORAGE_REGION: "${STORAGE_REGION:-us-east-1}"
-      STORAGE_PATH_STYLE: "${STORAGE_PATH_STYLE:-true}"
-    ports:
-      - "${FILE_PORT:-8086}:8086"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
-    restart: on-failure
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8086/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-
+  # ── MinIO ─────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_USER:     "${MINIO_ROOT_USER:-minioadmin}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
     ports:
-      - "9000:9000"
+      # Console vẫn expose để dev quản lý bucket
       - "9001:9001"
+      # API MinIO KHÔNG expose ra ngoài – truy cập file qua nginx /files/*
+    expose:
+      - "9000"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -295,8 +315,7 @@ services:
   minio-init:
     image: minio/mc:latest
     depends_on:
-      minio:
-        condition: service_healthy
+      minio: { condition: service_healthy }
     entrypoint: >
       /bin/sh -c "
         mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
@@ -305,6 +324,7 @@ services:
       "
     restart: "no"
 
+  # ── NATS ──────────────────────────────────────────────────────────────
   nats:
     image: nats:2-alpine
     command: ["-js", "--store_dir", "/data", "-m", "8222"]
