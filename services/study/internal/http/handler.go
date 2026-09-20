@@ -728,7 +728,7 @@ func (h *Handler) internalRouter(w http.ResponseWriter, r *http.Request) {
 // Used by Quiz service to fetch cards by ownership via X-User-ID header.
 func (h *Handler) getFlashcardsInternal(w http.ResponseWriter, r *http.Request, studySetID int64) {
 	userID := userIDFromHeader(r)
-	set, err := h.sets.GetWithCards(r.Context(), studySetID, userID)
+	set, err := h.sets.GetAllCardsForInternal(r.Context(), studySetID, userID)
 	if err != nil {
 		WriteServiceError(w, err)
 		return

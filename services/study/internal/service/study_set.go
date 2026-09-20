@@ -61,6 +61,32 @@ func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (m
 	return set, nil
 }
 
+// GetAllCardsForInternal returns a study set with ALL its flashcards loaded
+// (no pagination cap). Used exclusively by internal callers (e.g. the Quiz
+// service) that need the complete deck to generate quiz items — unlike
+// GetWithCards, which intentionally caps the embedded array at 50 cards
+// for the public detail page preview.
+// Visibility enforcement mirrors GetWithCards: private sets return 403 to non-owners.
+func (s *StudySetService) GetAllCardsForInternal(ctx context.Context, id, userID int64) (model.StudySet, error) {
+	set, err := s.sets.Get(ctx, id)
+	if err != nil {
+		return model.StudySet{}, err
+	}
+	if userID == 0 {
+		return model.StudySet{}, ErrUnauthorized
+	}
+	if set.UserID != userID && set.Visibility == "private" {
+		return model.StudySet{}, ErrForbidden
+	}
+	cards, err := s.cards.ListByStudySet(ctx, id)
+	if err != nil {
+		return model.StudySet{}, err
+	}
+	set.Flashcards = cards
+	set.FlashcardCount = len(cards)
+	return set, nil
+}
+
 // GetFlashcardsPaged returns a paginated page of flashcards for a study set.
 // Enforces visibility the same way GetWithCards does.
 func (s *StudySetService) GetFlashcardsPaged(ctx context.Context, id, userID int64, f model.FlashcardFilter) (model.FlashcardListResult, error) {
