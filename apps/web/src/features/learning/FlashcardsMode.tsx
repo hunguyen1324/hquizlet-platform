@@ -65,23 +65,23 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     mode: "flashcards",
   });
 
-  const cardById = React.useMemo(
-    () => new Map(cards.map((c) => [c.id, c])),
-    [cards],
-  );
+  // Ref thay vì useMemo để tránh reference thay đổi mỗi khi allCards infinite-scroll
+  // load trang mới, vì điều đó reset deck/index/seen trong khi đang học
+  const cardByIdRef = React.useRef<Map<number, Flashcard>>(new Map());
+  cardByIdRef.current = new Map(cards.map((c) => [c.id, c]));
 
   React.useEffect(() => {
     if (generation.state.state !== "ready") return;
     const generated = generation.state.data.items.map((item) => {
-      // cardById là fallback cho các field phụ (imageUrl, hint) nếu backend chưa trả
-      const full = cardById.get(item.flashcardId);
+      // cardByIdRef là fallback cho các field phụ (imageUrl, hint) nếu backend chưa trả
+      const full = cardByIdRef.current.get(item.flashcardId);
       return {
         id: item.flashcardId,
         studySetId,
         term: item.term ?? full?.term ?? "",
         definition: item.definition ?? full?.definition ?? "",
         starred: item.starred ?? full?.starred ?? false,
-        // API generate đã trả imageUrl — dùng nó trước, fallback về cardById
+        // API generate đã trả imageUrl — dùng nó trước, fallback về cardByIdRef
         imageUrl: (item as { imageUrl?: string | null }).imageUrl ?? full?.imageUrl ?? null,
         exampleSentence: (item as { exampleSentence?: string | null }).exampleSentence ?? full?.exampleSentence ?? null,
         hintExplanation: (item as { hintExplanation?: string | null }).hintExplanation ?? full?.hintExplanation ?? null,
@@ -95,7 +95,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     completionTriggered.current = false;
     resetSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generation.state, starredOnly, studySetId, resetSave, cardById]);
+  // cardByIdRef là ref, không cần trong deps — chỉ reset khi generation thật sự đổi
+  }, [generation.state, starredOnly, studySetId, resetSave]);
 
   // Ghi nhớ seed của batch đầu để các batch tiếp theo dùng cùng seed + offset tăng dần
   React.useEffect(() => {
