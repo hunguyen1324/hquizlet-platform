@@ -7,7 +7,19 @@ import { LearningEmptyState } from "../../components/learning/LearningEmptyState
 import { useProgressSave } from "./useProgressSave";
 import { ProgressSaveStatus } from "./ProgressSaveStatus";
 import { useQuizGeneration } from "./useQuizGeneration";
+import { FlashcardsSettingsDialog } from "./FlashcardsSettingsDialog";
+import type { FlashcardsSettings } from "./FlashcardsSettingsDialog";
 import "./learning.css";
+
+/** Phát âm text qua Web Speech API */
+function speakText(text: string) {
+  if (!window.speechSynthesis || !text.trim()) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = "vi-VN";
+  utt.rate = 0.9;
+  window.speechSynthesis.speak(utt);
+}
 
 type Props = {
   cards: Flashcard[];
@@ -26,6 +38,11 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   const [seenCardIds, setSeenCardIds] = React.useState<Set<number>>(new Set());
   const completionTriggered = React.useRef(false);
   const touchStartX = React.useRef<number | null>(null);
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [fcSettings, setFcSettings] = React.useState<FlashcardsSettings>({
+    startFromDefinition: false,
+    autoPlay: false,
+  });
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -88,6 +105,21 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     }
   }, [seenCardIds, total]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-play TTS when card becomes front
+  React.useEffect(() => {
+    if (!fcSettings.autoPlay || !current || flipped) return;
+    const text = fcSettings.startFromDefinition ? current.definition : current.term;
+    speakText(text);
+  }, [index, flipped, fcSettings.autoPlay, fcSettings.startFromDefinition, current]);
+
+  function handleAudio() {
+    if (!current) return;
+    const text = flipped
+      ? (fcSettings.startFromDefinition ? current.term : current.definition)
+      : (fcSettings.startFromDefinition ? current.definition : current.term);
+    speakText(text);
+  }
+
   function handlePrev() {
     setFlipped(false);
     setTimeout(() => setIndex((i) => (i - 1 + total) % total), 60);
@@ -149,8 +181,21 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     );
   }
 
+  // Flip respects startFromDefinition setting
+  const frontLabel = fcSettings.startFromDefinition ? "Định nghĩa" : "Thuật ngữ";
+  const backLabel = fcSettings.startFromDefinition ? "Thuật ngữ" : "Định nghĩa";
+  const frontText = fcSettings.startFromDefinition ? current.definition : current.term;
+  const backText = fcSettings.startFromDefinition ? current.term : current.definition;
+
   return (
     <div className="ql-root">
+      {showSettings && (
+        <FlashcardsSettingsDialog
+          settings={fcSettings}
+          onClose={() => setShowSettings(false)}
+          onChange={(s) => { setFcSettings(s); setShowSettings(false); }}
+        />
+      )}
       {/* ── Progress bar ── */}
       <div className="ql-progress-wrap">
         <div
@@ -169,6 +214,20 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
         </span>
 
         <div className="ql-actions">
+          {/* Audio button */}
+          <button
+            className="ql-icon-btn"
+            onClick={handleAudio}
+            title="Phát âm"
+            aria-label="Phát âm thẻ hiện tại"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          </button>
+
           {/* Starred filter */}
           {starredCount > 0 && (
             <button
@@ -210,6 +269,19 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
             </svg>
           </button>
 
+          {/* Settings */}
+          <button
+            className="ql-icon-btn"
+            onClick={() => setShowSettings(true)}
+            title="Cài đặt"
+            aria-label="Cài đặt Flashcards"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+
           {/* Restart */}
           <button className="ql-icon-btn" onClick={handleRestart} title="Bắt đầu lại">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -224,12 +296,12 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
         /* Both-sides view */
         <div className="ql-bothsides">
           <div className="ql-bothside-card ql-bothside-card--front">
-            <span className="ql-face-label">Thuật ngữ</span>
-            <p className="ql-card-text">{current.term}</p>
+            <span className="ql-face-label">{frontLabel}</span>
+            <p className="ql-card-text">{frontText}</p>
           </div>
           <div className="ql-bothside-card ql-bothside-card--back">
-            <span className="ql-face-label">Định nghĩa</span>
-            <p className="ql-card-text ql-card-text--def">{current.definition}</p>
+            <span className="ql-face-label">{backLabel}</span>
+            <p className="ql-card-text ql-card-text--def">{backText}</p>
           </div>
         </div>
       ) : (
@@ -251,22 +323,22 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
           tabIndex={0}
           role="button"
           aria-label={flipped
-            ? `Định nghĩa: ${current.definition}. Nhấn Space để lật lại.`
-            : `Thuật ngữ: ${current.term}. Nhấn Space để xem định nghĩa.`}
+            ? `${backLabel}: ${backText}. Nhấn Space để lật lại.`
+            : `${frontLabel}: ${frontText}. Nhấn Space để xem ${backLabel.toLowerCase()}.`}
         >
           <div className="ql-card-inner">
             {/* Front */}
             <div className="ql-face ql-face--front">
-              <span className="ql-face-label">Thuật ngữ</span>
+              <span className="ql-face-label">{frontLabel}</span>
               <div className="ql-face-main">
                 {current.imageUrl && (
                   <div className="ql-img-wrap">
-                    <img src={current.imageUrl} alt={current.term} className="ql-img" />
+                    <img src={current.imageUrl} alt={frontText} className="ql-img" />
                   </div>
                 )}
-                <p className="ql-card-text">{current.term}</p>
+                <p className="ql-card-text">{frontText}</p>
               </div>
-              {current.exampleSentence && (
+              {current.exampleSentence && !fcSettings.startFromDefinition && (
                 <div className="ql-face-extra">
                   <span className="ql-face-extra-label">Example</span>
                   <p className="ql-face-extra-text">{current.exampleSentence}</p>
@@ -280,11 +352,11 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
 
             {/* Back */}
             <div className="ql-face ql-face--back">
-              <span className="ql-face-label">Định nghĩa</span>
+              <span className="ql-face-label">{backLabel}</span>
               <div className="ql-face-main">
-                <p className="ql-card-text ql-card-text--def">{current.definition}</p>
+                <p className="ql-card-text ql-card-text--def">{backText}</p>
               </div>
-              {current.hintExplanation && (
+              {current.hintExplanation && !fcSettings.startFromDefinition && (
                 <div className="ql-face-extra">
                   <span className="ql-face-extra-label">Hint</span>
                   <p className="ql-face-extra-text">{current.hintExplanation}</p>

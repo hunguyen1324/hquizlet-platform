@@ -1,6 +1,9 @@
-// Navbar — unified design system, Quizlet-style
+// Navbar — unified design system, Quizlet-style with global search dropdown
 // PM: thống nhất với hq-* CSS classes, không dùng Tailwind inline
 import React, { useState, useRef, useEffect } from "react";
+import { useAuth } from "../../features/auth/AuthContext";
+import { SearchDropdown } from "../../features/search/SearchDropdown";
+import type { StudySet } from "../../types";
 import "./layout.css";
 
 type NavbarProps = {
@@ -9,19 +12,24 @@ type NavbarProps = {
   onCreateSet: () => void;
   onLogout: () => void;
   onNavigate?: (view: string) => void;
+  onSelectSet?: (set: StudySet) => void;
 };
 
-export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate }: NavbarProps) {
+export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSelectSet }: NavbarProps) {
+  const { token } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showUser, setShowUser] = useState(false);
   const createRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (createRef.current && !createRef.current.contains(e.target as Node)) setShowCreate(false);
       if (userRef.current && !userRef.current.contains(e.target as Node)) setShowUser(false);
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setShowDropdown(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -29,9 +37,28 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate }: Na
 
   const initials = user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
-  function handleSearch(e: React.FormEvent) {
+  function handleSearchChange(value: string) {
+    setSearchQuery(value);
+    setShowDropdown(!!value.trim());
+    onSearch?.(value);
+  }
+
+  function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSearch?.(searchQuery.trim());
+    if (searchQuery.trim()) {
+      onSearch?.(searchQuery.trim());
+      setShowDropdown(false);
+    }
+  }
+
+  function handleSelectSet(set: StudySet) {
+    setSearchQuery("");
+    setShowDropdown(false);
+    if (onSelectSet) {
+      onSelectSet(set);
+    } else {
+      onNavigate?.(`study-set-${set.id}`);
+    }
   }
 
   return (
@@ -47,24 +74,46 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate }: Na
         <span className="hq-nav-logo-text">HQuizlet</span>
       </button>
 
-      {/* Search */}
-      <form className="hq-nav-search" onSubmit={handleSearch}>
-        <div className="hq-nav-search-wrap">
-          <svg className="hq-nav-search-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            className="hq-nav-search-input"
-            type="search"
-            placeholder="Tìm kiếm học phần, bài học…"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              onSearch?.(e.target.value);
-            }}
+      {/* Search with dropdown */}
+      <div className="hq-nav-search-wrap-outer" ref={searchRef}>
+        <form className="hq-nav-search" onSubmit={handleSearchSubmit}>
+          <div className="hq-nav-search-wrap">
+            <svg className="hq-nav-search-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              id="navbar-search-input"
+              className="hq-nav-search-input"
+              type="search"
+              placeholder="Tìm kiếm học phần, bài học…"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => { if (searchQuery.trim()) setShowDropdown(true); }}
+              autoComplete="off"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="hq-nav-search-clear"
+                onClick={() => { setSearchQuery(""); setShowDropdown(false); onSearch?.(""); }}
+                aria-label="Xóa tìm kiếm"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        </form>
+        {showDropdown && (
+          <SearchDropdown
+            query={searchQuery}
+            token={token}
+            onSelect={handleSelectSet}
+            onClose={() => setShowDropdown(false)}
           />
-        </div>
-      </form>
+        )}
+      </div>
 
       <div className="hq-nav-spacer" />
 
