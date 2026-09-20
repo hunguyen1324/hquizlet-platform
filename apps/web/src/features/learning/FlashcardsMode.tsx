@@ -31,18 +31,26 @@ type Props = {
 
 export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const { token } = useAuth();
-  // Nếu totalCount không được truyền hoặc nhỏ hơn cards.length (race condition),
-  // dùng giá trị lớn hơn để tránh trigger completion sớm
-  const displayTotal = Math.max(totalCount ?? cards.length, cards.length);
-  // DEBUG — xoá sau khi xác nhận fix
-  React.useEffect(() => {
-    console.debug("[FC] totalCount=", totalCount, "cards.length=", cards.length, "displayTotal=", displayTotal);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalCount, cards.length]);
+  // displayTotal được tính từ nhiều nguồn theo độ ưu tiên:
+  // 1. total từ API generate (chính xác nhất — tổng thẻ thật trước limit/offset)
+  // 2. totalCount prop từ StudyDetail (fallback khi batch đầu chưa ready)
+  // 3. cards.length (last resort)
+  const [apiTotal, setApiTotal] = React.useState<number | null>(null);
   const BATCH = 100; // thẻ mỗi lần fetch
   const PRELOAD_THRESHOLD = 40; // fetch thêm khi còn cách cuối 40 thẻ
 
   const generation = useQuizGeneration(studySetId, "flashcards", BATCH);
+
+  // Lấy total từ API generate (nguồn chính xác nhất) và lưu vào state
+  React.useEffect(() => {
+    if (generation.state.state === "ready" && generation.state.data.total > 0) {
+      setApiTotal(generation.state.data.total);
+    }
+  }, [generation.state]);
+
+  // displayTotal: ưu tiên apiTotal → totalCount prop → cards.length
+  const displayTotal = apiTotal ?? Math.max(totalCount ?? cards.length, cards.length);
+
   // Lưu seed của batch đầu để dùng lại khi preload batch tiếp theo.
   // Cùng seed + tăng offset → deck shuffle giống nhau, không bao giờ trùng thẻ.
   const initialSeedRef = React.useRef<number | null>(null);
@@ -65,7 +73,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const [loadingMore, setLoadingMore] = React.useState(false);
   // Ref để handleNext luôn đọc được deck.length mới nhất trong setTimeout closure
   const deckLengthRef = React.useRef<number>(cards.length);
-  const displayTotalRef = React.useRef<number>(totalCount ?? cards.length);
+  const displayTotalRef = React.useRef<number>(0);
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,

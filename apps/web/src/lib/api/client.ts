@@ -132,6 +132,7 @@ export type QuizGenerateResponse = {
   mode: LearningMode;
   seed: number;
   items: QuizGeneratedItem[];
+  total: number; // tổng số thẻ thật trong study set (trước khi limit/offset)
   contractVersion: string;
 };
 export type QuizAnswer = {

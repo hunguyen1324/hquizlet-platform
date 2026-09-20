@@ -119,6 +119,7 @@ type generateResponse struct {
 	Mode            string        `json:"mode"`
 	Seed            uint64        `json:"seed"`
 	Items           []engine.Item `json:"items"`
+	Total           int           `json:"total"` // tổng số thẻ thật trong study set (trước khi limit/offset)
 	ContractVersion string        `json:"contractVersion"`
 }
 
@@ -394,7 +395,7 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid mode, seed, or limit")
 		return
 	}
-	writeJSON(w, http.StatusOK, generateResponse{Mode: req.Mode, Seed: req.Seed, Items: items, ContractVersion: engine.ContractVersion})
+	writeJSON(w, http.StatusOK, generateResponse{Mode: req.Mode, Seed: req.Seed, Items: items, Total: len(set.Flashcards), ContractVersion: engine.ContractVersion})
 }
 
 func (s *server) evaluate(w http.ResponseWriter, r *http.Request) {
