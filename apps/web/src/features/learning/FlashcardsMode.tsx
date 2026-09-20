@@ -167,7 +167,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   React.useEffect(() => {
     if (completionTriggered.current || total === 0) return;
-    if (seenCardIds.size >= total) {
+    // Chỉ trigger completion khi đã load ĐỦ tất cả thẻ thật VÀ đã xem hết
+    // Tránh trigger sớm ở thẻ 50 khi còn 3138 thẻ chưa load
+    const allRealCardsLoaded = total >= displayTotal;
+    if (allRealCardsLoaded && seenCardIds.size >= total) {
       completionTriggered.current = true;
       onSessionComplete({
         score: total,
@@ -176,7 +179,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         startedAt,
       });
     }
-  }, [seenCardIds, total]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [seenCardIds, total, displayTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-play TTS when card becomes front
   React.useEffect(() => {
