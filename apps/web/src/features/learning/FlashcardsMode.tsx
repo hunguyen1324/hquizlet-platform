@@ -508,6 +508,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
           <ProgressSaveStatus status={saveStatus} />
         </div>
       )}
+      {/* DEBUG BANNER — xoá sau khi fix */}
+      <div style={{fontSize:"11px",color:"#888",textAlign:"center",padding:"4px"}}>
+        deck:{deck.length} displayTotal:{displayTotal} totalCount:{totalCount ?? "undefined"} cards:{cards.length} seen:{seenCardIds.size} allSeen:{String(allSeen)}
+      </div>
 
       <p className="ql-kbd-hint" aria-hidden="true">
         ← → điều hướng · Space lật thẻ · vuốt trên mobile
