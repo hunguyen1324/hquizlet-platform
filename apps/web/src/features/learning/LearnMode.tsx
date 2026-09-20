@@ -234,7 +234,7 @@ export function LearnMode({ cards, studySetId }: Props) {
     });
   }
 
-  function restart() {
+  function restart(keepGeneration = false) {
     resetSave();
     setDone(false);
     setAnswers({});
@@ -245,9 +245,13 @@ export function LearnMode({ cards, studySetId }: Props) {
     setError(null);
     setStartedAt(new Date());
     setQuestionStartedAt(Date.now());
+<<<<<<< HEAD
     // Increment restartKey BEFORE clearing queue so useEffect fires with fresh items
     setRestartKey((k) => k + 1);
     generation.regenerate();
+=======
+    if (!keepGeneration) generation.regenerate();
+>>>>>>> 46c209a9dbaf0ce39db298890229e6fe78482ab0
   }
 
   /* ── Guard states ── */
@@ -303,7 +307,7 @@ export function LearnMode({ cards, studySetId }: Props) {
           <LearnSettingsDialog
             settings={settings}
             onClose={() => setShowSettings(false)}
-            onChange={(s) => { setSettings(s); setShowSettings(false); restart(); }}
+            onChange={(s) => { setSettings(s); setShowSettings(false); restart(true); }}
             hasStarred={cards.some((c) => c.starred)}
           />
         )}
@@ -322,7 +326,7 @@ export function LearnMode({ cards, studySetId }: Props) {
         <LearnSettingsDialog
           settings={settings}
           onClose={() => setShowSettings(false)}
-          onChange={(s) => { setSettings(s); setShowSettings(false); restart(); }}
+          onChange={(s) => { setSettings(s); setShowSettings(false); restart(true); }}
           hasStarred={cards.some((c) => c.starred)}
         />
       )}

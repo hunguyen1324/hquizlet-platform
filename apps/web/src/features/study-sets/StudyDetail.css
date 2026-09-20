@@ -1342,3 +1342,37 @@
 .dark .ql-delete-confirm { background: rgba(239,68,68,0.1); border-color: #f87171; }
 .dark .sd-action-error { background: rgba(239,68,68,0.15); }
 
+
+/* ── Infinite scroll sentinel ── */
+.sd-infinite-sentinel {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+.sd-infinite-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+.sd-all-loaded {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.82rem;
+  padding: 0.75rem 0;
+  margin: 0;
+}
+
+.ql-spinner-sm {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid #e5e7eb;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: sd-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes sd-spin { to { transform: rotate(360deg); } }
