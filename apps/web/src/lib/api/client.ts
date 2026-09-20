@@ -286,9 +286,19 @@ export const grammarApi = {
 
 export type ImportResult = { imported: number; errors: Array<{ row: number; field: string; reason: string }> };
 async function uploadExcel(token: string, path: string, file: File): Promise<ImportResult> {
+  const url = new URL(`${gatewayUrl}${path}`);
   const form = new FormData();
   form.append("file", file);
-  return apiFetch(path, token, { method: "POST", body: form });
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  const body = (await res.json().catch(() => ({}))) as ApiErrorBody & Partial<ImportResult>;
+  if (res.ok || (res.status === 422 && Array.isArray(body.errors))) {
+    return { imported: body.imported ?? 0, errors: body.errors ?? [] };
+  }
+  throw new ApiError(res.status, body.message ?? body.error ?? `Request failed ${res.status}`, body.code, body.field, body.requestId);
 }
 export const importApi = {
   flashcards: (token: string, studySetId: number, file: File): Promise<ImportResult> =>

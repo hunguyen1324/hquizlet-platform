@@ -420,21 +420,18 @@ func parseFlashcardExcel(data []byte) ([]model.ImportFlashcardRow, []model.Impor
 		return nil, nil, fmt.Errorf("excel file must have a header row and at least one data row")
 	}
 
-	header := make(map[string]int)
-	for i, cell := range rows[0] {
-		header[strings.ToLower(strings.TrimSpace(cell))] = i
-	}
+	header := flashcardHeaderIndex(rows[0])
 
-	termIdx, hasTerm := header["term"]
-	defIdx, hasDef := header["definition"]
+	termIdx, hasTerm := firstHeaderIndex(header, "term", "front", "kanji", "word", "vocabulary", "question")
+	defIdx, hasDef := firstHeaderIndex(header, "definition", "back", "meaning", "answer", "translation")
 	if !hasTerm || !hasDef {
 		return nil, nil, fmt.Errorf("excel file must have 'Term' and 'Definition' columns")
 	}
 
-	exIdx := header["example"]
-	hintIdx := header["hint"]
-	synIdx := header["synonyms"]
-	imgIdx := header["image url"]
+	exIdx, _ := firstHeaderIndex(header, "example", "example sentence")
+	hintIdx, _ := firstHeaderIndex(header, "hint", "hint explanation", "explanation", "note", "notes")
+	synIdx, _ := firstHeaderIndex(header, "synonyms", "synonym")
+	imgIdx, _ := firstHeaderIndex(header, "image url", "image", "image_url", "imageurl")
 
 	var items []model.ImportFlashcardRow
 	var errs []model.ImportError
@@ -477,4 +474,28 @@ func parseFlashcardExcel(data []byte) ([]model.ImportFlashcardRow, []model.Impor
 	}
 
 	return items, errs, nil
+}
+
+func flashcardHeaderIndex(row []string) map[string]int {
+	header := make(map[string]int)
+	for i, cell := range row {
+		header[normalizeHeader(cell)] = i
+	}
+	return header
+}
+
+func firstHeaderIndex(header map[string]int, names ...string) (int, bool) {
+	for _, name := range names {
+		if idx, ok := header[normalizeHeader(name)]; ok {
+			return idx, true
+		}
+	}
+	return -1, false
+}
+
+func normalizeHeader(s string) string {
+	normalized := strings.ToLower(strings.TrimSpace(s))
+	normalized = strings.ReplaceAll(normalized, "_", " ")
+	normalized = strings.ReplaceAll(normalized, "-", " ")
+	return strings.Join(strings.Fields(normalized), " ")
 }

@@ -27,6 +27,8 @@ const MODE_CONFIG: { mode: StudyMode; icon: string; label: string }[] = [
   { mode: "match",      icon: "⌘", label: "Ghép thẻ" },
 ];
 
+const CARD_PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
   const { token } = useAuth();
   const [studyMode, setStudyMode] = React.useState<StudyMode>("dashboard");
@@ -34,6 +36,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [progress, setProgress] = React.useState<ProgressListResponse | null>(null);
   const [progressError, setProgressError] = React.useState("");
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
+  const [cardPage, setCardPage] = React.useState(1);
+  const [cardPageSize, setCardPageSize] = React.useState(50);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
@@ -59,6 +63,19 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     }
     return cards;
   }, [cards, sortOrder]);
+
+  const cardPageCount = Math.max(1, Math.ceil(sortedCards.length / cardPageSize));
+  const visibleCardStart = (cardPage - 1) * cardPageSize;
+  const visibleCards = sortedCards.slice(visibleCardStart, visibleCardStart + cardPageSize);
+  const visibleCardEnd = Math.min(visibleCardStart + visibleCards.length, sortedCards.length);
+
+  React.useEffect(() => {
+    setCardPage(1);
+  }, [set.id, sortOrder, cardPageSize]);
+
+  React.useEffect(() => {
+    setCardPage((page) => Math.min(page, cardPageCount));
+  }, [cardPageCount]);
 
   const totalItems =
     (set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cards.length);
@@ -212,6 +229,21 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                   <span className="sd-termlist-count">({cards.length})</span>
                 </h2>
                 <div className="sd-termlist-controls">
+                  {cards.length > 0 && (
+                    <span className="sd-page-range">
+                      {visibleCardStart + 1}-{visibleCardEnd} / {sortedCards.length}
+                    </span>
+                  )}
+                  <select
+                    className="sd-sort-select"
+                    value={cardPageSize}
+                    aria-label="Số thẻ mỗi trang"
+                    onChange={(e) => setCardPageSize(Number(e.target.value))}
+                  >
+                    {CARD_PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>{size}/trang</option>
+                    ))}
+                  </select>
                   <select
                     className="sd-sort-select"
                     value={sortOrder}
@@ -231,7 +263,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               )}
 
               <div className="sd-cards">
-                {sortedCards.map((card) => (
+                {visibleCards.map((card) => (
                   <article className="sd-card" key={card.id}>
                     {card.imageUrl && (
                       <div className="sd-card-image">
@@ -260,6 +292,28 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                   </article>
                 ))}
               </div>
+
+              {sortedCards.length > cardPageSize && (
+                <div className="sd-pagination" aria-label="Phân trang thuật ngữ">
+                  <button
+                    className="sd-page-btn"
+                    type="button"
+                    disabled={cardPage === 1}
+                    onClick={() => setCardPage((page) => Math.max(1, page - 1))}
+                  >
+                    Trước
+                  </button>
+                  <span className="sd-page-status">Trang {cardPage} / {cardPageCount}</span>
+                  <button
+                    className="sd-page-btn"
+                    type="button"
+                    disabled={cardPage === cardPageCount}
+                    onClick={() => setCardPage((page) => Math.min(cardPageCount, page + 1))}
+                  >
+                    Sau
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

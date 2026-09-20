@@ -40,92 +40,14 @@ func (s *ImportService) ImportFlashcards(ctx context.Context, studySetID, userID
 		return model.ImportFlashcardResult{}, err
 	}
 
-	// Read the entire file into a temp file for excelize
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return model.ImportFlashcardResult{}, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	f, err := excelize.OpenReader(bytes.NewReader(data))
+	items, errors, err := parseFlashcardExcel(data)
 	if err != nil {
-		return model.ImportFlashcardResult{}, fmt.Errorf("failed to open Excel file: %w", err)
-	}
-	defer f.Close()
-
-	// Get the first sheet
-	sheetName := f.GetSheetName(0)
-	if sheetName == "" {
-		return model.ImportFlashcardResult{}, fmt.Errorf("Excel file has no sheets")
-	}
-
-	rows, err := f.GetRows(sheetName)
-	if err != nil {
-		return model.ImportFlashcardResult{}, fmt.Errorf("failed to read sheet: %w", err)
-	}
-
-	if len(rows) < 2 {
-		return model.ImportFlashcardResult{}, fmt.Errorf("Excel file must have a header row and at least one data row")
-	}
-
-	// Parse header row (case-insensitive)
-	header := make(map[string]int)
-	for i, cell := range rows[0] {
-		header[strings.ToLower(strings.TrimSpace(cell))] = i
-	}
-
-	// Validate required columns
-	termIdx, hasTerm := header["term"]
-	defIdx, hasDef := header["definition"]
-	if !hasTerm || !hasDef {
-		return model.ImportFlashcardResult{}, fmt.Errorf("Excel file must have 'Term' and 'Definition' columns")
-	}
-
-	// Optional column indices
-	exIdx := header["example"]
-	hintIdx := header["hint"]
-	synIdx := header["synonyms"]
-	imgIdx := header["image url"]
-
-	var items []model.ImportFlashcardRow
-	errors := []model.ImportError{}
-
-	for rowIdx := 1; rowIdx < len(rows); rowIdx++ {
-		row := rows[rowIdx]
-		if len(row) == 0 || (len(row) == 1 && strings.TrimSpace(row[0]) == "") {
-			continue // skip empty rows
-		}
-
-		if len(items) >= maxFlashcardImportRows {
-			errors = append(errors, model.ImportError{
-				Row:    rowIdx + 1,
-				Field:  "row",
-				Reason: fmt.Sprintf("exceeds maximum of %d rows", maxFlashcardImportRows),
-			})
-			break
-		}
-
-		term := getCell(row, termIdx)
-		def := getCell(row, defIdx)
-
-		if term == "" {
-			errors = append(errors, model.ImportError{Row: rowIdx + 1, Field: "Term", Reason: "Term is required"})
-			continue
-		}
-		if def == "" {
-			errors = append(errors, model.ImportError{Row: rowIdx + 1, Field: "Definition", Reason: "Definition is required"})
-			continue
-		}
-
-		item := model.ImportFlashcardRow{
-			Row:             rowIdx + 1,
-			Term:            term,
-			Definition:      def,
-			ExampleSentence: getCell(row, exIdx),
-			HintExplanation: getCell(row, hintIdx),
-			Synonyms:        getCell(row, synIdx),
-			ImageURL:        getCell(row, imgIdx),
-		}
-		items = append(items, item)
+		return model.ImportFlashcardResult{}, err
 	}
 
 	// Nếu đã có lỗi parse thì trả về sớm, không insert gì
