@@ -19,6 +19,8 @@ type Props = {
 
 export function LearningContainer({ set, mode }: Props) {
   const cards: Flashcard[] = set.flashcards ?? [];
+  // Dùng flashcardCount từ server nếu có, fallback về cards.length
+  const totalCardCount = set.flashcardCount ?? cards.length;
 
   if (cards.length === 0) {
     return (
@@ -31,7 +33,7 @@ export function LearningContainer({ set, mode }: Props) {
 
   switch (mode) {
     case "flashcards":
-      return <FlashcardsMode cards={cards} studySetId={set.id} />;
+      return <FlashcardsMode cards={cards} studySetId={set.id} totalCount={totalCardCount} />;
     case "learn":
       return <LearnMode cards={cards} studySetId={set.id} />;
     case "test":

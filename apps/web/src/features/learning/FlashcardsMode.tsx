@@ -24,9 +24,11 @@ function speakText(text: string) {
 type Props = {
   cards: Flashcard[];
   studySetId: number;
+  totalCount?: number; // tổng thẻ thật từ server
 };
 
-export function FlashcardsMode({ cards, studySetId }: Props) {
+export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
+  const displayTotal = totalCount ?? cards.length;
   const generation = useQuizGeneration(studySetId, "flashcards", Math.min(cards.length, 100));
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
@@ -202,7 +204,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
           className="ql-progress-bar"
           role="progressbar"
           aria-valuenow={index + 1}
-          aria-valuemax={cards.length}
+          aria-valuemax={displayTotal}
           style={{ width: `${progressPct}%` }}
         />
       </div>
@@ -210,7 +212,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
       {/* ── Counter + toolbar ── */}
       <div className="ql-topbar">
         <span className="ql-counter" aria-live="polite">
-          <strong>{index + 1}</strong> / {cards.length}
+          <strong>{index + 1}</strong> / {displayTotal}
         </span>
 
         <div className="ql-actions">
@@ -390,7 +392,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
               tabIndex={-1}
             />
           )) : (
-            <span className="ql-nav-count">{index + 1} / {cards.length}</span>
+            <span className="ql-nav-count">{index + 1} / {displayTotal}</span>
           )}
         </div>
 
