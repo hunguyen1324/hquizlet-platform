@@ -36,7 +36,8 @@ func (s *StudySetService) ListWithFilter(ctx context.Context, userID int64, f mo
 	return s.sets.ListWithFilter(ctx, userID, f)
 }
 
-// GetWithCards returns a study set along with its flashcards.
+// GetWithCards returns a study set along with a first page of flashcards (max 50).
+// For large sets, callers should use GetFlashcardsPaged for subsequent pages.
 // Visibility enforcement: private sets return 403 to non-owners.
 func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (model.StudySet, error) {
 	set, err := s.sets.Get(ctx, id)
@@ -50,12 +51,43 @@ func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (m
 	if set.UserID != userID && set.Visibility == "private" {
 		return model.StudySet{}, ErrForbidden
 	}
-	cards, err := s.cards.ListByStudySet(ctx, id)
+	// Load first 50 cards inline for backward compat; detail page will lazy-load more
+	cards, total, err := s.cards.ListByStudySetPaged(ctx, id, 1, 50)
 	if err != nil {
 		return model.StudySet{}, err
 	}
 	set.Flashcards = cards
+	set.FlashcardCount = total
 	return set, nil
+}
+
+// GetFlashcardsPaged returns a paginated page of flashcards for a study set.
+// Enforces visibility the same way GetWithCards does.
+func (s *StudySetService) GetFlashcardsPaged(ctx context.Context, id, userID int64, f model.FlashcardFilter) (model.FlashcardListResult, error) {
+	set, err := s.sets.Get(ctx, id)
+	if err != nil {
+		return model.FlashcardListResult{}, err
+	}
+	if userID == 0 {
+		return model.FlashcardListResult{}, ErrUnauthorized
+	}
+	if set.UserID != userID && set.Visibility == "private" {
+		return model.FlashcardListResult{}, ErrForbidden
+	}
+	page, perPage := model.ClampPage(f.Page, f.PerPage, 200)
+	items, total, err := s.cards.ListByStudySetPaged(ctx, id, page, perPage)
+	if err != nil {
+		return model.FlashcardListResult{}, err
+	}
+	return model.FlashcardListResult{
+		Items: items,
+		PageMeta: model.PageMeta{
+			Page:       page,
+			PerPage:    perPage,
+			Total:      total,
+			TotalPages: model.CalcTotalPages(total, perPage),
+		},
+	}, nil
 }
 
 func (s *StudySetService) Create(ctx context.Context, userID int64, in model.CreateStudySetInput) (model.StudySet, error) {

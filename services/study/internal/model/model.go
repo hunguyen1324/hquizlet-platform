@@ -481,3 +481,15 @@ type ImportJobListResult struct {
 	Items    []ImportJob `json:"items"`
 	PageMeta             // inlined
 }
+
+// FlashcardFilter holds pagination params for listing flashcards under a study set.
+type FlashcardFilter struct {
+	Page    int // 1-based, default 1
+	PerPage int // default 50, max 200
+}
+
+// FlashcardListResult is the paginated response for GET /v1/study-sets/{id}/flashcards.
+type FlashcardListResult struct {
+	Items    []Flashcard `json:"items"`
+	PageMeta             // inlined: page, perPage, total, totalPages
+}

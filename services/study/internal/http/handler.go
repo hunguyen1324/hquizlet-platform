@@ -110,6 +110,8 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 && parts[1] == "flashcards" {
 		if r.Method == http.MethodPost {
 			h.createFlashcard(w, r, setID)
+		} else if r.Method == http.MethodGet {
+			h.listFlashcardsPaged(w, r, setID)
 		} else {
 			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -234,6 +236,21 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	default:
 		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// listFlashcardsPaged handles GET /v1/study-sets/{id}/flashcards?page=1&per_page=50
+func (h *Handler) listFlashcardsPaged(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	q := r.URL.Query()
+	filter := model.FlashcardFilter{
+		Page:    intQueryParam(q.Get("page"), 1),
+		PerPage: intQueryParam(q.Get("per_page"), 50),
+	}
+	result, err := h.sets.GetFlashcardsPaged(r.Context(), studySetID, userIDFromHeader(r), filter)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) createFlashcard(w http.ResponseWriter, r *http.Request, studySetID int64) {

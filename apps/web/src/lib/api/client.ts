@@ -88,9 +88,11 @@ export type BulkFlashcardItem = {
   imageUrl?: string | null;
 };
 export type BulkSaveResult = { created: Flashcard[]; updated: Flashcard[]; deleted: number[] };
+export type FlashcardListResult = { items: Flashcard[]; page: number; perPage: number; total: number; totalPages: number };
 export const flashcardApi = {
   create: (token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> => apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, { method: "POST", body: JSON.stringify(payload) }),
   add: (token: string, studySetId: number, payload: CreateFlashcardPayload): Promise<Flashcard> => apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, { method: "POST", body: JSON.stringify(payload) }),
+  listPaged: (token: string, studySetId: number, page = 1, perPage = 50): Promise<FlashcardListResult> => apiFetch(`/v1/study-sets/${studySetId}/flashcards`, token, {}, { page, per_page: perPage }),
   bulkSave: (token: string, studySetId: number, cards: BulkFlashcardItem[]): Promise<BulkSaveResult> => apiFetch(`/v1/study-sets/${studySetId}/flashcards/bulk`, token, { method: "POST", body: JSON.stringify({ cards }) }),
   update: (token: string, id: number, payload: UpdateFlashcardPayload): Promise<Flashcard> => apiFetch(`/v1/flashcards/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),
   delete: (token: string, id: number): Promise<void> => apiFetch(`/v1/flashcards/${id}`, token, { method: "DELETE" }),

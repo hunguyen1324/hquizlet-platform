@@ -182,3 +182,56 @@ func (r *FlashcardRepository) BulkSave(ctx context.Context, studySetID int64, it
 	}
 	return result, nil
 }
+
+// ---------------------------------------------------------------------------
+// Paginated flashcard list
+// ---------------------------------------------------------------------------
+
+// FlashcardPage is the paginated result for listing flashcards under a study set.
+// It is defined here (not in model) to avoid circular imports; the handler
+// converts it to a JSON response directly.
+
+// ListByStudySetPaged returns a page of flashcards for a study set.
+// page is 1-based; perPage is clamped to [1, 200].
+func (r *FlashcardRepository) ListByStudySetPaged(ctx context.Context, studySetID int64, page, perPage int) (items []model.Flashcard, total int, err error) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 {
+		perPage = 50
+	}
+	if perPage > 200 {
+		perPage = 200
+	}
+	offset := (page - 1) * perPage
+
+	if err = r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM flashcards WHERE study_set_id = $1`, studySetID,
+	).Scan(&total); err != nil {
+		return
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT `+selectCols+`
+		FROM flashcards
+		WHERE study_set_id = $1
+		ORDER BY position ASC, id ASC
+		LIMIT $2 OFFSET $3
+	`, studySetID, perPage, offset)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	items = []model.Flashcard{}
+	for rows.Next() {
+		c, scanErr := scanCard(rows)
+		if scanErr != nil {
+			err = scanErr
+			return
+		}
+		items = append(items, c)
+	}
+	err = rows.Err()
+	return
+}

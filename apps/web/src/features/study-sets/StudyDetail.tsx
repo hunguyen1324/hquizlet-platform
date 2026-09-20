@@ -8,6 +8,7 @@ import { LearningContainer } from "../learning";
 import { fetchProgressSummary, type ProgressListResponse } from "../learning/progressContract";
 import { useAuth } from "../auth/AuthContext";
 import { ProgressPanel, type ProgressPanelStatus } from "../../components/progress";
+import { flashcardApi } from "../../lib/api";
 import "./StudyDetail.css";
 
 type StudyMode = "dashboard" | LearningMode;
@@ -27,6 +28,8 @@ const MODE_CONFIG: { mode: StudyMode; icon: string; label: string }[] = [
   { mode: "match",      icon: "⌘", label: "Ghép thẻ" },
 ];
 
+const PER_PAGE = 50;
+
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
   const { token } = useAuth();
   const [studyMode, setStudyMode] = React.useState<StudyMode>("dashboard");
@@ -36,6 +39,38 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
+
+  // ── Paginated flashcard list state ──────────────────────────────────────
+  const [pagedCards, setPagedCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
+  const [cardPage, setCardPage] = React.useState(1);
+  const [cardTotal, setCardTotal] = React.useState(set.flashcardCount ?? (set.flashcards?.length ?? 0));
+  const [cardTotalPages, setCardTotalPages] = React.useState(
+    Math.max(1, Math.ceil((set.flashcardCount ?? (set.flashcards?.length ?? 0)) / PER_PAGE))
+  );
+  const [cardLoading, setCardLoading] = React.useState(false);
+  const [cardError, setCardError] = React.useState("");
+
+  const loadCards = React.useCallback(async (page: number) => {
+    setCardLoading(true);
+    setCardError("");
+    try {
+      const result = await flashcardApi.listPaged(token, set.id, page, PER_PAGE);
+      setPagedCards(result.items);
+      setCardPage(result.page);
+      setCardTotal(result.total);
+      setCardTotalPages(result.totalPages);
+    } catch (err) {
+      setCardError(err instanceof Error ? err.message : "Không tải được thẻ.");
+    } finally {
+      setCardLoading(false);
+    }
+  }, [token, set.id]);
+
+  // Only fetch from API when user navigates pages (first page is pre-loaded from set.flashcards)
+  const handleCardPage = (next: number) => {
+    if (next === cardPage) return;
+    void loadCards(next);
+  };
 
   // Close dropdown on outside click
   React.useEffect(() => {
@@ -49,19 +84,19 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  const cards = set.flashcards ?? [];
   const progressHistory = progress?.history ?? [];
   const latestProgress = progressHistory[0] ?? null;
 
   const sortedCards = React.useMemo(() => {
     if (sortOrder === "alphabetical") {
-      return [...cards].sort((a, b) => a.term.localeCompare(b.term));
+      return [...pagedCards].sort((a, b) => a.term.localeCompare(b.term));
     }
-    return cards;
-  }, [cards, sortOrder]);
+    return pagedCards;
+  }, [pagedCards, sortOrder]);
 
+  // Total displayed in header: use authoritative count from API
   const totalItems =
-    (set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cards.length);
+    (set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cardTotal);
 
   const loadProgress = React.useCallback(async () => {
     setProgressStatus("loading");
@@ -209,13 +244,14 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
               <div className="sd-termlist-header">
                 <h2 className="sd-termlist-title">
                   Thuật ngữ trong học phần này
-                  <span className="sd-termlist-count">({cards.length})</span>
+                  <span className="sd-termlist-count">({cardTotal})</span>
                 </h2>
                 <div className="sd-termlist-controls">
                   <select
                     className="sd-sort-select"
                     value={sortOrder}
                     onChange={(e) => setSortOrder(e.target.value as "original" | "alphabetical")}
+                    disabled={cardLoading}
                   >
                     <option value="original">Thứ tự gốc</option>
                     <option value="alphabetical">A → Z</option>
@@ -223,43 +259,85 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                 </div>
               </div>
 
-              {cards.length === 0 && (
+              {cardError && (
+                <div className="sd-empty">
+                  <span>⚠️</span>
+                  <p>{cardError}</p>
+                  <button className="ghost-button" onClick={() => void loadCards(cardPage)}>Thử lại</button>
+                </div>
+              )}
+
+              {!cardError && pagedCards.length === 0 && !cardLoading && (
                 <div className="sd-empty">
                   <span>📭</span>
                   <p>Chưa có thẻ học nào.</p>
                 </div>
               )}
 
-              <div className="sd-cards">
-                {sortedCards.map((card) => (
-                  <article className="sd-card" key={card.id}>
-                    {card.imageUrl && (
-                      <div className="sd-card-image">
-                        <img src={card.imageUrl} alt={card.term} />
+              {cardLoading && (
+                <div className="loading-skeleton" aria-busy="true">
+                  {[1, 2, 3].map((i) => <div key={i} className="skeleton-row" />)}
+                </div>
+              )}
+
+              {!cardLoading && (
+                <div className="sd-cards">
+                  {sortedCards.map((card) => (
+                    <article className="sd-card" key={card.id}>
+                      {card.imageUrl && (
+                        <div className="sd-card-image">
+                          <img src={card.imageUrl} alt={card.term} />
+                        </div>
+                      )}
+                      <div className="sd-card-body">
+                        <div className="sd-card-term">{card.term}</div>
+                        <div className="sd-card-divider" />
+                        <div className="sd-card-definition">{card.definition}</div>
+                        {card.exampleSentence && (
+                          <div className="sd-card-example">{card.exampleSentence}</div>
+                        )}
                       </div>
-                    )}
-                    <div className="sd-card-body">
-                      <div className="sd-card-term">{card.term}</div>
-                      <div className="sd-card-divider" />
-                      <div className="sd-card-definition">{card.definition}</div>
-                      {card.exampleSentence && (
-                        <div className="sd-card-example">{card.exampleSentence}</div>
-                      )}
-                    </div>
-                    <div className="sd-card-actions">
-                      {onToggleStar && (
-                        <button
-                          className={`sd-star-btn ${card.starred ? "starred" : ""}`}
-                          onClick={() => onToggleStar(card)}
-                          title={card.starred ? "Bỏ đánh dấu" : "Đánh dấu"}
-                        >
-                          {card.starred ? "★" : "☆"}
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
+                      <div className="sd-card-actions">
+                        {onToggleStar && (
+                          <button
+                            className={`sd-star-btn ${card.starred ? "starred" : ""}`}
+                            onClick={() => onToggleStar(card)}
+                            title={card.starred ? "Bỏ đánh dấu" : "Đánh dấu"}
+                          >
+                            {card.starred ? "★" : "☆"}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination controls — only show when there is more than 1 page */}
+              {cardTotalPages > 1 && (
+                <div className="sd-pagination">
+                  <button
+                    className="sd-page-btn"
+                    disabled={cardPage <= 1 || cardLoading}
+                    onClick={() => handleCardPage(cardPage - 1)}
+                    aria-label="Trang trước"
+                  >
+                    ‹
+                  </button>
+                  <span className="sd-page-info">
+                    Trang {cardPage} / {cardTotalPages}
+                    <span className="sd-page-total"> · {cardTotal} thẻ</span>
+                  </span>
+                  <button
+                    className="sd-page-btn"
+                    disabled={cardPage >= cardTotalPages || cardLoading}
+                    onClick={() => handleCardPage(cardPage + 1)}
+                    aria-label="Trang sau"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -26,6 +26,7 @@ type StudySets interface {
 // Flashcards is the interface for flashcard data access.
 type Flashcards interface {
 	ListByStudySet(ctx context.Context, studySetID int64) ([]model.Flashcard, error)
+	ListByStudySetPaged(ctx context.Context, studySetID int64, page, perPage int) (items []model.Flashcard, total int, err error)
 	Get(ctx context.Context, id int64) (model.Flashcard, error)
 	Create(ctx context.Context, studySetID int64, in model.CreateFlashcardInput) (model.Flashcard, error)
 	Update(ctx context.Context, id int64, in model.UpdateFlashcardInput) (model.Flashcard, error)
