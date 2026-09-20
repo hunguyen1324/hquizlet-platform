@@ -99,6 +99,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
     imported: number;
     errors: Array<{ row: number; field: string; reason: string }>;
   } | null>(null);
+  const [importToast, setImportToast] = useState<{ imported: number; errors: number } | null>(null);
 
   function updateCard(
     key: string,
@@ -162,11 +163,13 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
       if (importFile) {
         const result = await importFlashcardsIntoSet(saved.id, importFile);
-        if (result.errors.length > 0) {
-          const updated = await studySetApi.get(token, saved.id);
+        const updated = await studySetApi.get(token, saved.id);
+        setImportToast({ imported: result.imported, errors: result.errors.length });
+        setTimeout(() => {
+          setImportToast(null);
           onSave(updated);
-          return;
-        }
+        }, result.errors.length > 0 ? 4000 : 2500);
+        return;
       }
 
       const keepItems = cleanCards.map((card, position) => ({
@@ -197,6 +200,55 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
   return (
     <form className="qe-page" onSubmit={handleSubmit}>
+      {/* ── Import loading overlay ───────────────────────── */}
+      {loading && importFile && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          zIndex: 9999, gap: 16,
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: 16, padding: "36px 48px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 18,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+          }}>
+            <div style={{
+              width: 48, height: 48, border: "5px solid #e5e7eb",
+              borderTopColor: "#4f46e5", borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }} />
+            <p style={{ margin: 0, fontWeight: 700, fontSize: "1.1rem", color: "#1e1b4b" }}>
+              Đang nhập dữ liệu từ Excel…
+            </p>
+            <p style={{ margin: 0, color: "#6b7280", fontSize: "0.9rem" }}>
+              Vui lòng không đóng trang này
+            </p>
+          </div>
+        </div>
+      )}
+      {/* ── Import toast result ──────────────────────────── */}
+      {importToast && (
+        <div style={{
+          position: "fixed", bottom: 32, right: 32, zIndex: 9999,
+          background: importToast.errors > 0 ? "#fef3c7" : "#d1fae5",
+          border: `1.5px solid ${importToast.errors > 0 ? "#f59e0b" : "#10b981"}`,
+          borderRadius: 12, padding: "18px 28px", minWidth: 280,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.12)",
+          display: "flex", flexDirection: "column", gap: 6,
+        }}>
+          <p style={{ margin: 0, fontWeight: 700, fontSize: "1rem", color: importToast.errors > 0 ? "#92400e" : "#065f46" }}>
+            {importToast.errors > 0 ? "⚠ Nhập một phần" : "✓ Nhập thành công"}
+          </p>
+          <p style={{ margin: 0, color: "#374151", fontSize: "0.9rem" }}>
+            Đã nhập <strong>{importToast.imported}</strong> thẻ
+            {importToast.errors > 0 && <>, bỏ qua <strong>{importToast.errors}</strong> dòng lỗi</>}.
+          </p>
+          <p style={{ margin: 0, color: "#6b7280", fontSize: "0.82rem" }}>
+            Đang chuyển đến học phần…
+          </p>
+        </div>
+      )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       {/* ── Top bar ─────────────────────────────────────── */}
       <div className="qe-topbar">
         <span className="qe-topbar-title">
@@ -330,8 +382,13 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   try {
                     const result = await importFlashcardsIntoSet(existingSet.id, importFile);
                     if (result.errors.length === 0) {
+                      setImportToast({ imported: result.imported, errors: 0 });
                       const updated = await studySetApi.get(token, existingSet.id);
-                      onSave(updated);
+                      setTimeout(() => { setImportToast(null); onSave(updated); }, 2500);
+                    } else {
+                      setImportToast({ imported: result.imported, errors: result.errors.length });
+                      const updated = await studySetApi.get(token, existingSet.id);
+                      setTimeout(() => { setImportToast(null); onSave(updated); }, 4000);
                     }
                   } catch (err) {
                     setError(err instanceof Error ? err.message : "Import thất bại");
