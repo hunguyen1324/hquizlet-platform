@@ -104,6 +104,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       };
     });
     const base = starredOnly ? generated.filter((c) => c.starred) : generated;
+    // Ghi nhớ seed + offset ngay trong cùng effect để đảm bảo refs sẵn sàng
+    // trước khi preload effect chạy (tránh race condition giữa 2 effects)
+    initialSeedRef.current = generation.state.data.seed;
+    nextOffsetRef.current = generation.state.data.items.length; // offset = số thẻ thực nhận
     setDeck(base);
     setIndex(0);
     setFlipped(false);
@@ -114,33 +118,30 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // cardByIdRef là ref, không cần trong deps — chỉ reset khi generation thật sự đổi
   }, [generation.state, starredOnly, studySetId, resetSave]);
 
-  // Ghi nhớ seed của batch đầu và set nextOffset = số thẻ thực tế đã nhận
+  // Preload batch tiếp theo: trigger khi còn ít hơn PRELOAD_THRESHOLD thẻ phía trước
+  // HOẶC ngay khi deck vừa được load mà vẫn còn thẻ chưa fetch (eager preload).
+  // Dùng seed cố định (từ batch đầu) + offset tăng dần → không trùng thẻ giữa các batch.
+  const preloadInProgress = React.useRef(false);
   React.useEffect(() => {
-    if (generation.state.state === "ready") {
-      initialSeedRef.current = generation.state.data.seed;
-      // offset tiếp theo = số items thực nhận (không phải BATCH cố định)
-      // tránh bỏ sót thẻ khi server trả về ít hơn limit
-      nextOffsetRef.current = generation.state.data.items.length;
-    }
-  }, [generation.state]);
+    // Chưa biết seed → chưa thể preload
+    if (initialSeedRef.current === null) return;
+    // Deck rỗng → chờ batch đầu về
+    if (deck.length === 0) return;
+    // Đã có request đang chạy
+    if (preloadInProgress.current) return;
+    // Đã load đủ hết rồi
+    if (apiTotal !== null && deck.length >= apiTotal) return;
 
-  // Preload batch tiếp theo khi user gần đến cuối deck hiện tại.
-  // Dùng seed cố định (từ batch đầu) + offset tăng dần → đảm bảo không trùng thẻ.
-  React.useEffect(() => {
     const remaining = deck.length - index - 1;
-    if (
-      remaining > PRELOAD_THRESHOLD ||
-      deck.length === 0 ||
-      loadingMore ||
-      // Chỉ dừng preload khi đã biết tổng thật từ API VÀ đã load đủ
-      // Dùng apiTotal (không phải displayTotal) để tránh dừng sớm khi fallback = totalCount nhỏ
-      (apiTotal !== null && deck.length >= apiTotal) ||
-      initialSeedRef.current === null
-    ) return;
+    // Trigger preload khi còn <= PRELOAD_THRESHOLD thẻ HOẶC khi deck < 2*BATCH
+    // (eager: không để user ngồi chờ khi deck chỉ có 50 thẻ)
+    const shouldPreload = remaining <= PRELOAD_THRESHOLD || deck.length < BATCH * 2;
+    if (!shouldPreload) return;
 
     const seedToUse = initialSeedRef.current;
     const offsetToUse = nextOffsetRef.current;
 
+    preloadInProgress.current = true;
     setLoadingMore(true);
     quizApi
       .generate(token, studySetId, { mode: "flashcards", seed: seedToUse, limit: BATCH, offset: offsetToUse })
@@ -166,9 +167,12 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         });
       })
       .catch(() => { /* silent fail — user vẫn lướt được trong deck hiện tại */ })
-      .finally(() => setLoadingMore(false));
+      .finally(() => {
+        preloadInProgress.current = false;
+        setLoadingMore(false);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, deck.length]);
+  }, [index, deck.length, apiTotal]);
 
   const current = deck[index];
   const total = deck.length;
