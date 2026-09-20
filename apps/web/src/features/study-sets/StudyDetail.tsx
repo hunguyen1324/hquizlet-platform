@@ -20,24 +20,26 @@ type Props = {
   onToggleStar?: (card: Flashcard) => void;
 };
 
-const CARD_PAGE_SIZE_OPTIONS = [25, 50, 100];
+const INFINITE_PAGE_SIZE = 30; // thẻ mỗi lần load
 
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
   const { token } = useAuth();
   const [studyMode, setStudyMode] = React.useState<LearningMode>("flashcards");
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
-  const [cardPageSize, setCardPageSize] = React.useState(50);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
+  // Infinite scroll state — allCards accumulates pages
   const [allCards, setAllCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
   const [cardPage, setCardPage] = React.useState(1);
   const [cardTotal, setCardTotal] = React.useState(set.flashcardCount ?? (set.flashcards?.length ?? 0));
   const [cardTotalPages, setCardTotalPages] = React.useState(
-    Math.max(1, Math.ceil((set.flashcardCount ?? (set.flashcards?.length ?? 0)) / 50)),
+    Math.max(1, Math.ceil((set.flashcardCount ?? (set.flashcards?.length ?? 0)) / INFINITE_PAGE_SIZE)),
   );
   const [cardLoading, setCardLoading] = React.useState(false);
   const [cardError, setCardError] = React.useState("");
+  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const hasMore = cardPage < cardTotalPages;
 
   // Search state
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -51,12 +53,16 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [actionToast, setActionToast] = React.useState<string | null>(null);
 
-  const loadCards = React.useCallback(async (page: number, perPage = cardPageSize) => {
+  // pagedCards alias — keep compat with rest of component
+  const pagedCards = allCards;
+
+  const loadNextPage = React.useCallback(async (page: number, reset = false) => {
+    if (cardLoading) return;
     setCardLoading(true);
     setCardError("");
     try {
-      const result = await flashcardApi.listPaged(token, set.id, page, perPage);
-      setAllCards(prev => page === 1 ? result.items : [...prev, ...result.items]);
+      const result = await flashcardApi.listPaged(token, set.id, page, INFINITE_PAGE_SIZE);
+      setAllCards((prev) => reset ? result.items : [...prev, ...result.items.filter((r) => !prev.some((p) => p.id === r.id))]);
       setCardPage(result.page);
       setCardTotal(result.total);
       setCardTotalPages(result.totalPages);
@@ -65,28 +71,32 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     } finally {
       setCardLoading(false);
     }
-  }, [token, set.id, cardPageSize]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, set.id]);
 
+  // Initial load & reset on set/sort change
   React.useEffect(() => {
+    setAllCards([]);
     setCardPage(1);
-    void loadCards(1, cardPageSize);
-  }, [set.id, sortOrder, cardPageSize, loadCards]);
+    void loadNextPage(1, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [set.id, sortOrder]);
 
-  const sentinelRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      if (cardLoading) return;
-      if (observerRef.current) observerRef.current.disconnect();
-
-      observerRef.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && cardPage < cardTotalPages) {
-          void loadCards(cardPage + 1);
+  // Infinite scroll observer
+  React.useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !cardLoading && hasMore) {
+          void loadNextPage(cardPage + 1);
         }
-      });
-
-      if (node) observerRef.current.observe(node);
-    },
-    [cardLoading, cardPage, cardTotalPages, loadCards]
-  );
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, cardPage, cardLoading, loadNextPage]);
 
   React.useEffect(() => {
     if (!menuOpen) return;
@@ -104,7 +114,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     window.setTimeout(() => setActionToast(null), 3000);
   }
 
-  // Filter & sort
+  // Filter & sort (client-side on loaded cards)
   const filteredCards = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const base = q
@@ -227,7 +237,9 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
 
       {isFlashcardSet && (
         <div className="sd-learning-wrapper">
-          <LearningContainer set={set} mode={studyMode} />
+          {/* Truyền allCards (đã infinite-scroll đầy đủ) và cardTotal thật từ server.
+              set.flashcards chỉ là initial payload bị giới hạn trang đầu — không dùng trực tiếp. */}
+          <LearningContainer set={set} mode={studyMode} cards={allCards} totalCount={cardTotal} />
         </div>
       )}
 
@@ -236,24 +248,12 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
           <div className="sd-termlist-header">
             <h2 className="sd-termlist-title">
               Thuật ngữ trong học phần này
-              <span className="sd-termlist-count">({cardTotal})</span>
+              <span className="sd-termlist-count">
+                ({allCards.length < cardTotal ? `${allCards.length} / ${cardTotal}` : cardTotal})
+              </span>
             </h2>
             <div className="sd-termlist-controls">
-              {cardTotal > 0 && (
-                <span className="sd-page-range">
-                  Hiển thị {allCards.length} / {cardTotal}
-                </span>
-              )}
-              <select
-                className="sd-sort-select"
-                value={cardPageSize}
-                aria-label="Số thẻ mỗi trang"
-                onChange={(e) => setCardPageSize(Number(e.target.value))}
-              >
-                {CARD_PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>{size}/trang</option>
-                ))}
-              </select>
+
               <select
                 className="sd-sort-select"
                 value={sortOrder}
@@ -282,7 +282,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
           {cardError && (
             <div className="sd-empty">
               <p>{cardError}</p>
-              <button type="button" className="ghost-button" onClick={() => void loadCards(cardPage)}>Thử lại</button>
+              <button type="button" className="ghost-button" onClick={() => void loadNextPage(cardPage, true)}>Thử lại</button>
             </div>
           )}
 
@@ -367,6 +367,10 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                 </button>
               )}
             </div>
+          )}
+
+          {!hasMore && allCards.length > 0 && !searchQuery && (
+            <p className="sd-all-loaded">Đã hiển thị tất cả {cardTotal} thẻ</p>
           )}
         </div>
       )}

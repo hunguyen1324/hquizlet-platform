@@ -21,7 +21,6 @@ type LearnItem = Pick<QuizGeneratedItem, "flashcardId" | "term" | "definition" |
 type QuestionType = "written" | "multipleChoice" | "trueFalse";
 type AnswerState = { submitted: string; correct: boolean; attempts: number; responseTimeMs: number };
 
-/** Tính loại câu hỏi theo số thẻ và settings */
 function getQuestionType(
   index: number,
   total: number,
@@ -31,7 +30,6 @@ function getQuestionType(
   const available = allowedTypes.filter((t) => t !== "multipleChoice" || hasChoices);
   if (available.length === 0) return "written";
   if (available.length === 1) return available[0];
-  // Phân loại theo plan: <4 written only, 4–7 30/30/40, ≥8 25/25/50
   if (total < 4) return "written";
   const ratios = total < 8
     ? ["multipleChoice", "trueFalse", "written", "written", "trueFalse", "multipleChoice", "written"]
@@ -71,7 +69,7 @@ export function LearnMode({ cards, studySetId }: Props) {
     [data],
   );
 
-  // Filter starred if needed, then add TF metadata
+  // ── FIX: items phải tính lại khi settings thay đổi ──
   const items = React.useMemo((): LearnItem[] => {
     const base = settings.starredOnly ? rawItems.filter((x) => x.starred) : rawItems;
     return base.map((item, idx) => {
@@ -92,9 +90,12 @@ export function LearnMode({ cards, studySetId }: Props) {
     });
   }, [rawItems, settings]);
 
+  // ── FIX: reset queue khi items hoặc restartKey thay đổi ──
   React.useEffect(() => {
-    if (items.length && !done) setQueue(items.map((_, i) => i));
-  // restartKey: incrementing this triggers re-init even when items hasn't changed
+    if (items.length) {
+      setQueue(items.map((_, i) => i));
+      setDone(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, restartKey]);
 
@@ -191,7 +192,6 @@ export function LearnMode({ cards, studySetId }: Props) {
 
   function next() {
     if (!current || feedback === null) return;
-    // Save to undo stack
     setPrevStack((s) => [...s.slice(-4), { queueSnapshot: [...queue], answersSnapshot: { ...answers } }]);
     const nextQueue = feedback ? queue.slice(1) : [...queue.slice(1), currentIndex];
     setQueue(nextQueue);
@@ -234,7 +234,8 @@ export function LearnMode({ cards, studySetId }: Props) {
     });
   }
 
-  function restart() {
+  // ── FIX: keepGeneration=true để không regenerate khi chỉ đổi settings ──
+  function restart(keepGeneration = false) {
     resetSave();
     setDone(false);
     setAnswers({});
@@ -245,9 +246,8 @@ export function LearnMode({ cards, studySetId }: Props) {
     setError(null);
     setStartedAt(new Date());
     setQuestionStartedAt(Date.now());
-    // Increment restartKey BEFORE clearing queue so useEffect fires with fresh items
     setRestartKey((k) => k + 1);
-    generation.regenerate();
+    if (!keepGeneration) generation.regenerate();
   }
 
   /* ── Guard states ── */
@@ -281,15 +281,30 @@ export function LearnMode({ cards, studySetId }: Props) {
     const pct = items.length ? Math.round((score / items.length) * 100) : 0;
     return (
       <div className="learn-done">
-        <div className="test-result-header">
+        <div className="test-result-hero">
           <div className={`test-result-score-ring ${pct >= 80 ? "ring--green" : pct >= 50 ? "ring--yellow" : "ring--red"}`}>
+            <svg viewBox="0 0 100 100" className="score-ring-svg" style={{ "--pct": pct } as React.CSSProperties}>
+              <circle className="score-ring-bg" cx="50" cy="50" r="45"></circle>
+              <circle className="score-ring-progress" cx="50" cy="50" r="45"></circle>
+            </svg>
             <span className="test-result-pct">{pct}%</span>
           </div>
           <div>
-            <h2>Hoàn thành vòng học!</h2>
-            <p className="learn-score">
+            <h2 className="test-result-heading">Hoàn thành vòng học!</h2>
+            <p className="test-result-sub">
               Đúng <strong>{score}</strong> / {items.length} câu
             </p>
+          </div>
+        </div>
+        <div className="test-result-breakdown">
+          <div className="test-breakdown-item test-breakdown-item--correct">
+            <span className="test-breakdown-count">{score}</span>
+            <span className="test-breakdown-label">Đúng</span>
+          </div>
+          <div className="test-breakdown-sep" />
+          <div className="test-breakdown-item test-breakdown-item--wrong">
+            <span className="test-breakdown-count">{items.length - score}</span>
+            <span className="test-breakdown-label">Sai</span>
           </div>
         </div>
         <ProgressSaveStatus status={saveStatus} onRetry={() => onSessionComplete({ score, total: items.length, cardResults, startedAt })} />
@@ -297,13 +312,13 @@ export function LearnMode({ cards, studySetId }: Props) {
           <button type="button" className="secondary-button" onClick={() => setShowSettings(true)}>
             Cài đặt lại
           </button>
-          <button type="button" className="primary-button" onClick={restart}>Học lại</button>
+          <button type="button" className="primary-button" onClick={() => restart(false)}>Học lại</button>
         </div>
         {showSettings && (
           <LearnSettingsDialog
             settings={settings}
             onClose={() => setShowSettings(false)}
-            onChange={(s) => { setSettings(s); setShowSettings(false); restart(); }}
+            onChange={(s) => { setSettings(s); setShowSettings(false); restart(true); }}
             hasStarred={cards.some((c) => c.starred)}
           />
         )}
@@ -322,7 +337,7 @@ export function LearnMode({ cards, studySetId }: Props) {
         <LearnSettingsDialog
           settings={settings}
           onClose={() => setShowSettings(false)}
-          onChange={(s) => { setSettings(s); setShowSettings(false); restart(); }}
+          onChange={(s) => { setSettings(s); setShowSettings(false); restart(true); }}
           hasStarred={cards.some((c) => c.starred)}
         />
       )}
@@ -334,7 +349,6 @@ export function LearnMode({ cards, studySetId }: Props) {
         </div>
         <div className="learn-progress-actions">
           <span className="mode-progress-label">Thẻ {items.length - queue.length + 1} / {items.length}</span>
-          {/* Undo button */}
           {prevStack.length > 0 && (
             <button
               type="button"
@@ -348,7 +362,6 @@ export function LearnMode({ cards, studySetId }: Props) {
               </svg>
             </button>
           )}
-          {/* Settings button */}
           <button
             type="button"
             className="ql-icon-btn"
@@ -374,7 +387,7 @@ export function LearnMode({ cards, studySetId }: Props) {
         <p className="learn-prompt">{promptText}</p>
       </div>
 
-      {/* Question input area */}
+      {/* MCQ */}
       {useMcq && (
         <div className="test-choices learn-mcq">
           {current.choices!.map((choice, i) => {
@@ -396,6 +409,7 @@ export function LearnMode({ cards, studySetId }: Props) {
         </div>
       )}
 
+      {/* True/False */}
       {useTF && (
         <TrueFalseQuestion
           term={promptText ?? ""}
@@ -407,6 +421,7 @@ export function LearnMode({ cards, studySetId }: Props) {
         />
       )}
 
+      {/* Written */}
       {!useMcq && !useTF && (
         <div className="learn-input-area">
           <label className="learn-input-label" htmlFor="learn-answer">Nhập định nghĩa</label>
@@ -427,10 +442,10 @@ export function LearnMode({ cards, studySetId }: Props) {
         </div>
       )}
 
-      {/* Feedback for written/mcq (TF shows its own) */}
+      {/* Feedback */}
       {!useTF && feedback !== null && (
         <div className={`learn-feedback ${feedback ? "feedback-correct" : "feedback-wrong"}`}>
-          {feedback ? "Chính xác!" : <>Chưa đúng. Đáp án: <strong>{correctAnswer}</strong></>}
+          {feedback ? "✓ Chính xác!" : <>✗ Chưa đúng. Đáp án: <strong>{correctAnswer}</strong></>}
         </div>
       )}
       {error && <div className="learn-error" role="alert">{error}</div>}
@@ -443,9 +458,6 @@ export function LearnMode({ cards, studySetId }: Props) {
           </button>
         )}
         {feedback !== null && (
-          <button type="button" className="primary-button" onClick={next}>Tiếp theo →</button>
-        )}
-        {useTF && feedback !== null && (
           <button type="button" className="primary-button" onClick={next}>Tiếp theo →</button>
         )}
       </div>

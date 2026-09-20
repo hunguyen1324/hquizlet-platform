@@ -2,11 +2,13 @@
 // Unified design system: ql-* classes, full Quizlet parity
 
 import React from "react";
+import { useAuth } from "../auth/AuthContext";
 import type { Flashcard } from "./types";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
 import { ProgressSaveStatus } from "./ProgressSaveStatus";
 import { useQuizGeneration } from "./useQuizGeneration";
+import { quizApi } from "../../lib/api/client";
 import { FlashcardsSettingsDialog } from "./FlashcardsSettingsDialog";
 import type { FlashcardsSettings } from "./FlashcardsSettingsDialog";
 import "./learning.css";
@@ -24,10 +26,20 @@ function speakText(text: string) {
 type Props = {
   cards: Flashcard[];
   studySetId: number;
+  totalCount?: number; // tổng thẻ thật từ server
 };
 
-export function FlashcardsMode({ cards, studySetId }: Props) {
-  const generation = useQuizGeneration(studySetId, "flashcards", Math.min(cards.length, 100));
+export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
+  const { token } = useAuth();
+  const displayTotal = totalCount ?? cards.length;
+  const BATCH = 100; // thẻ mỗi lần fetch
+  const PRELOAD_THRESHOLD = 20; // fetch thêm khi còn cách cuối 20 thẻ
+
+  const generation = useQuizGeneration(studySetId, "flashcards", BATCH);
+  // Lưu seed của batch đầu để dùng lại khi preload batch tiếp theo.
+  // Cùng seed + tăng offset → deck shuffle giống nhau, không bao giờ trùng thẻ.
+  const initialSeedRef = React.useRef<number | null>(null);
+  const nextOffsetRef = React.useRef<number>(BATCH); // offset của batch tiếp theo
   const [startedAt, setStartedAt] = React.useState(() => new Date());
   const [shuffled, setShuffled] = React.useState(false);
   const [starredOnly, setStarredOnly] = React.useState(false);
@@ -43,6 +55,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     startFromDefinition: false,
     autoPlay: false,
   });
+  const [loadingMore, setLoadingMore] = React.useState(false);
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -57,6 +70,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
   React.useEffect(() => {
     if (generation.state.state !== "ready") return;
     const generated = generation.state.data.items.map((item) => {
+      // cardById là fallback cho các field phụ (imageUrl, hint) nếu backend chưa trả
       const full = cardById.get(item.flashcardId);
       return {
         id: item.flashcardId,
@@ -64,9 +78,10 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
         term: item.term ?? full?.term ?? "",
         definition: item.definition ?? full?.definition ?? "",
         starred: item.starred ?? full?.starred ?? false,
-        imageUrl: full?.imageUrl,
-        exampleSentence: full?.exampleSentence,
-        hintExplanation: full?.hintExplanation,
+        // API generate đã trả imageUrl — dùng nó trước, fallback về cardById
+        imageUrl: (item as { imageUrl?: string | null }).imageUrl ?? full?.imageUrl ?? null,
+        exampleSentence: (item as { exampleSentence?: string | null }).exampleSentence ?? full?.exampleSentence ?? null,
+        hintExplanation: (item as { hintExplanation?: string | null }).hintExplanation ?? full?.hintExplanation ?? null,
       };
     });
     const base = starredOnly ? generated.filter((c) => c.starred) : generated;
@@ -78,6 +93,58 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
     resetSave();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generation.state, starredOnly, studySetId, resetSave, cardById]);
+
+  // Ghi nhớ seed của batch đầu để các batch tiếp theo dùng cùng seed + offset tăng dần
+  React.useEffect(() => {
+    if (generation.state.state === "ready") {
+      initialSeedRef.current = generation.state.data.seed;
+      nextOffsetRef.current = BATCH; // reset offset khi generation mới (shuffle/restart)
+    }
+  }, [generation.state]);
+
+  // Preload batch tiếp theo khi user gần đến cuối deck hiện tại.
+  // Dùng seed cố định (từ batch đầu) + offset tăng dần → đảm bảo không trùng thẻ.
+  React.useEffect(() => {
+    const remaining = deck.length - index - 1;
+    if (
+      remaining > PRELOAD_THRESHOLD ||
+      deck.length === 0 ||
+      loadingMore ||
+      deck.length >= displayTotal ||
+      initialSeedRef.current === null
+    ) return;
+
+    const seedToUse = initialSeedRef.current;
+    const offsetToUse = nextOffsetRef.current;
+
+    setLoadingMore(true);
+    quizApi
+      .generate(token, studySetId, { mode: "flashcards", seed: seedToUse, limit: BATCH, offset: offsetToUse })
+      .then((data) => {
+        if (data.items.length === 0) return; // đã hết thẻ
+        nextOffsetRef.current = offsetToUse + BATCH; // chuẩn bị offset cho batch kế tiếp
+        const newCards = data.items.map((item) => ({
+          id: item.flashcardId,
+          studySetId,
+          term: item.term ?? "",
+          definition: item.definition ?? "",
+          starred: item.starred ?? false,
+          imageUrl: (item as { imageUrl?: string | null }).imageUrl ?? null,
+          exampleSentence: (item as { exampleSentence?: string | null }).exampleSentence ?? null,
+          hintExplanation: (item as { hintExplanation?: string | null }).hintExplanation ?? null,
+        }));
+        const filtered = starredOnly ? newCards.filter((c) => c.starred) : newCards;
+        // Dedup phòng thủ (offset đảm bảo không trùng nhưng phòng race condition)
+        setDeck((prev) => {
+          const existingIds = new Set(prev.map((c) => c.id));
+          const unique = filtered.filter((c) => !existingIds.has(c.id));
+          return unique.length > 0 ? [...prev, ...unique] : prev;
+        });
+      })
+      .catch(() => { /* silent fail — user vẫn lướt được trong deck hiện tại */ })
+      .finally(() => setLoadingMore(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, deck.length]);
 
   const current = deck[index];
   const total = deck.length;
@@ -152,7 +219,9 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
 
   const starredCount = cards.filter((c) => c.starred).length;
   const allSeen = seenCardIds.size >= total && total > 0;
-  const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
+  // Dùng displayTotal (tổng thẻ thật từ server) để progress phản ánh toàn bộ set,
+  // không bị kẹt ở 50% khi deck chỉ load batch 100/3188 thẻ.
+  const progressPct = displayTotal > 0 ? ((index + 1) / displayTotal) * 100 : 0;
 
   if (cards.length === 0) return <LearningEmptyState />;
 
@@ -202,7 +271,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
           className="ql-progress-bar"
           role="progressbar"
           aria-valuenow={index + 1}
-          aria-valuemax={total}
+          aria-valuemax={displayTotal}
           style={{ width: `${progressPct}%` }}
         />
       </div>
@@ -210,7 +279,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
       {/* ── Counter + toolbar ── */}
       <div className="ql-topbar">
         <span className="ql-counter" aria-live="polite">
-          <strong>{index + 1}</strong> / {total}
+          <strong>{index + 1}</strong> / {displayTotal}
         </span>
 
         <div className="ql-actions">
@@ -390,7 +459,7 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
               tabIndex={-1}
             />
           )) : (
-            <span className="ql-nav-count">{index + 1} / {total}</span>
+            <span className="ql-nav-count">{index + 1} / {displayTotal}</span>
           )}
         </div>
 
@@ -408,7 +477,10 @@ export function FlashcardsMode({ cards, studySetId }: Props) {
         </div>
       )}
 
-      <p className="ql-kbd-hint" aria-hidden="true">← → điều hướng · Space lật thẻ · vuốt trên mobile</p>
+      <p className="ql-kbd-hint" aria-hidden="true">
+        ← → điều hướng · Space lật thẻ · vuốt trên mobile
+        {loadingMore && <span className="ql-loading-more"> · Đang tải thêm…</span>}
+      </p>
     </div>
   );
 }

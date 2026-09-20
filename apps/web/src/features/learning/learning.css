@@ -2317,3 +2317,14 @@
   font-weight: 700;
   margin-bottom: 1rem;
 }
+
+/* ── Flashcard lazy load indicator ── */
+.ql-loading-more {
+  color: #a5b4fc;
+  font-size: 0.7rem;
+  animation: ql-pulse 1.2s ease-in-out infinite;
+}
+@keyframes ql-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
