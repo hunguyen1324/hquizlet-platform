@@ -59,6 +59,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   React.useEffect(() => {
     if (generation.state.state !== "ready") return;
     const generated = generation.state.data.items.map((item) => {
+      // cardById là fallback cho các field phụ (imageUrl, hint) nếu backend chưa trả
       const full = cardById.get(item.flashcardId);
       return {
         id: item.flashcardId,
@@ -66,9 +67,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         term: item.term ?? full?.term ?? "",
         definition: item.definition ?? full?.definition ?? "",
         starred: item.starred ?? full?.starred ?? false,
-        imageUrl: full?.imageUrl,
-        exampleSentence: full?.exampleSentence,
-        hintExplanation: full?.hintExplanation,
+        // API generate đã trả imageUrl — dùng nó trước, fallback về cardById
+        imageUrl: (item as { imageUrl?: string | null }).imageUrl ?? full?.imageUrl ?? null,
+        exampleSentence: (item as { exampleSentence?: string | null }).exampleSentence ?? full?.exampleSentence ?? null,
+        hintExplanation: (item as { hintExplanation?: string | null }).hintExplanation ?? full?.hintExplanation ?? null,
       };
     });
     const base = starredOnly ? generated.filter((c) => c.starred) : generated;
