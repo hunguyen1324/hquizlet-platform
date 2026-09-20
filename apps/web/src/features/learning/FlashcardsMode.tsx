@@ -211,7 +211,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   const starredCount = cards.filter((c) => c.starred).length;
   const allSeen = seenCardIds.size >= total && total > 0;
-  const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
+  // Dùng displayTotal (tổng thẻ thật từ server) để progress phản ánh toàn bộ set,
+  // không bị kẹt ở 50% khi deck chỉ load batch 100/3188 thẻ.
+  const progressPct = displayTotal > 0 ? ((index + 1) / displayTotal) * 100 : 0;
 
   if (cards.length === 0) return <LearningEmptyState />;
 
