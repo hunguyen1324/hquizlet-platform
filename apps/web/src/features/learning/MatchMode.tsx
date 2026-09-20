@@ -1,4 +1,4 @@
-// MatchMode — full parity: start screen + shake animation + MM:SS timer + end screen
+// MatchMode — start screen với chọn số cặp, shake animation, timer, end screen
 import React from "react";
 import { useAuth } from "../auth/AuthContext";
 import { quizApi, type QuizAnswer, type QuizGeneratedItem } from "../../lib/api/client";
@@ -7,7 +7,6 @@ import type { CardResult } from "./progressContract";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
 import { useQuizGeneration } from "./useQuizGeneration";
-import { MatchStartScreen } from "./MatchStartScreen";
 import { MatchEndScreen } from "./MatchEndScreen";
 import "./learning.css";
 
@@ -24,7 +23,12 @@ function formatTime(ms: number) {
 
 export function MatchMode({ cards, studySetId }: Props) {
   const { token } = useAuth();
-  const generation = useQuizGeneration(studySetId, "match", 6);
+  const maxPairs = Math.min(cards.length, 20);
+  const defaultPairs = Math.min(cards.length, 6);
+
+  const [pairCount, setPairCount] = React.useState(defaultPairs);
+  const [pendingPairCount, setPendingPairCount] = React.useState(defaultPairs);
+  const generation = useQuizGeneration(studySetId, "match", pairCount);
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "match" });
 
   const [phase, setPhase] = React.useState<Phase>("start");
@@ -44,7 +48,7 @@ export function MatchMode({ cards, studySetId }: Props) {
   const totalPairs = React.useMemo(() => new Set(tiles.map((x) => x.pairId)).size, [tiles]);
   const finished = phase === "playing" && totalPairs > 0 && matched.size === totalPairs;
 
-  // Timer — only runs when playing
+  // Timer
   React.useEffect(() => {
     if (phase !== "playing" || finished) return;
     const timer = window.setInterval(() => setElapsed(Date.now() - startedAt.getTime()), 100);
@@ -69,7 +73,6 @@ export function MatchMode({ cards, studySetId }: Props) {
       .catch((e: unknown) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Không thể chấm kết quả");
-          // Still show done even if evaluation fails
           setPhase("done");
         }
       });
@@ -78,26 +81,82 @@ export function MatchMode({ cards, studySetId }: Props) {
 
   /* ── Guard states ── */
   if (cards.length < 2) return <LearningEmptyState message="Cần ít nhất 2 thẻ để chơi ghép cặp." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
-  if (generation.state.state === "loading") return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
+  if (generation.state.state === "loading" && phase !== "start") return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
   if (generation.state.state === "error") return (
     <div className="learn-error" role="alert">
       Không thể tạo Match: {generation.state.error.message}
       <button className="secondary-button" onClick={generation.regenerate}>Thử lại</button>
     </div>
   );
-  if (tiles.length === 0) return <LearningEmptyState message="Backend không trả về cặp ghép hợp lệ." hint="Thử lại để tạo một bộ mới." />;
+  if (tiles.length === 0 && phase === "playing") return <LearningEmptyState message="Backend không trả về cặp ghép hợp lệ." hint="Thử lại để tạo một bộ mới." />;
 
   /* ── Start screen ── */
   if (phase === "start") {
     return (
-      <MatchStartScreen
-        totalPairs={totalPairs}
-        onStart={() => {
-          setStartedAt(new Date());
-          setElapsed(0);
-          setPhase("playing");
-        }}
-      />
+      <div className="ql-match-start-screen">
+        <div className="ql-match-start-icon" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            <path d="M7 7l3 3M14 10l3-3M7 14l3-3M14 14l3 3" opacity=".4"/>
+          </svg>
+        </div>
+        <h2 className="ql-match-start-title">Ghép cặp</h2>
+        <p className="ql-match-start-desc">
+          Ghép thuật ngữ với định nghĩa tương ứng. Nhanh tay xem bạn mất bao lâu!
+        </p>
+
+        {/* Chọn số cặp */}
+        {maxPairs > 2 && (
+          <div className="ql-match-count-wrap">
+            <label className="ql-match-count-label" htmlFor="match-pair-count">
+              Số cặp: <strong>{pendingPairCount}</strong>
+              <span className="ql-match-count-hint"> (tối đa {maxPairs})</span>
+            </label>
+            <input
+              id="match-pair-count"
+              type="range"
+              min={2}
+              max={maxPairs}
+              value={pendingPairCount}
+              onChange={(e) => setPendingPairCount(Number(e.target.value))}
+              className="ql-match-count-slider"
+            />
+          </div>
+        )}
+
+        <ul className="ql-match-start-rules">
+          <li>Click một thẻ, rồi click thẻ khớp của nó</li>
+          <li>Ghép sai → thẻ rung và không bị xóa</li>
+          <li>Ghép hết tất cả cặp để hoàn thành</li>
+        </ul>
+        <button
+          id="match-start-btn"
+          type="button"
+          className="primary-button ql-match-start-btn"
+          onClick={() => {
+            const newCount = pendingPairCount;
+            if (newCount !== pairCount) {
+              setPairCount(newCount);
+              // generation sẽ re-trigger tự động vì limit thay đổi
+              // nhưng cần delay một chút để generation hook cập nhật
+              window.setTimeout(() => {
+                setStartedAt(new Date());
+                setElapsed(0);
+                setPhase("playing");
+              }, 50);
+            } else {
+              generation.regenerate();
+              setStartedAt(new Date());
+              setElapsed(0);
+              setPhase("playing");
+            }
+          }}
+          autoFocus
+        >
+          Bắt đầu
+        </button>
+      </div>
     );
   }
 
@@ -141,7 +200,6 @@ export function MatchMode({ cards, studySetId }: Props) {
       setMatched((cur) => new Set(cur).add(tile.cardId));
       setSelectedId(null);
     } else {
-      // Wrong match → shake both tiles
       const wrongIds = new Set([first.id, tile.id]);
       setWrongTileIds(wrongIds);
       setWrongCount((n) => n + 1);
@@ -173,6 +231,10 @@ export function MatchMode({ cards, studySetId }: Props) {
   }
 
   /* ── Playing ── */
+  if (generation.state.state === "loading") {
+    return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
+  }
+
   return (
     <div className="match-mode">
       <div className="learn-header">

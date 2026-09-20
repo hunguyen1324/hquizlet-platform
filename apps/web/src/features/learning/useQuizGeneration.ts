@@ -11,23 +11,40 @@ export function useQuizGeneration(studySetId: number, mode: LearningMode, limit?
   const { token } = useAuth();
   const [seed, setSeed] = React.useState(() => randomSeed());
   const [state, setState] = React.useState<QuizGenerationState>({ state: "loading" });
+  // Track the limit as a ref so regenerate always uses the latest value
+  const limitRef = React.useRef(limit);
+  limitRef.current = limit;
 
-  const generate = React.useCallback((nextSeed: number) => {
+  const generateWithLimit = React.useCallback((nextSeed: number, overrideLimit?: number) => {
     setSeed(nextSeed);
     setState({ state: "loading" });
     const controller = new AbortController();
-    quizApi.generate(token, studySetId, { mode, seed: nextSeed, limit }, controller.signal)
+    const useLimit = overrideLimit ?? limitRef.current;
+    quizApi.generate(token, studySetId, { mode, seed: nextSeed, limit: useLimit }, controller.signal)
       .then((data) => setState({ state: "ready", data }))
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setState({ state: "error", error: error instanceof Error ? error : new Error("Không thể tạo bài học") });
       });
     return () => controller.abort();
-  }, [token, studySetId, mode, limit]);
+  }, [token, studySetId, mode]);
 
-  React.useEffect(() => generate(seed), [generate]);
+  // Re-trigger when limit changes (for MatchMode dynamic pair count)
+  const prevLimitRef = React.useRef(limit);
+  React.useEffect(() => {
+    if (prevLimitRef.current !== limit) {
+      prevLimitRef.current = limit;
+      generateWithLimit(randomSeed(), limit);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limit]);
 
-  return { state, seed, regenerate: () => generate(randomSeed()) };
+  React.useEffect(() => {
+    return generateWithLimit(seed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generateWithLimit]);
+
+  return { state, seed, regenerate: () => generateWithLimit(randomSeed()) };
 }
 
 function randomSeed(): number {
