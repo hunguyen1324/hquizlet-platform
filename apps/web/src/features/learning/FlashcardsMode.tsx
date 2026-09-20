@@ -74,6 +74,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // Ref để handleNext luôn đọc được deck.length mới nhất trong setTimeout closure
   const deckLengthRef = React.useRef<number>(cards.length);
   const displayTotalRef = React.useRef<number>(0);
+  const apiTotalRef = React.useRef<number | null>(null);
 
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({
     studySetId,
@@ -129,7 +130,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       remaining > PRELOAD_THRESHOLD ||
       deck.length === 0 ||
       loadingMore ||
-      deck.length >= displayTotal ||
+      // Chỉ dừng preload khi đã biết tổng thật từ API VÀ đã load đủ
+      // Dùng apiTotal (không phải displayTotal) để tránh dừng sớm khi fallback = totalCount nhỏ
+      (apiTotal !== null && deck.length >= apiTotal) ||
       initialSeedRef.current === null
     ) return;
 
@@ -170,6 +173,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   // Đồng bộ refs để closure trong setTimeout luôn có giá trị mới nhất
   deckLengthRef.current = total;
   displayTotalRef.current = displayTotal;
+  apiTotalRef.current = apiTotal;
 
   React.useEffect(() => {
     if (!current) return;
@@ -183,9 +187,11 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   React.useEffect(() => {
     if (completionTriggered.current || total === 0) return;
-    // Chỉ trigger completion khi đã load ĐỦ tất cả thẻ thật VÀ đã xem hết
-    // Tránh trigger sớm ở thẻ 50 khi còn 3138 thẻ chưa load
-    const allRealCardsLoaded = total >= displayTotal;
+    // QUAN TRỌNG: chỉ trigger completion khi đã biết tổng thật từ API (apiTotal != null).
+    // Nếu dùng displayTotal (có thể vẫn là fallback từ totalCount prop = 50 thẻ đầu),
+    // sẽ trigger sai khi deck chỉ mới load 50/3188 thẻ.
+    if (apiTotal === null) return; // chưa biết tổng thật — chờ API trả về
+    const allRealCardsLoaded = total >= apiTotal;
     if (allRealCardsLoaded && seenCardIds.size >= total) {
       completionTriggered.current = true;
       onSessionComplete({
@@ -195,7 +201,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         startedAt,
       });
     }
-  }, [seenCardIds, total, displayTotal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [seenCardIds, total, displayTotal, apiTotal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-play TTS when card becomes front
   React.useEffect(() => {
@@ -220,13 +226,14 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
     setFlipped(false);
     setTimeout(() => setIndex((i) => {
       const nextIdx = i + 1;
-      // Đọc từ ref để luôn có giá trị mới nhất, tránh stale closure
       const currentDeckLen = deckLengthRef.current;
-      const currentDisplayTotal = displayTotalRef.current;
+      const currentApiTotal = apiTotalRef.current;
       // Nếu còn thẻ trong deck → tiến thẳng, không wrap
       if (nextIdx < currentDeckLen) return nextIdx;
-      // Nếu đã xem hết tất cả thẻ thật (không còn batch nào để load) → wrap về 0
-      if (currentDeckLen >= currentDisplayTotal) return 0;
+      // Nếu chưa biết tổng thật từ API → giữ nguyên, chờ batch đầu về
+      if (currentApiTotal === null) return i;
+      // Nếu đã load đủ tất cả thẻ thật → wrap về 0 (đã xem hết)
+      if (currentDeckLen >= currentApiTotal) return 0;
       // Đang chờ load batch mới → giữ nguyên vị trí cuối, KHÔNG wrap về 0
       return i;
     }), 60);
@@ -254,8 +261,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   }, [total, index]);
 
   const starredCount = cards.filter((c) => c.starred).length;
-  // allSeen chỉ true khi đã load đủ tất cả thẻ thật VÀ đã xem hết
-  const allLoadedAndSeen = deck.length >= displayTotal && seenCardIds.size >= total && total > 0;
+  // allSeen chỉ true khi đã biết tổng thật từ API, đã load đủ tất cả thẻ, VÀ đã xem hết
+  const allLoadedAndSeen = apiTotal !== null && deck.length >= apiTotal && seenCardIds.size >= total && total > 0;
   const allSeen = allLoadedAndSeen;
   // DEBUG — xoá sau khi xác nhận fix
   if (allSeen) console.debug("[FC] allSeen=true", { deckLen: deck.length, displayTotal, seenSize: seenCardIds.size, total });
