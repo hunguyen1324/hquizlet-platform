@@ -33,7 +33,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const { token } = useAuth();
   const displayTotal = totalCount ?? cards.length;
   const BATCH = 100; // thẻ mỗi lần fetch
-  const PRELOAD_THRESHOLD = 20; // fetch thêm khi còn cách cuối 20 thẻ
+  const PRELOAD_THRESHOLD = 40; // fetch thêm khi còn cách cuối 40 thẻ
 
   const generation = useQuizGeneration(studySetId, "flashcards", BATCH);
   // Lưu seed của batch đầu để dùng lại khi preload batch tiếp theo.
@@ -189,11 +189,19 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   function handlePrev() {
     setFlipped(false);
-    setTimeout(() => setIndex((i) => (i - 1 + total) % total), 60);
+    setTimeout(() => setIndex((i) => Math.max(0, i - 1)), 60);
   }
   function handleNext() {
     setFlipped(false);
-    setTimeout(() => setIndex((i) => (i + 1) % total), 60);
+    setTimeout(() => setIndex((i) => {
+      const nextIdx = i + 1;
+      // Nếu còn thẻ trong deck hoặc còn thẻ chưa load → tiến thẳng, không wrap
+      if (nextIdx < total) return nextIdx;
+      // Nếu đã xem hết tất cả thẻ thật → wrap về 0 (restart)
+      if (i + 1 >= displayTotal) return 0;
+      // Đang chờ load batch mới → giữ nguyên vị trí cuối
+      return i;
+    }), 60);
   }
   function handleRestart() {
     completionTriggered.current = false;
@@ -218,7 +226,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   }, [total, index]);
 
   const starredCount = cards.filter((c) => c.starred).length;
-  const allSeen = seenCardIds.size >= total && total > 0;
+  // allSeen chỉ true khi đã load đủ tất cả thẻ thật VÀ đã xem hết
+  const allLoadedAndSeen = deck.length >= displayTotal && seenCardIds.size >= total && total > 0;
+  const allSeen = allLoadedAndSeen;
   // Dùng displayTotal (tổng thẻ thật từ server) để progress phản ánh toàn bộ set,
   // không bị kẹt ở 50% khi deck chỉ load batch 100/3188 thẻ.
   const progressPct = displayTotal > 0 ? ((index + 1) / displayTotal) * 100 : 0;
@@ -479,7 +489,11 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
       <p className="ql-kbd-hint" aria-hidden="true">
         ← → điều hướng · Space lật thẻ · vuốt trên mobile
-        {loadingMore && <span className="ql-loading-more"> · Đang tải thêm…</span>}
+        {loadingMore && (
+          <span className="ql-loading-more">
+            {" "}· Đang tải thẻ {deck.length + 1}–{Math.min(deck.length + BATCH, displayTotal)}…
+          </span>
+        )}
       </p>
     </div>
   );
