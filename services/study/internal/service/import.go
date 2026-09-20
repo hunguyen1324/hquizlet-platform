@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxFlashcardImportRows = 500
+	maxFlashcardImportRows = 2000 // tăng từ 500 – file kanji đầy đủ ~1000 rows
 	maxQuizImportRows      = 200
 )
 
