@@ -23,7 +23,7 @@ func (r *QuizQuestionRepository) ListByStudySet(ctx context.Context, studySetID 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, study_set_id, position, question_text, question_type,
 		       correct_answer, time_in_seconds, audio_url, answer_explanation,
-		       paragraph_text, sub_questions, tags
+		       paragraph_text, sub_questions, COALESCE(array_to_json(tags), '[]'::json)
 		FROM quiz_question
 		WHERE study_set_id = $1
 		ORDER BY position ASC
@@ -36,17 +36,17 @@ func (r *QuizQuestionRepository) ListByStudySet(ctx context.Context, studySetID 
 	var questions []model.QuizQuestion
 	for rows.Next() {
 		var q model.QuizQuestion
-		var subQ []byte
+		var subQ, tagsJSON []byte
 		if err := rows.Scan(&q.ID, &q.StudySetID, &q.Position, &q.QuestionText, &q.QuestionType,
 			&q.CorrectAnswer, &q.TimeInSeconds, &q.AudioURL, &q.AnswerExplanation,
-			&q.ParagraphText, &subQ, &q.Tags); err != nil {
+			&q.ParagraphText, &subQ, &tagsJSON); err != nil {
 			return nil, err
 		}
 		if subQ != nil {
 			q.SubQuestions = json.RawMessage(subQ)
 		}
-		if q.Tags == nil {
-			q.Tags = []string{}
+		if err := json.Unmarshal(tagsJSON, &q.Tags); err != nil {
+			return nil, err
 		}
 		questions = append(questions, q)
 	}

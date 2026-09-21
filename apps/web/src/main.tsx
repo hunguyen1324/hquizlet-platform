@@ -29,12 +29,26 @@ import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDe
 import { AppShell } from "./components/layout/AppShell";
 import { HomePage } from "./components/home/HomePage";
 
+const VIEW_PATHS: Partial<Record<AppView, string>> = {
+  home: "/", dashboard: "/library", folders: "/folders", live: "/live-quiz",
+  classes: "/classes", activity: "/notifications", wallet: "/wallet",
+  deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
+  "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar",
+};
+
+function viewToPath(view: AppView) { return VIEW_PATHS[view] ?? "/"; }
+function pathToView(path: string): AppView {
+  const found = Object.entries(VIEW_PATHS).find(([, value]) => value === path);
+  return (found?.[0] as AppView | undefined) ?? "home";
+}
+
 function RootApp() {
   const { user, logout, token } = useAuth();
   const [view, setView] = useState<AppView>("home");
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassDetailType | null>(null);
   const [loadingSet, setLoadingSet] = useState(false);
+  const [navigationError, setNavigationError] = useState("");
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
   const [services, setServices] = useState<ServiceHealth[]>([]);
 
@@ -53,6 +67,19 @@ function RootApp() {
     return () => window.clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    const restoreUrl = () => {
+      const match = window.location.pathname.match(/^\/study-sets\/(\d+)$/);
+      if (match) void handleOpenSet(Number(match[1]), false);
+      else handleNavigate(pathToView(window.location.pathname), false);
+    };
+    restoreUrl();
+    window.addEventListener("popstate", restoreUrl);
+    return () => window.removeEventListener("popstate", restoreUrl);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   if (!user) {
     return (
       <AuthScreen
@@ -63,8 +90,9 @@ function RootApp() {
     );
   }
 
-  async function handleOpenSet(id: number) {
+  async function handleOpenSet(id: number, pushHistory = true) {
     setLoadingSet(true);
+    setNavigationError("");
     try {
       let data = await studySetApi.get(token, id);
       if (data.contentType === "quiz") {
@@ -73,6 +101,9 @@ function RootApp() {
       }
       setSelectedSet(data);
       setView("study");
+      if (pushHistory) window.history.pushState({}, "", `/study-sets/${id}`);
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : "Không mở được học phần.");
     } finally {
       setLoadingSet(false);
     }
@@ -96,10 +127,13 @@ function RootApp() {
   }
 
   // Navigation handler for AppShell sidebar/navbar
-  function handleNavigate(viewName: string) {
+  function handleNavigate(viewName: string, pushHistory = true) {
     setSelectedSet(null);
     setSelectedClass(null);
-    setView(viewName as AppView);
+    const nextView = viewName as AppView;
+    setView(nextView);
+    setNavigationError("");
+    if (pushHistory) window.history.pushState({}, "", viewToPath(nextView));
   }
 
   return (
@@ -112,6 +146,7 @@ function RootApp() {
           <span>Đang tải học phần...</span>
         </div>
       )}
+      {navigationError && <div className="message message--error" role="alert">{navigationError}</div>}
 
       {/* NEW: HomePage — shown for home & dashboard views */}
       {(view === "home" || view === "dashboard") && !loadingSet && (
@@ -163,7 +198,7 @@ function RootApp() {
           set={selectedSet}
           onEdit={() => setView(selectedSet.contentType === "quiz" ? "quiz-editor" : "editor")}
           onDelete={() => void handleDeleteSet()}
-          onBack={() => setView("dashboard")}
+          onBack={() => window.history.back()}
           onToggleStar={(card) => void handleToggleStar(card)}
         />
       )}
