@@ -306,15 +306,21 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 		return
 	}
 
-	optAIdx := header["option a"]
-	optBIdx := header["option b"]
-	optCIdx := header["option c"]
-	optDIdx := header["option d"]
-	timeIdx := header["time (s)"]
-	audioIdx := header["audio url"]
-	explainIdx := header["answer explanation"]
-	paragraphIdx := header["paragraph text"]
-	subQuestionsIdx := header["sub questions (json)"]
+	optionalHeader := func(name string) int {
+		if idx, ok := header[name]; ok {
+			return idx
+		}
+		return -1
+	}
+	optAIdx := optionalHeader("option a")
+	optBIdx := optionalHeader("option b")
+	optCIdx := optionalHeader("option c")
+	optDIdx := optionalHeader("option d")
+	timeIdx := optionalHeader("time (s)")
+	audioIdx := optionalHeader("audio url")
+	explainIdx := optionalHeader("answer explanation")
+	paragraphIdx := optionalHeader("paragraph text")
+	subQuestionsIdx := optionalHeader("sub questions (json)")
 
 	typeMap := map[string]string{
 		"MC": "multiple_choice", "TF": "true_false",
@@ -346,7 +352,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 		}
 		// Paragraph rows are containers. Their answers live in Sub Questions (JSON),
 		// so the parent row intentionally has no Correct Answer.
-		if correctAnswer == "" && mappedType != "paragraph" && mappedType != "written" {
+		if correctAnswer == "" && mappedType != "paragraph" && mappedType != "written" && mappedType != "sorting" {
 			errs = append(errs, model.ImportError{Row: rowIdx + 1, Field: "Correct Answer", Reason: "Correct Answer is required"})
 			continue
 		}
@@ -379,13 +385,27 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 	// Convert to CreateQuizQuestionInput
 	for i, item := range items {
 		var opts []model.CreateOptionInput
-		if item.Type == "multiple_choice" {
+		switch item.Type {
+		case "multiple_choice":
 			for j, optText := range []string{item.OptionA, item.OptionB, item.OptionC, item.OptionD} {
 				if optText != "" {
 					isCorrect := strings.EqualFold(optText, item.CorrectAnswer) ||
 						strings.EqualFold(fmt.Sprintf("%c", 'A'+j), item.CorrectAnswer)
 					opts = append(opts, model.CreateOptionInput{Text: optText, Position: j, IsCorrect: isCorrect})
 				}
+			}
+		case "sorting":
+			for j, optText := range []string{item.OptionA, item.OptionB, item.OptionC, item.OptionD} {
+				if optText != "" {
+					opts = append(opts, model.CreateOptionInput{Text: optText, Position: j})
+				}
+			}
+			if item.CorrectAnswer == "" && len(opts) > 0 {
+				parts := make([]string, len(opts))
+				for j, option := range opts {
+					parts[j] = option.Text
+				}
+				item.CorrectAnswer = strings.Join(parts, " → ")
 			}
 		}
 		correctStr := item.CorrectAnswer

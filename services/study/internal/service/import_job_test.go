@@ -70,6 +70,24 @@ func TestParseQuizRowsPreservesParagraphAndSubQuestions(t *testing.T) {
 	}
 }
 
+func TestParseQuizRowsPreservesSortingOptions(t *testing.T) {
+	rows := [][]string{
+		{"Question", "Type", "Option A", "Option B", "Option C", "Option D", "Correct Answer"},
+		{"Arrange these", "SO", "first", "second", "third", "", ""},
+	}
+
+	_, errs, questions := parseQuizRows(rows)
+	if len(errs) != 0 {
+		t.Fatalf("expected no row errors, got %#v", errs)
+	}
+	if len(questions) != 1 || len(questions[0].Options) != 3 {
+		t.Fatalf("expected one sorting question with three options, got %#v", questions)
+	}
+	if questions[0].CorrectAnswer == nil || *questions[0].CorrectAnswer != "first → second → third" {
+		t.Fatalf("unexpected generated sorting answer: %#v", questions[0].CorrectAnswer)
+	}
+}
+
 func flashcardWorkbook(t *testing.T, header []string, row []string) []byte {
 	t.Helper()
 
