@@ -45,7 +45,7 @@ func TestParseQuizRowsPreservesParagraphAndSubQuestions(t *testing.T) {
 	subQuestions := `[{"id":1,"questionText":"19","questionType":"multiple_choice","options":[{"text":"A","position":0},{"text":"B","position":1}],"correctAnswer":"B"}]`
 	rows := [][]string{
 		{"Question", "Type", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Time (s)", "Audio URL", "Answer Explanation", "Sub Questions (JSON)", "Paragraph Text"},
-		{"passage fallback", "PG", "", "", "", "", "", "30", "", "", subQuestions, "full passage"},
+		{"passage fallback", "PG", "", "", "", "", "19: B", "30", "", "", subQuestions, "full passage"},
 	}
 
 	items, errs, questions := parseQuizRows(rows)

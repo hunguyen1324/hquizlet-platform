@@ -410,7 +410,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 		}
 		correctStr := item.CorrectAnswer
 		var correct *string
-		if correctStr != "" {
+		if correctStr != "" && item.Type != "paragraph" {
 			correct = &correctStr
 		}
 		var timeSec *int
