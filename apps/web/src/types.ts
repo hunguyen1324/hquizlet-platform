@@ -47,9 +47,9 @@ export type Flashcard = {
   studySetId: number;
   term: string;
   definition: string;
-  exampleSentence?: string;
-  hintExplanation?: string;
-  synonyms?: string;
+  exampleSentence?: string | null;
+  hintExplanation?: string | null;
+  synonyms?: string | null;
   imageUrl?: string | null;
   starred: boolean;
 };

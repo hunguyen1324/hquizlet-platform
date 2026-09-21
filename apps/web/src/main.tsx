@@ -23,7 +23,7 @@ import { ActivityFeed } from "./features/activity/ActivityFeed";
 import { WalletPage } from "./features/wallet/WalletPage";
 import { DepositPage } from "./features/payment/DepositPage";
 import { AdminPayments } from "./features/admin/AdminPayments";
-import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
+import { studySetApi, flashcardApi, fetchHealth, classApi, quizQuestionApi } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
 
 import { AppShell } from "./components/layout/AppShell";
@@ -66,7 +66,11 @@ function RootApp() {
   async function handleOpenSet(id: number) {
     setLoadingSet(true);
     try {
-      const data = await studySetApi.get(token, id);
+      let data = await studySetApi.get(token, id);
+      if (data.contentType === "quiz") {
+        const quizQuestions = await quizQuestionApi.list(token, id);
+        data = { ...data, quizQuestions };
+      }
       setSelectedSet(data);
       setView("study");
     } finally {

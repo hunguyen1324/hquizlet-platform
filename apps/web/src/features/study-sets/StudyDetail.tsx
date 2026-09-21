@@ -384,7 +384,9 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             {set.quizQuestions.map((q, i) => (
               <article className="sd-card" key={q.id ?? i}>
                 <div className="sd-card-body">
-                  <div className="sd-card-term">{i + 1}. {q.questionText}</div>
+                  <div className="sd-card-term">
+                    {i + 1}. {q.questionText || q.paragraphText || "Câu hỏi đoạn văn"}
+                  </div>
                 </div>
               </article>
             ))}

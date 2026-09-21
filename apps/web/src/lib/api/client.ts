@@ -16,6 +16,7 @@ import type {
   PaymentOrder,
   PendingDepositOrderList,
   PurchaseResult,
+  QuizQuestion,
   StudySet,
   StudySetAccessInfo,
   User,
@@ -275,7 +276,8 @@ export type QuizQuestionPayload = {
 };
 
 export const quizQuestionApi = {
-  list: (token: string, studySetId: number) => apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token),
+  list: (token: string, studySetId: number): Promise<QuizQuestion[]> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token),
   bulkSave: (token: string, studySetId: number, questions: QuizQuestionPayload[]): Promise<void> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "PUT", body: JSON.stringify({ questions }) }),
   deleteByStudySet: (token: string, studySetId: number): Promise<void> =>
