@@ -70,6 +70,11 @@ function RootApp() {
   useEffect(() => {
     if (!user) return;
     const restoreUrl = () => {
+      const editMatch = window.location.pathname.match(/^\/study-sets\/(\d+)\/edit$/);
+      if (editMatch) {
+        void handleOpenSet(Number(editMatch[1]), false).then(() => setView("quiz-editor"));
+        return;
+      }
       const match = window.location.pathname.match(/^\/study-sets\/(\d+)$/);
       if (match) void handleOpenSet(Number(match[1]), false);
       else handleNavigate(pathToView(window.location.pathname), false);
@@ -112,6 +117,12 @@ function RootApp() {
   async function handleToggleStar(card: Flashcard) {
     await flashcardApi.toggleStar(token, card.id);
     if (selectedSet) await handleOpenSet(selectedSet.id);
+  }
+
+  function handleEditSet() {
+    if (!selectedSet) return;
+    setView(selectedSet.contentType === "quiz" ? "quiz-editor" : "editor");
+    window.history.pushState({}, "", `/study-sets/${selectedSet.id}/edit`);
   }
 
   async function handleDeleteSet() {
@@ -196,7 +207,7 @@ function RootApp() {
       {!loadingSet && view === "study" && selectedSet && (
         <StudyDetail
           set={selectedSet}
-          onEdit={() => setView(selectedSet.contentType === "quiz" ? "quiz-editor" : "editor")}
+          onEdit={handleEditSet}
           onDelete={() => void handleDeleteSet()}
           onBack={() => window.history.back()}
           onToggleStar={(card) => void handleToggleStar(card)}

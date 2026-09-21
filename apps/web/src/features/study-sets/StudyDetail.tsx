@@ -5,7 +5,8 @@ import type { StudySet, Flashcard } from "../../types";
 import type { LearningMode } from "../learning/types";
 import { LearningContainer } from "../learning";
 import { useAuth } from "../auth/AuthContext";
-import { flashcardApi } from "../../lib/api";
+import { flashcardApi, folderApi, studySetApi } from "../../lib/api";
+import type { FolderSummary } from "../../lib/api";
 import { StudyModes } from "./StudyModes";
 import { FlashcardListCard } from "./FlashcardListCard";
 import { FlashcardSearchBar } from "./FlashcardSearchBar";
@@ -28,6 +29,9 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const [studyMode, setStudyMode] = React.useState<LearningMode>("flashcards");
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [visibility, setVisibility] = React.useState(set.visibility);
+  const [folders, setFolders] = React.useState<FolderSummary[]>([]);
+  const [folderDialogOpen, setFolderDialogOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   // Infinite scroll state — allCards accumulates pages
@@ -115,6 +119,26 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
     window.setTimeout(() => setActionToast(null), 3000);
   }
 
+  async function toggleVisibility() {
+    const next = visibility === "public" ? "private" : "public";
+    try {
+      await studySetApi.update(token, set.id, { title: set.title, description: set.description, termLanguage: set.termLanguage, definitionLanguage: set.definitionLanguage, visibility: next });
+      setVisibility(next);
+      setMenuOpen(false);
+      showToast(next === "public" ? "Quiz hiện được xem công khai" : "Quiz đã chuyển sang riêng tư");
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Không đổi được quyền xem"); }
+  }
+
+  async function openFolderDialog() {
+    try { setFolders(await folderApi.listFolders(token)); setFolderDialogOpen(true); setMenuOpen(false); }
+    catch (error) { setActionError(error instanceof Error ? error.message : "Không tải được thư mục"); }
+  }
+
+  async function addToFolder(folderId: number) {
+    try { await folderApi.addStudySetToFolder(token, folderId, set.id); setFolderDialogOpen(false); showToast("Đã thêm quiz vào thư mục"); }
+    catch (error) { setActionError(error instanceof Error ? error.message : "Không thêm được vào thư mục"); }
+  }
+
   // Filter & sort (client-side on loaded cards)
   const filteredCards = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -185,7 +209,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
         <div className="sd-title-row">
           <div className="sd-title-copy">
             <div className="sd-eyebrow">
-              {set.visibility === "private" && <span className="sd-private-badge">🔒 Riêng tư</span>}
+              {visibility === "private" ? <span className="sd-private-badge">🔒 Riêng tư</span> : <span className="sd-public-badge">🌐 Công khai</span>}
               <span>
                 {set.contentType === "quiz" ? "Quiz" : set.contentType === "grammar" ? "Ngữ pháp" : "Học phần"}
               </span>
@@ -218,6 +242,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                 >
                   Sửa
                 </button>
+                <button type="button" className="sd-dropdown-item" onClick={() => void openFolderDialog()}>Thêm vào thư mục</button>
+                <button type="button" className="sd-dropdown-item" onClick={() => void toggleVisibility()}>{visibility === "public" ? "Chuyển sang riêng tư" : "Chuyển sang công khai"}</button>
                 <div className="sd-dropdown-divider" />
                 <button
                   type="button"
@@ -377,7 +403,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
       )}
 
       {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
-        <QuizPlayer questions={set.quizQuestions} />
+        <QuizPlayer studySetId={set.id} questions={set.quizQuestions} />
       )}
 
       {set.contentType === "quiz" && (!set.quizQuestions || set.quizQuestions.length === 0) && (
@@ -406,6 +432,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
           </div>
         </div>
       )}
+
+      {folderDialogOpen && <div className="sd-modal-backdrop" role="presentation" onMouseDown={() => setFolderDialogOpen(false)}><section className="sd-folder-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><p className="eyebrow">Sắp xếp quiz</p><h2>Thêm vào thư mục</h2></div><button className="ghost-button" onClick={() => setFolderDialogOpen(false)}>×</button></header>{folders.length === 0 ? <p>Bạn chưa có thư mục. Hãy tạo thư mục từ thanh bên trước.</p> : <div className="sd-folder-options">{folders.map((folder) => <button key={folder.id} onClick={() => void addToFolder(folder.id)}><span>📁</span><div><strong>{folder.title}</strong><small>{folder.studySetCount} học phần</small></div><b>Thêm</b></button>)}</div>}</section></div>}
     </div>
   );
 }

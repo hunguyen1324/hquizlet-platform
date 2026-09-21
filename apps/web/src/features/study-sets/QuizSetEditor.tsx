@@ -1,9 +1,9 @@
 // QuizSetEditor — tạo/sửa quiz set (multiple choice, true/false, written)
 // Tham chiếu: hquizlet/apps/nextjs/src/components/study-set/quiz-set-form.tsx
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { quizApi, importApi } from "../../lib/api";
+import { quizApi, importApi, quizQuestionApi, studySetApi } from "../../lib/api";
 
 const LANGUAGES = [
   { code: "en-US", name: "English (US)", flag: "🇺🇸" },
@@ -34,6 +34,9 @@ interface QuizQuestion {
   audioUrl: string;
   options: QuizOption[];
   position: number;
+  subQuestions?: unknown;
+  tags?: string[];
+  timeInSeconds?: number;
 }
 
 type Props = {
@@ -339,6 +342,26 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: Array<{ row: number; field: string; reason: string }> } | null>(null);
 
+  useEffect(() => {
+    if (!existingSetId) return;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([studySetApi.get(token, existingSetId), quizQuestionApi.list(token, existingSetId)])
+      .then(([set, loadedQuestions]) => {
+        if (cancelled) return;
+        setTitle(set.title); setDescription(set.description ?? ""); setTermLanguage(set.termLanguage); setDefinitionLanguage(set.definitionLanguage); setVisibility(set.visibility);
+        setQuestions(loadedQuestions.map((q, index) => ({
+          key: String(q.id ?? crypto.randomUUID()), questionText: q.questionText, questionType: q.questionType,
+          correctAnswer: q.correctAnswer ?? "", answerExplanation: q.answerExplanation ?? "", paragraphText: q.paragraphText ?? "",
+          audioUrl: q.audioUrl ?? "", options: (q.options ?? []).map((o, optionIndex) => ({ text: o.text, position: optionIndex })),
+          position: q.position ?? index, subQuestions: q.subQuestions, tags: q.tags, timeInSeconds: q.timeInSeconds,
+        })));
+      })
+      .catch((value) => setError(value instanceof Error ? value.message : "Không tải được quiz để sửa."))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [existingSetId, token]);
+
   function updateQuestion(key: string, updated: QuizQuestion) {
     setQuestions((prev) => prev.map((q) => (q.key === key ? updated : q)));
   }
@@ -373,7 +396,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
       setError("Tất cả câu hỏi cần có nội dung.");
       return;
     }
-    if (!importFile && questions.some((q) => !q.correctAnswer)) {
+    if (!importFile && questions.some((q) => q.questionType !== "paragraph" && !q.correctAnswer)) {
       setError("Tất cả câu hỏi cần có đáp án đúng.");
       return;
     }
@@ -404,6 +427,17 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
                   : [],
             })),
       };
+      if (existingSetId) {
+        await studySetApi.update(token, existingSetId, { title: payload.title, description: payload.description, termLanguage, definitionLanguage, visibility });
+        if (!importFile) await quizQuestionApi.bulkSave(token, existingSetId, questions.map((q, i) => ({
+          questionText: q.questionText.trim(), questionType: q.questionType, correctAnswer: q.correctAnswer || undefined,
+          answerExplanation: q.answerExplanation.trim() || undefined, paragraphText: q.paragraphText?.trim() || undefined,
+          audioUrl: q.audioUrl || undefined, timeInSeconds: q.timeInSeconds, subQuestions: q.subQuestions, tags: q.tags, position: i,
+          options: q.options.filter((o) => o.text.trim()).map((o, idx) => ({ text: o.text.trim(), position: idx, isCorrect: q.correctAnswer.toUpperCase() === String.fromCharCode(65 + idx) || q.correctAnswer === o.text })),
+        })));
+        if (importFile) { const result = await importQuizIntoSet(existingSetId, importFile); if (result.errors.length > 0) return; }
+        onSave(); return;
+      }
       const saved = await quizApi.create(token, payload);
       if (importFile) {
         const result = await importQuizIntoSet(saved.id, importFile);
@@ -421,15 +455,15 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
     <form className="create-page" onSubmit={handleSubmit}>
       <section className="create-header">
         <div>
-          <p className="eyebrow">Tạo bộ học mới</p>
-          <h1>Tạo Quiz</h1>
+          <p className="eyebrow">{existingSetId ? "Chỉnh sửa" : "Tạo bộ học mới"}</p>
+          <h1>{existingSetId ? "Sửa Quiz" : "Tạo Quiz"}</h1>
         </div>
         <div className="header-actions">
           <button className="ghost-button" type="button" onClick={onCancel} disabled={loading}>
             Hủy
           </button>
           <button className="primary-button" type="submit" disabled={loading}>
-            {loading ? "Đang lưu..." : importFile ? "Tạo từ Excel" : "Tạo Quiz"}
+            {loading ? "Đang lưu..." : existingSetId ? "Lưu thay đổi" : importFile ? "Tạo từ Excel" : "Tạo Quiz"}
           </button>
         </div>
       </section>        <section className="create-meta">
