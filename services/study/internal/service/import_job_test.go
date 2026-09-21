@@ -41,6 +41,35 @@ func TestParseFlashcardExcelRequiresTermAndDefinitionColumns(t *testing.T) {
 	}
 }
 
+func TestParseQuizRowsPreservesParagraphAndSubQuestions(t *testing.T) {
+	subQuestions := `[{"id":1,"questionText":"19","questionType":"multiple_choice","options":[{"text":"A","position":0},{"text":"B","position":1}],"correctAnswer":"B"}]`
+	rows := [][]string{
+		{"Question", "Type", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Time (s)", "Audio URL", "Answer Explanation", "Sub Questions (JSON)", "Paragraph Text"},
+		{"passage fallback", "PG", "", "", "", "", "", "30", "", "", subQuestions, "full passage"},
+	}
+
+	items, errs, questions := parseQuizRows(rows)
+	if len(errs) != 0 {
+		t.Fatalf("expected no row errors, got %#v", errs)
+	}
+	if len(items) != 1 || len(questions) != 1 {
+		t.Fatalf("expected one parsed paragraph, got %d items and %d questions", len(items), len(questions))
+	}
+	question := questions[0]
+	if question.QuestionType != "paragraph" || question.QuestionText != "" {
+		t.Fatalf("unexpected paragraph question: %#v", question)
+	}
+	if question.CorrectAnswer != nil {
+		t.Fatalf("paragraph parent must not have a correct answer, got %q", *question.CorrectAnswer)
+	}
+	if question.ParagraphText == nil || *question.ParagraphText != "full passage" {
+		t.Fatalf("expected Paragraph Text column to be preserved, got %#v", question.ParagraphText)
+	}
+	if string(question.SubQuestions) != subQuestions {
+		t.Fatalf("expected sub-questions JSON to be preserved, got %s", question.SubQuestions)
+	}
+}
+
 func flashcardWorkbook(t *testing.T, header []string, row []string) []byte {
 	t.Helper()
 

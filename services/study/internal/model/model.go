@@ -286,6 +286,8 @@ type ImportQuizRow struct {
 	TimeSeconds        int    `json:"timeSeconds,omitempty"`
 	AudioURL           string `json:"audioUrl,omitempty"`
 	AnswerExplanation  string `json:"answerExplanation,omitempty"`
+	ParagraphText      string          `json:"paragraphText,omitempty"`
+	SubQuestions       json.RawMessage `json:"subQuestions,omitempty"`
 }
 
 // ImportError describes a validation error in a specific row/field.

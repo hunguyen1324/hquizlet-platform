@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -312,6 +313,8 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 	timeIdx := header["time (s)"]
 	audioIdx := header["audio url"]
 	explainIdx := header["answer explanation"]
+	paragraphIdx := header["paragraph text"]
+	subQuestionsIdx := header["sub questions (json)"]
 
 	typeMap := map[string]string{
 		"MC": "multiple_choice", "TF": "true_false",
@@ -341,9 +344,20 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			errs = append(errs, model.ImportError{Row: rowIdx + 1, Field: "Type", Reason: fmt.Sprintf("unknown type '%s'. Use MC, TF, WR, PG, or SO", typeCode)})
 			continue
 		}
-		if correctAnswer == "" {
+		// Paragraph rows are containers. Their answers live in Sub Questions (JSON),
+		// so the parent row intentionally has no Correct Answer.
+		if correctAnswer == "" && mappedType != "paragraph" && mappedType != "written" {
 			errs = append(errs, model.ImportError{Row: rowIdx + 1, Field: "Correct Answer", Reason: "Correct Answer is required"})
 			continue
+		}
+
+		var subQuestions json.RawMessage
+		if raw := getCell(row, subQuestionsIdx); raw != "" {
+			if !json.Valid([]byte(raw)) {
+				errs = append(errs, model.ImportError{Row: rowIdx + 1, Field: "Sub Questions (JSON)", Reason: "must contain valid JSON"})
+				continue
+			}
+			subQuestions = json.RawMessage(raw)
 		}
 
 		item := model.ImportQuizRow{
@@ -352,6 +366,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			OptionC: getCell(row, optCIdx), OptionD: getCell(row, optDIdx),
 			CorrectAnswer: correctAnswer, AudioURL: getCell(row, audioIdx),
 			AnswerExplanation: getCell(row, explainIdx),
+			ParagraphText:     getCell(row, paragraphIdx), SubQuestions: subQuestions,
 		}
 		if t := getCell(row, timeIdx); t != "" {
 			n := 0
@@ -359,10 +374,6 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			item.TimeSeconds = n
 		}
 		items = append(items, item)
-	}
-
-	if len(errs) > 0 {
-		return items, errs, nil
 	}
 
 	// Convert to CreateQuizQuestionInput
@@ -378,6 +389,10 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			}
 		}
 		correctStr := item.CorrectAnswer
+		var correct *string
+		if correctStr != "" {
+			correct = &correctStr
+		}
 		var timeSec *int
 		if item.TimeSeconds > 0 {
 			timeSec = &item.TimeSeconds
@@ -390,10 +405,23 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 		if item.AnswerExplanation != "" {
 			explain = &item.AnswerExplanation
 		}
+		questionText := item.Question
+		var paragraphText *string
+		if item.Type == "paragraph" {
+			paragraph := item.ParagraphText
+			if paragraph == "" {
+				paragraph = item.Question
+			}
+			if paragraph != "" {
+				paragraphText = &paragraph
+			}
+			questionText = ""
+		}
 		questions = append(questions, model.CreateQuizQuestionInput{
-			Position: i, QuestionText: item.Question, QuestionType: item.Type,
-			CorrectAnswer: &correctStr, TimeInSeconds: timeSec,
+			Position: i, QuestionText: questionText, QuestionType: item.Type,
+			CorrectAnswer: correct, TimeInSeconds: timeSec,
 			AudioURL: audioURL, AnswerExplanation: explain, Options: opts,
+			ParagraphText: paragraphText, SubQuestions: item.SubQuestions,
 		})
 	}
 	return
