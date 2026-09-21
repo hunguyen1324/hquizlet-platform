@@ -10,6 +10,7 @@ import { StudyModes } from "./StudyModes";
 import { FlashcardListCard } from "./FlashcardListCard";
 import { FlashcardSearchBar } from "./FlashcardSearchBar";
 import { InlineFlashcardEditor } from "./InlineFlashcardEditor";
+import { QuizPlayer } from "./QuizPlayer";
 import "./StudyDetail.css";
 
 type Props = {
@@ -373,6 +374,14 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
             <p className="sd-all-loaded">Đã hiển thị tất cả {cardTotal} thẻ</p>
           )}
         </div>
+      )}
+
+      {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
+        <QuizPlayer questions={set.quizQuestions} />
+      )}
+
+      {set.contentType === "quiz" && (!set.quizQuestions || set.quizQuestions.length === 0) && (
+        <div className="sd-empty"><p>Quiz chưa có câu hỏi hoặc dữ liệu import chưa được lưu.</p></div>
       )}
 
       {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
