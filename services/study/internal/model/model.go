@@ -275,17 +275,20 @@ type ImportFlashcardRow struct {
 
 // ImportQuizRow represents one row from a quiz Excel import.
 type ImportQuizRow struct {
-	Row                int    `json:"row"`
-	Question           string `json:"question"`
-	Type               string `json:"type"`
-	OptionA            string `json:"optionA,omitempty"`
-	OptionB            string `json:"optionB,omitempty"`
-	OptionC            string `json:"optionC,omitempty"`
-	OptionD            string `json:"optionD,omitempty"`
-	CorrectAnswer      string `json:"correctAnswer"`
-	TimeSeconds        int    `json:"timeSeconds,omitempty"`
-	AudioURL           string `json:"audioUrl,omitempty"`
-	AnswerExplanation  string `json:"answerExplanation,omitempty"`
+	Row               int    `json:"row"`
+	Question          string `json:"question"`
+	Type              string `json:"type"`
+	OptionA           string `json:"optionA,omitempty"`
+	OptionB           string `json:"optionB,omitempty"`
+	OptionC           string `json:"optionC,omitempty"`
+	OptionD           string `json:"optionD,omitempty"`
+	CorrectAnswer     string `json:"correctAnswer"`
+	TimeSeconds       int    `json:"timeSeconds,omitempty"`
+	AudioURL          string `json:"audioUrl,omitempty"`
+	AnswerExplanation string `json:"answerExplanation,omitempty"`
+	// Cột mở rộng (Option B) — chỉ có trong file export từ hquizlet v2+
+	SubQuestionsJSON string `json:"subQuestionsJson,omitempty"` // JSON string của sub-questions cho PG
+	ParagraphText    string `json:"paragraphText,omitempty"`    // backup cho PG paragraph text
 }
 
 // ImportError describes a validation error in a specific row/field.

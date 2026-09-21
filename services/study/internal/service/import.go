@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -143,6 +144,8 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 	timeIdx := header["time (s)"]
 	audioIdx := header["audio url"]
 	explainIdx := header["answer explanation"]
+	subQIdx := header["sub questions (json)"] // cột mới cho PG subQuestions
+	pgTextIdx := header["paragraph text"]     // cột backup cho PG paragraphText
 
 	var items []model.ImportQuizRow
 	errors := []model.ImportError{}
@@ -200,6 +203,8 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 			CorrectAnswer:     correctAnswer,
 			AudioURL:          getCell(row, audioIdx),
 			AnswerExplanation: getCell(row, explainIdx),
+			SubQuestionsJSON:  getCell(row, subQIdx),
+			ParagraphText:     getCell(row, pgTextIdx),
 		}
 		if t := getCell(row, timeIdx); t != "" {
 			n := 0
@@ -213,7 +218,10 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 	var questions []model.CreateQuizQuestionInput
 	for i, item := range items {
 		var opts []model.CreateOptionInput
-		if item.Type == "multiple_choice" {
+
+		switch item.Type {
+		case "multiple_choice":
+			// MC: options A/B/C/D, correct = chữ cái hoặc text khớp
 			for j, optText := range []string{item.OptionA, item.OptionB, item.OptionC, item.OptionD} {
 				if optText != "" {
 					isCorrect := strings.EqualFold(optText, item.CorrectAnswer) ||
@@ -224,6 +232,27 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 						IsCorrect: isCorrect,
 					})
 				}
+			}
+
+		case "sorting":
+			// SO: options A/B/C/D là các mục cần sắp xếp (thứ tự đúng từ trên xuống).
+			// correctAnswer từ export = "A → B → C" hoặc thứ tự text join.
+			// Lưu options theo đúng thứ tự; correctAnswer giữ nguyên để frontend dùng.
+			for j, optText := range []string{item.OptionA, item.OptionB, item.OptionC, item.OptionD} {
+				if optText != "" {
+					opts = append(opts, model.CreateOptionInput{
+						Text:     optText,
+						Position: j,
+					})
+				}
+			}
+			// Nếu correctAnswer rỗng nhưng có options, tự build từ options (thứ tự đã đúng)
+			if item.CorrectAnswer == "" && len(opts) > 0 {
+				parts := make([]string, len(opts))
+				for k, o := range opts {
+					parts[k] = o.Text
+				}
+				item.CorrectAnswer = strings.Join(parts, " → ")
 			}
 		}
 
@@ -258,13 +287,26 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 			AnswerExplanation: explain,
 			Options:           opts,
 		}
-		// Câu đọc hiểu (PG): nội dung đoạn văn trong cột Question được lưu vào ParagraphText.
-		// QuestionText để trống hoặc giữ nguyên để label group.
-		if item.Type == "paragraph" && item.Question != "" {
-			pgText := item.Question
-			input.ParagraphText = &pgText
-			input.QuestionText = "" // paragraph không cần question text riêng
+
+		// PG (paragraph/reading comprehension):
+		// - Cột Question chứa nội dung đoạn văn (paragraphText) — từ export hquizlet v2+
+		//   hoặc cột "Paragraph Text" nếu file cũ hơn dùng cột riêng.
+		// - SubQuestionsJSON chứa mảng câu hỏi con serialized.
+		if item.Type == "paragraph" {
+			pgText := item.Question // v2+: Question = paragraphText
+			if item.ParagraphText != "" {
+				pgText = item.ParagraphText // cột riêng có độ ưu tiên cao hơn nếu tồn tại
+			}
+			if pgText != "" {
+				input.ParagraphText = &pgText
+			}
+			input.QuestionText = "" // PG không dùng questionText
+
+			if item.SubQuestionsJSON != "" {
+				input.SubQuestions = json.RawMessage(item.SubQuestionsJSON)
+			}
 		}
+
 		questions = append(questions, input)
 	}
 
