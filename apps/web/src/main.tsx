@@ -143,8 +143,11 @@ function RootApp() {
       {view === "quiz-editor" && (
         <QuizSetEditor
           existingSetId={selectedSet?.id}
-          onSave={() => setView("dashboard")}
-          onCancel={() => setView("create-type")}
+          onSave={() => {
+            if (selectedSet) void handleOpenSet(selectedSet.id);
+            else setView("dashboard");
+          }}
+          onCancel={() => setView(selectedSet ? "study" : "create-type")}
         />
       )}
 
@@ -158,7 +161,7 @@ function RootApp() {
       {!loadingSet && view === "study" && selectedSet && (
         <StudyDetail
           set={selectedSet}
-          onEdit={() => setView("editor")}
+          onEdit={() => setView(selectedSet.contentType === "quiz" ? "quiz-editor" : "editor")}
           onDelete={() => void handleDeleteSet()}
           onBack={() => setView("dashboard")}
           onToggleStar={(card) => void handleToggleStar(card)}

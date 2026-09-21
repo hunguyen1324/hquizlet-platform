@@ -190,7 +190,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
                 {set.contentType === "quiz" ? "Quiz" : set.contentType === "grammar" ? "Ngữ pháp" : "Học phần"}
               </span>
               <span className="sd-dot">·</span>
-              <span>{totalItems} thuật ngữ</span>
+              <span>{totalItems} {set.contentType === "quiz" ? "câu hỏi" : "thuật ngữ"}</span>
             </div>
             <h1 className="sd-title">{set.title}</h1>
             {set.description && <p className="sd-description">{set.description}</p>}
@@ -381,7 +381,11 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
       )}
 
       {set.contentType === "quiz" && (!set.quizQuestions || set.quizQuestions.length === 0) && (
-        <div className="sd-empty"><p>Quiz chưa có câu hỏi hoặc dữ liệu import chưa được lưu.</p></div>
+        <div className="sd-empty sd-empty--quiz">
+          <h2>Quiz chưa có câu hỏi</h2>
+          <p>Dữ liệu Excel chưa được lưu vào quiz này. Hãy nhập lại file để bắt đầu luyện tập hoặc thi thử.</p>
+          <button type="button" className="primary-button" onClick={onEdit}>Nhập câu hỏi từ Excel</button>
+        </div>
       )}
 
       {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
