@@ -182,7 +182,9 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 			errors = append(errors, model.ImportError{Row: rowIdx + 1, Field: "Type", Reason: fmt.Sprintf("Unknown type '%s'. Use MC, TF, WR, PG, or SO", typeCode)})
 			continue
 		}
-		if correctAnswer == "" {
+		// PG (paragraph/reading) không cần correct_answer vì đây là câu cha chứa sub-questions.
+		// WR (written/sorting) dùng correct_answer là chuỗi thứ tự (ví dụ "3241"), cho phép rỗng.
+		if correctAnswer == "" && typeCode != "PG" && typeCode != "WR" {
 			errors = append(errors, model.ImportError{Row: rowIdx + 1, Field: "Correct Answer", Reason: "Correct Answer is required"})
 			continue
 		}
@@ -226,8 +228,10 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 		}
 
 		var correct *string
-		correctStr := item.CorrectAnswer
-		correct = &correctStr
+		if item.CorrectAnswer != "" {
+			correctStr := item.CorrectAnswer
+			correct = &correctStr
+		}
 
 		var timeSec *int
 		if item.TimeSeconds > 0 {
@@ -244,7 +248,7 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 			explain = &item.AnswerExplanation
 		}
 
-		questions = append(questions, model.CreateQuizQuestionInput{
+		input := model.CreateQuizQuestionInput{
 			Position:          i,
 			QuestionText:      item.Question,
 			QuestionType:      item.Type,
@@ -253,7 +257,15 @@ func (s *ImportService) ImportQuiz(ctx context.Context, studySetID, userID int64
 			AudioURL:          audioURL,
 			AnswerExplanation: explain,
 			Options:           opts,
-		})
+		}
+		// Câu đọc hiểu (PG): nội dung đoạn văn trong cột Question được lưu vào ParagraphText.
+		// QuestionText để trống hoặc giữ nguyên để label group.
+		if item.Type == "paragraph" && item.Question != "" {
+			pgText := item.Question
+			input.ParagraphText = &pgText
+			input.QuestionText = "" // paragraph không cần question text riêng
+		}
+		questions = append(questions, input)
 	}
 
 	// Bulk save (replaces all existing questions)
