@@ -1,0 +1,190 @@
+# HQuizlet Platform – APP LAYER (chạy trên server "App")
+# Gồm: Nginx (entry point) + Gateway + Auth/Study/Quiz/Class/Payment/File + Web
+#
+# Khác với infra/docker/docker-compose.yml (bản dev), file này:
+#   - KHÔNG build image tại chỗ, chỉ "pull" image đã build sẵn ở CI (GHCR)
+#   - Trỏ DATABASE_URL / REDIS_URL / NATS_URL / STORAGE_ENDPOINT sang server Data
+#     qua biến DATA_HOST (đặt trong .env = Tailscale IP của server Data)
+#
+# Chạy: docker compose -f infra/docker/docker-compose.app.yml pull
+#       docker compose -f infra/docker/docker-compose.app.yml up -d
+
+services:
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      gateway: { condition: service_healthy }
+      web:     { condition: service_healthy }
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/nginx-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  gateway:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-gateway:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8080"
+      AUTH_SERVICE_URL:    "http://auth:8081"
+      STUDY_SERVICE_URL:   "http://study:8082"
+      QUIZ_SERVICE_URL:    "http://quiz:8083"
+      CLASS_SERVICE_URL:   "http://class:8084"
+      PAYMENT_SERVICE_URL: "http://payment:8085"
+      FILE_SERVICE_URL:    "http://file:8086"
+    expose: ["8080"]
+    depends_on:
+      auth: { condition: service_healthy }
+      study: { condition: service_healthy }
+      quiz: { condition: service_healthy }
+      class: { condition: service_healthy }
+      payment: { condition: service_healthy }
+      file: { condition: service_healthy }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  auth:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-auth:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8081"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
+      SESSION_TTL:  "${SESSION_TTL:-1h}"
+      JWT_SECRET:   "${JWT_SECRET:?JWT_SECRET is required}"
+    expose: ["8081"]
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  study:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-study:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8082"
+      DATABASE_URL:     "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
+      AUTH_SERVICE_URL: "http://auth:8081"
+    expose: ["8082"]
+    depends_on:
+      auth: { condition: service_healthy }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  quiz:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-quiz:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8083"
+      DATABASE_URL:      "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
+      AUTH_SERVICE_URL:  "http://auth:8081"
+      STUDY_SERVICE_URL: "http://study:8082"
+      REDIS_URL:         "redis://:${REDIS_PASSWORD}@${DATA_HOST}:${REDIS_PORT:-6379}"
+      NATS_URL:          "nats://${DATA_HOST}:${NATS_CLIENT_PORT:-4222}"
+    expose: ["8083"]
+    depends_on:
+      auth: { condition: service_healthy }
+      study: { condition: service_healthy }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8083/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  class:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-class:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8084"
+      DATABASE_URL:         "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
+      AUTH_SERVICE_URL:     "http://auth:8081"
+      STUDY_SERVICE_URL:    "http://study:8082"
+      NATS_URL:             "nats://${DATA_HOST}:${NATS_CLIENT_PORT:-4222}"
+      CLASS_INTERNAL_TOKEN: "${CLASS_INTERNAL_TOKEN:?CLASS_INTERNAL_TOKEN is required}"
+    expose: ["8084"]
+    depends_on:
+      auth: { condition: service_healthy }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  payment:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-payment:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8085"
+      DATABASE_URL:               "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
+      STUDY_SERVICE_URL:          "http://study:8082"
+      AUTH_SERVICE_URL:           "http://auth:8081"
+      ADMIN_TOKEN:                "${ADMIN_TOKEN:?ADMIN_TOKEN is required}"
+      SEPAY_API_TOKEN:            "${SEPAY_API_TOKEN:-}"
+      SEPAY_BIDV_BANK_ACCOUNT_ID: "${SEPAY_BIDV_BANK_ACCOUNT_ID:-}"
+      SEPAY_WEBHOOK_API_KEY:      "${SEPAY_WEBHOOK_API_KEY:-}"
+    expose: ["8085"]
+    depends_on:
+      auth: { condition: service_healthy }
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8085/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  file:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-file:${IMAGE_TAG:-latest}
+    environment:
+      PORT: "8086"
+      DATABASE_URL:            "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
+      STORAGE_PROVIDER:        "minio"
+      STORAGE_ENDPOINT:        "http://${DATA_HOST}:9000"
+      STORAGE_BUCKET:          "${STORAGE_BUCKET:-hquizlet}"
+      STORAGE_ACCESS_KEY:      "${MINIO_ROOT_USER}"
+      STORAGE_SECRET_KEY:      "${MINIO_ROOT_PASSWORD}"
+      STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-http://localhost/files}"
+      STORAGE_REGION:          "us-east-1"
+      STORAGE_PATH_STYLE:      "true"
+    expose: ["8086"]
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-web:${IMAGE_TAG:-latest}
+    environment:
+      VITE_GATEWAY_URL: "${VITE_GATEWAY_URL:-http://localhost/api}"
+    expose: ["5173"]
+    depends_on:
+      gateway: { condition: service_healthy }
+    restart: on-failure
+    healthcheck:
+      test:
+        ["CMD-SHELL",
+         "node -e \"fetch('http://localhost:5173').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

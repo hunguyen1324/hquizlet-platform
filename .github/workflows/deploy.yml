@@ -1,0 +1,103 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_data:
+        description: "Deploy luôn cả data layer (Postgres/Redis/NATS/MinIO)?"
+        type: boolean
+        default: false
+
+# Chạy trên self-hosted runner cài ở máy dev (Windows). Cần cài sẵn:
+#   - Docker Desktop (để build & login GHCR)
+#   - OpenSSH Client (ssh, đã có sẵn trên Windows 10/11)
+#   - Go, Node/pnpm, Rust (để chạy bước test — hoặc bỏ qua nếu chỉ muốn build/deploy)
+jobs:
+
+  # ── 1. Test / lint (dùng lại target có sẵn trong Makefile) ────────────────
+  test:
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run CI gate
+        run: make ci-gate
+
+  # ── 2. Build & push image cho từng service Go + web lên GHCR ─────────────
+  build-and-push:
+    needs: test
+    runs-on: [self-hosted]
+    strategy:
+      matrix:
+        service: [gateway, auth, study, quiz, class, payment, file]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build & push ${{ matrix.service }}
+        run: |
+          docker build -f infra/docker/go-service.Dockerfile --build-arg SERVICE=${{ matrix.service }} `
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:${{ github.sha }} `
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:latest .
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:latest
+
+  build-and-push-web:
+    needs: test
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Build & push web
+        run: |
+          docker build -f infra/docker/web.Dockerfile `
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-web:${{ github.sha }} `
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-web:latest .
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-web:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-web:latest
+
+  # ── 3. Deploy DATA layer (chỉ chạy khi bấm workflow_dispatch + tick chọn) ─
+  deploy-data:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_data == true }}
+    needs: test
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy data layer
+        shell: pwsh
+        env:
+          SSH_KEY: ${{ secrets.DATA_SERVER_SSH_KEY }}
+        run: |
+          $keyPath = "$env:RUNNER_TEMP\data_deploy_key"
+          Set-Content -Path $keyPath -Value $env:SSH_KEY -NoNewline
+          icacls $keyPath /inheritance:r /grant:r "$env:USERNAME:(R)"
+          $target = "${{ secrets.DATA_SERVER_USER }}@${{ secrets.DATA_SERVER_HOST }}"
+          $port   = "${{ secrets.DATA_SERVER_PORT }}"
+          scp -i $keyPath -P $port -o StrictHostKeyChecking=accept-new infra/docker/docker-compose.data.yml "${target}:/opt/hquizlet/infra/docker/docker-compose.data.yml"
+          ssh -i $keyPath -p $port -o StrictHostKeyChecking=accept-new $target "cd /opt/hquizlet && docker compose -f infra/docker/docker-compose.data.yml pull && docker compose -f infra/docker/docker-compose.data.yml up -d"
+          Remove-Item $keyPath -Force
+
+  # ── 4. Deploy APP layer (chạy mỗi lần push lên main, sau khi build xong) ─
+  deploy-app:
+    needs: [build-and-push, build-and-push-web]
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy app layer
+        shell: pwsh
+        env:
+          SSH_KEY: ${{ secrets.APP_SERVER_SSH_KEY }}
+        run: |
+          $keyPath = "$env:RUNNER_TEMP\app_deploy_key"
+          Set-Content -Path $keyPath -Value $env:SSH_KEY -NoNewline
+          icacls $keyPath /inheritance:r /grant:r "$env:USERNAME:(R)"
+          $target = "${{ secrets.APP_SERVER_USER }}@${{ secrets.APP_SERVER_HOST }}"
+          $port   = "${{ secrets.APP_SERVER_PORT }}"
+          scp -i $keyPath -P $port -o StrictHostKeyChecking=accept-new infra/docker/docker-compose.app.yml "${target}:/opt/hquizlet/infra/docker/docker-compose.app.yml"
+          scp -i $keyPath -P $port -o StrictHostKeyChecking=accept-new infra/nginx/nginx.conf "${target}:/opt/hquizlet/infra/nginx/nginx.conf"
+          ssh -i $keyPath -p $port -o StrictHostKeyChecking=accept-new $target "cd /opt/hquizlet && echo IMAGE_TAG=${{ github.sha }} > .image_tag.env && docker compose -f infra/docker/docker-compose.app.yml --env-file .env --env-file .image_tag.env pull && docker compose -f infra/docker/docker-compose.app.yml --env-file .env --env-file .image_tag.env up -d && docker image prune -af --filter '"'"'until=72h'"'"'"
+          Remove-Item $keyPath -Force
