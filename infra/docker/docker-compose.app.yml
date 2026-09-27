@@ -76,6 +76,10 @@ services:
       PORT: "8082"
       DATABASE_URL:     "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
       AUTH_SERVICE_URL: "http://auth:8081"
+      MINIO_ENDPOINT:      "http://${DATA_HOST}:9000"
+      MINIO_ACCESS_KEY:    "${MINIO_ROOT_USER}"
+      MINIO_SECRET_KEY:    "${MINIO_ROOT_PASSWORD}"
+      MINIO_IMPORT_BUCKET: "${MINIO_IMPORT_BUCKET:-hquizlet-imports}"
     expose: ["8082"]
     depends_on:
       auth: { condition: service_healthy }

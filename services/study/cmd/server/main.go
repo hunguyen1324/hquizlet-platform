@@ -17,6 +17,7 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/migration"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/storage"
 )
 
 func main() {
@@ -44,7 +45,11 @@ func main() {
 	progressSvc := service.NewProgressService(progressRepo, setRepo, cardRepo)
 	quizSvc := service.NewQuizQuestionService(quizRepo, setRepo)
 	importSvc := service.NewImportService(cardRepo, quizRepo, setRepo)
-	importJobSvc := service.NewImportJobService(importJobRepo, cardRepo, quizRepo, setRepo)
+	importBlob, err := openImportBlobStorage(cfg)
+	if err != nil {
+		log.Fatalf("import storage: %v", err)
+	}
+	importJobSvc := service.NewImportJobService(importJobRepo, cardRepo, quizRepo, setRepo, importBlob)
 
 	// HTTP
 	mux := http.NewServeMux()
@@ -80,4 +85,18 @@ func openDatabase(url string) *sql.DB {
 	}
 	log.Fatal("[study] postgres is not reachable after 20 attempts")
 	return db
+}
+
+func openImportBlobStorage(cfg config.Config) (storage.ImportBlobStorage, error) {
+	if cfg.MinIO.Endpoint != "" {
+		log.Printf("[study] import blob storage: minio %s bucket=%s", cfg.MinIO.Endpoint, cfg.MinIO.Bucket)
+		return storage.NewMinIOImportStorage(storage.MinIOConfig{
+			Endpoint:        cfg.MinIO.Endpoint,
+			AccessKeyID:     cfg.MinIO.AccessKeyID,
+			SecretAccessKey: cfg.MinIO.SecretAccessKey,
+			Bucket:          cfg.MinIO.Bucket,
+		})
+	}
+	log.Printf("[study] import blob storage: local spool %s", cfg.MinIO.LocalSpoolDir)
+	return storage.NewLocalSpoolStorage(cfg.MinIO.LocalSpoolDir)
 }

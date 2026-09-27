@@ -29,6 +29,15 @@ func scanCard(s interface {
 
 const selectCols = `id, study_set_id, term, definition, example_sentence, hint_explanation, synonyms, image_url, starred, position, created_at, updated_at`
 
+// NextFlashcardPosition returns the position index for the next appended card.
+func (r *FlashcardRepository) NextFlashcardPosition(ctx context.Context, studySetID int64) (int, error) {
+	var next int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(position) + 1, 0) FROM flashcards WHERE study_set_id = $1
+	`, studySetID).Scan(&next)
+	return next, err
+}
+
 // ListByStudySet returns all flashcards for a study set ordered by position then id.
 func (r *FlashcardRepository) ListByStudySet(ctx context.Context, studySetID int64) ([]model.Flashcard, error) {
 	rows, err := r.db.QueryContext(ctx, `

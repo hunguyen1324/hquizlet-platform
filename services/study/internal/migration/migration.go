@@ -247,4 +247,8 @@ var migrations = []string{
 		updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`,
 	`CREATE INDEX IF NOT EXISTS import_jobs_user_id_created_idx ON import_jobs(user_id, created_at DESC)`,
+
+	// 023 – import job blob reference (MinIO / spool)
+	`ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS minio_key TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT NOT NULL DEFAULT 0`,
 }

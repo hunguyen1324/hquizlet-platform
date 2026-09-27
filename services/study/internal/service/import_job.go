@@ -14,6 +14,7 @@ import (
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/storage"
 )
 
 const importChunkSize = 200 // rows per DB transaction chunk
@@ -24,6 +25,7 @@ type ImportJobService struct {
 	flashcards    repository.Flashcards
 	quizQuestions repository.QuizQuestions
 	sets          repository.StudySets
+	blob          storage.ImportBlobStorage
 }
 
 // NewImportJobService creates a new service.
@@ -32,8 +34,9 @@ func NewImportJobService(
 	flashcards repository.Flashcards,
 	quizQuestions repository.QuizQuestions,
 	sets repository.StudySets,
+	blob storage.ImportBlobStorage,
 ) *ImportJobService {
-	return &ImportJobService{jobs: jobs, flashcards: flashcards, quizQuestions: quizQuestions, sets: sets}
+	return &ImportJobService{jobs: jobs, flashcards: flashcards, quizQuestions: quizQuestions, sets: sets, blob: blob}
 }
 
 // EnqueueFlashcards creates a pending job, spawns a background goroutine, and
@@ -46,11 +49,6 @@ func (s *ImportJobService) EnqueueFlashcards(ctx context.Context, studySetID, us
 		return model.ImportJob{}, err
 	}
 
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return model.ImportJob{}, fmt.Errorf("read file: %w", err)
-	}
-
 	job, err := s.jobs.Create(ctx, model.CreateImportJobInput{
 		UserID:     userID,
 		StudySetID: studySetID,
@@ -60,8 +58,18 @@ func (s *ImportJobService) EnqueueFlashcards(ctx context.Context, studySetID, us
 		return model.ImportJob{}, fmt.Errorf("create import job: %w", err)
 	}
 
-	// Background goroutine – use a detached context so it survives the HTTP request.
-	go s.runFlashcardImport(job.ID, studySetID, data)
+	key := fmt.Sprintf("imports/%d/%d-flashcards.xlsx", userID, job.ID)
+	size, err := s.blob.Put(ctx, key, r)
+	if err != nil {
+		s.failJob(ctx, job.ID, err.Error(), slog.With("job_id", job.ID))
+		return model.ImportJob{}, fmt.Errorf("store import file: %w", err)
+	}
+	if err := s.jobs.SetImportFile(ctx, job.ID, key, size); err != nil {
+		_ = s.blob.Delete(ctx, key)
+		return model.ImportJob{}, fmt.Errorf("record import file: %w", err)
+	}
+
+	go s.runFlashcardImport(job.ID, studySetID, key)
 
 	return job, nil
 }
@@ -75,11 +83,6 @@ func (s *ImportJobService) EnqueueQuiz(ctx context.Context, studySetID, userID i
 		return model.ImportJob{}, err
 	}
 
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return model.ImportJob{}, fmt.Errorf("read file: %w", err)
-	}
-
 	job, err := s.jobs.Create(ctx, model.CreateImportJobInput{
 		UserID:     userID,
 		StudySetID: studySetID,
@@ -89,7 +92,18 @@ func (s *ImportJobService) EnqueueQuiz(ctx context.Context, studySetID, userID i
 		return model.ImportJob{}, fmt.Errorf("create import job: %w", err)
 	}
 
-	go s.runQuizImport(job.ID, studySetID, data)
+	key := fmt.Sprintf("imports/%d/%d-quiz.xlsx", userID, job.ID)
+	size, err := s.blob.Put(ctx, key, r)
+	if err != nil {
+		s.failJob(ctx, job.ID, err.Error(), slog.With("job_id", job.ID))
+		return model.ImportJob{}, fmt.Errorf("store import file: %w", err)
+	}
+	if err := s.jobs.SetImportFile(ctx, job.ID, key, size); err != nil {
+		_ = s.blob.Delete(ctx, key)
+		return model.ImportJob{}, fmt.Errorf("record import file: %w", err)
+	}
+
+	go s.runQuizImport(job.ID, studySetID, key)
 
 	return job, nil
 }
@@ -116,66 +130,100 @@ func (s *ImportJobService) ListJobsWithFilter(ctx context.Context, userID int64,
 // Background workers
 // ---------------------------------------------------------------------------
 
-func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, data []byte) {
+func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, blobKey string) {
 	ctx := context.Background()
 	log := slog.With("job_id", jobID, "study_set_id", studySetID, "kind", "flashcard")
+	defer func() { _ = s.blob.Delete(ctx, blobKey) }()
 
-	// Mark running
 	if _, err := s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{Status: model.ImportStatusRunning}); err != nil {
 		log.Error("mark running failed", "err", err)
 		return
 	}
 
-	items, parseErrors, err := parseFlashcardExcel(data)
+	rc, err := s.blob.Open(ctx, blobKey)
+	if err != nil {
+		s.failJob(ctx, jobID, err.Error(), log)
+		return
+	}
+	defer rc.Close()
+
+	startPos, err := s.flashcards.NextFlashcardPosition(ctx, studySetID)
 	if err != nil {
 		s.failJob(ctx, jobID, err.Error(), log)
 		return
 	}
 
-	// Tiếp tục import các dòng hợp lệ, bỏ qua dòng lỗi
-
-	// Determine start position
-	existing, err := s.flashcards.ListByStudySet(ctx, studySetID)
+	imported, total, parseErrors, err := s.streamFlashcardImport(ctx, jobID, studySetID, rc, startPos, log)
 	if err != nil {
 		s.failJob(ctx, jobID, err.Error(), log)
 		return
 	}
-	startPos := len(existing)
-	total := len(items)
-	imported := 0
 
-	// Process in chunks so progress updates are visible to the frontend.
-	for start := 0; start < len(items); start += importChunkSize {
-		end := start + importChunkSize
-		if end > len(items) {
-			end = len(items)
+	_, _ = s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
+		Status:   model.ImportStatusDone,
+		Total:    total,
+		Imported: imported,
+		Errors:   parseErrors,
+	})
+	log.Info("flashcard import done", "imported", imported, "total", total, "skipped", len(parseErrors))
+}
+
+func (s *ImportJobService) streamFlashcardImport(
+	ctx context.Context,
+	jobID, studySetID int64,
+	r io.Reader,
+	startPos int,
+	log *slog.Logger,
+) (imported, total int, parseErrors []model.ImportError, fatal error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer f.Close()
+
+	sheetName := f.GetSheetName(0)
+	if sheetName == "" {
+		return 0, 0, nil, fmt.Errorf("excel file has no sheets")
+	}
+
+	rows, err := f.Rows(sheetName)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("read sheet: %w", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, 0, nil, fmt.Errorf("excel file must have a header row and at least one data row")
+	}
+	headerRow, err := rows.Columns()
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	header := flashcardHeaderIndex(headerRow)
+
+	termIdx, hasTerm := firstHeaderIndex(header, "term", "front", "kanji", "word", "vocabulary", "question")
+	defIdx, hasDef := firstHeaderIndex(header, "definition", "back", "meaning", "answer", "translation")
+	if !hasTerm || !hasDef {
+		return 0, 0, nil, fmt.Errorf("excel file must have 'Term' and 'Definition' columns")
+	}
+	exIdx, _ := firstHeaderIndex(header, "example", "example sentence")
+	hintIdx, _ := firstHeaderIndex(header, "hint", "hint explanation", "explanation", "note", "notes")
+	synIdx, _ := firstHeaderIndex(header, "synonyms", "synonym")
+	imgIdx, _ := firstHeaderIndex(header, "image url", "image", "image_url", "imageurl")
+
+	validRows := 0
+	nextPos := startPos
+	chunk := make([]model.BulkFlashcardItem, 0, importChunkSize)
+
+	flush := func() error {
+		if len(chunk) == 0 {
+			return nil
 		}
-		chunk := items[start:end]
-
-		bulk := make([]model.BulkFlashcardItem, len(chunk))
-		for i, item := range chunk {
-			bi := model.BulkFlashcardItem{
-				Term:            item.Term,
-				Definition:      item.Definition,
-				ExampleSentence: item.ExampleSentence,
-				HintExplanation: item.HintExplanation,
-				Synonyms:        item.Synonyms,
-				Position:        startPos + start + i,
-			}
-			if item.ImageURL != "" {
-				bi.ImageURL = &item.ImageURL
-			}
-			bulk[i] = bi
-		}
-
-		result, err := s.flashcards.BulkSave(ctx, studySetID, bulk)
+		result, err := s.flashcards.BulkSave(ctx, studySetID, chunk)
 		if err != nil {
-			s.failJob(ctx, jobID, err.Error(), log)
-			return
+			return err
 		}
 		imported += len(result.Created)
-
-		// Update progress after each chunk.
 		if _, err := s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
 			Status:   model.ImportStatusRunning,
 			Total:    total,
@@ -183,31 +231,91 @@ func (s *ImportJobService) runFlashcardImport(jobID, studySetID int64, data []by
 		}); err != nil {
 			log.Warn("progress update failed", "err", err)
 		}
-
-		// Small yield between chunks to avoid starving the DB.
+		chunk = chunk[:0]
 		time.Sleep(5 * time.Millisecond)
+		return nil
 	}
 
-	_, _ = s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{
-		Status:   model.ImportStatusDone,
-		Total:    total + len(parseErrors),
-		Imported: imported,
-		Errors:   parseErrors,
-	})
-	log.Info("flashcard import done", "imported", imported, "total", total, "skipped", len(parseErrors))
+	rowNum := 1
+	for rows.Next() {
+		rowNum++
+		row, err := rows.Columns()
+		if err != nil {
+			return imported, total, parseErrors, err
+		}
+		if len(row) == 0 || (len(row) == 1 && strings.TrimSpace(row[0]) == "") {
+			continue
+		}
+		if validRows >= maxFlashcardImportRows {
+			parseErrors = append(parseErrors, model.ImportError{
+				Row: rowNum, Field: "row",
+				Reason: fmt.Sprintf("exceeds maximum of %d rows", maxFlashcardImportRows),
+			})
+			break
+		}
+
+		term := getCell(row, termIdx)
+		def := getCell(row, defIdx)
+		if term == "" {
+			parseErrors = append(parseErrors, model.ImportError{Row: rowNum, Field: "Term", Reason: "Term is required"})
+			total++
+			continue
+		}
+		if def == "" {
+			parseErrors = append(parseErrors, model.ImportError{Row: rowNum, Field: "Definition", Reason: "Definition is required"})
+			total++
+			continue
+		}
+
+		validRows++
+		total++
+		bi := model.BulkFlashcardItem{
+			Term:            term,
+			Definition:      def,
+			ExampleSentence: getCell(row, exIdx),
+			HintExplanation: getCell(row, hintIdx),
+			Synonyms:        getCell(row, synIdx),
+			Position:        nextPos,
+		}
+		nextPos++
+		if img := getCell(row, imgIdx); img != "" {
+			bi.ImageURL = &img
+		}
+		chunk = append(chunk, bi)
+
+		if len(chunk) >= importChunkSize {
+			if err := flush(); err != nil {
+				return imported, total, parseErrors, err
+			}
+		}
+	}
+	if err := rows.Error(); err != nil {
+		return imported, total, parseErrors, err
+	}
+	if err := flush(); err != nil {
+		return imported, total, parseErrors, err
+	}
+	return imported, total, parseErrors, nil
 }
 
-func (s *ImportJobService) runQuizImport(jobID, studySetID int64, data []byte) {
+func (s *ImportJobService) runQuizImport(jobID, studySetID int64, blobKey string) {
 	ctx := context.Background()
 	log := slog.With("job_id", jobID, "study_set_id", studySetID, "kind", "quiz")
+	defer func() { _ = s.blob.Delete(ctx, blobKey) }()
 
 	if _, err := s.jobs.Update(ctx, jobID, model.UpdateImportJobInput{Status: model.ImportStatusRunning}); err != nil {
 		log.Error("mark running failed", "err", err)
 		return
 	}
 
-	// Quiz import: parse then bulk save — ownership was already checked in EnqueueQuiz.
-	imported, importErrors, fatalErr := runQuizImportData(ctx, studySetID, data, s.flashcards, s.quizQuestions)
+	rc, err := s.blob.Open(ctx, blobKey)
+	if err != nil {
+		s.failJob(ctx, jobID, err.Error(), log)
+		return
+	}
+	defer rc.Close()
+
+	imported, importErrors, fatalErr := runQuizImportData(ctx, studySetID, rc, s.flashcards, s.quizQuestions)
 	if fatalErr != nil {
 		s.failJob(ctx, jobID, fatalErr.Error(), log)
 		return
@@ -251,11 +359,11 @@ func (s *ImportJobService) checkOwner(ctx context.Context, studySetID, userID in
 func runQuizImportData(
 	ctx context.Context,
 	studySetID int64,
-	data []byte,
+	r io.Reader,
 	fc repository.Flashcards,
 	qq repository.QuizQuestions,
 ) (imported int, importErrors []model.ImportError, fatalErr error) {
-	f, err := excelize.OpenReader(bytes.NewReader(data))
+	f, err := excelize.OpenReader(r)
 	if err != nil {
 		return 0, nil, fmt.Errorf("open excel: %w", err)
 	}

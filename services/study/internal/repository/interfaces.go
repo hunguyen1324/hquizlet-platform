@@ -33,6 +33,7 @@ type Flashcards interface {
 	ToggleStar(ctx context.Context, id int64) (model.Flashcard, error)
 	Delete(ctx context.Context, id int64) error
 	BulkSave(ctx context.Context, studySetID int64, items []model.BulkFlashcardItem) (model.BulkSaveResult, error)
+	NextFlashcardPosition(ctx context.Context, studySetID int64) (int, error)
 }
 
 // Folders is the interface for folder data access.
@@ -75,6 +76,7 @@ type ImportJobs interface {
 	Create(ctx context.Context, in model.CreateImportJobInput) (model.ImportJob, error)
 	Get(ctx context.Context, id int64) (model.ImportJob, error)
 	Update(ctx context.Context, id int64, in model.UpdateImportJobInput) (model.ImportJob, error)
+	SetImportFile(ctx context.Context, id int64, key string, sizeBytes int64) error
 	ListByUser(ctx context.Context, userID int64, limit int) ([]model.ImportJob, error)
 	ListWithFilter(ctx context.Context, userID int64, f model.ImportJobFilter) (model.ImportJobListResult, error)
 }

@@ -604,11 +604,7 @@ func (h *Handler) importQuiz(w http.ResponseWriter, r *http.Request, studySetID 
 // Async import handlers (returns job immediately; worker runs in background)
 
 func (h *Handler) importFlashcardsAsync(w http.ResponseWriter, r *http.Request, studySetID int64) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid multipart form")
-		return
-	}
-	file, _, err := r.FormFile("file")
+	file, err := multipartFileField(r, "file")
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "file is required")
 		return
@@ -624,11 +620,7 @@ func (h *Handler) importFlashcardsAsync(w http.ResponseWriter, r *http.Request, 
 }
 
 func (h *Handler) importQuizAsync(w http.ResponseWriter, r *http.Request, studySetID int64) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid multipart form")
-		return
-	}
-	file, _, err := r.FormFile("file")
+	file, err := multipartFileField(r, "file")
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "file is required")
 		return

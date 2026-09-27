@@ -24,7 +24,7 @@ func (r *ImportJobRepository) Create(ctx context.Context, in model.CreateImportJ
 	const q = `
 		INSERT INTO import_jobs (user_id, study_set_id, kind, status, total, imported, errors, error_msg)
 		VALUES ($1, $2, $3, 'pending', 0, 0, '[]', '')
-		RETURNING id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, created_at, updated_at`
+		RETURNING id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, minio_key, file_size_bytes, created_at, updated_at`
 
 	row := r.db.QueryRowContext(ctx, q, in.UserID, in.StudySetID, string(in.Kind))
 	return scanJob(row)
@@ -33,7 +33,7 @@ func (r *ImportJobRepository) Create(ctx context.Context, in model.CreateImportJ
 // Get fetches a single import job by ID.
 func (r *ImportJobRepository) Get(ctx context.Context, id int64) (model.ImportJob, error) {
 	const q = `
-		SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, created_at, updated_at
+		SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, minio_key, file_size_bytes, created_at, updated_at
 		FROM import_jobs WHERE id = $1`
 
 	row := r.db.QueryRowContext(ctx, q, id)
@@ -55,7 +55,7 @@ func (r *ImportJobRepository) Update(ctx context.Context, id int64, in model.Upd
 		UPDATE import_jobs
 		SET status = $1, total = $2, imported = $3, errors = $4, error_msg = $5, updated_at = NOW()
 		WHERE id = $6
-		RETURNING id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, created_at, updated_at`
+		RETURNING id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, minio_key, file_size_bytes, created_at, updated_at`
 
 	row := r.db.QueryRowContext(ctx, q, string(in.Status), in.Total, in.Imported, errsJSON, in.ErrorMsg, id)
 	job, err := scanJob(row)
@@ -65,13 +65,27 @@ func (r *ImportJobRepository) Update(ctx context.Context, id int64, in model.Upd
 	return job, err
 }
 
+// SetImportFile records the blob key and size after the upload stream completes.
+func (r *ImportJobRepository) SetImportFile(ctx context.Context, id int64, key string, sizeBytes int64) error {
+	const q = `UPDATE import_jobs SET minio_key = $1, file_size_bytes = $2, updated_at = NOW() WHERE id = $3`
+	res, err := r.db.ExecContext(ctx, q, key, sizeBytes, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // ListByUser returns the most-recent `limit` jobs for a user, newest-first.
 func (r *ImportJobRepository) ListByUser(ctx context.Context, userID int64, limit int) ([]model.ImportJob, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	const q = `
-		SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, created_at, updated_at
+		SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, minio_key, file_size_bytes, created_at, updated_at
 		FROM import_jobs
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -103,6 +117,7 @@ func scanJob(row *sql.Row) (model.ImportJob, error) {
 		&j.Kind, &j.Status,
 		&j.Total, &j.Imported,
 		&errsJSON, &j.ErrorMsg,
+		&j.MinIOKey, &j.FileSizeBytes,
 		&j.CreatedAt, &j.UpdatedAt,
 	)
 	if err != nil {
@@ -123,6 +138,7 @@ func scanJobRow(rows *sql.Rows) (model.ImportJob, error) {
 		&j.Kind, &j.Status,
 		&j.Total, &j.Imported,
 		&errsJSON, &j.ErrorMsg,
+		&j.MinIOKey, &j.FileSizeBytes,
 		&j.CreatedAt, &j.UpdatedAt,
 	)
 	if err != nil {
@@ -170,7 +186,7 @@ func (r *ImportJobRepository) ListWithFilter(ctx context.Context, userID int64, 
 	limitN := itoa(len(args) - 1)
 	offsetN := itoa(len(args))
 
-	q := `SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, created_at, updated_at
+	q := `SELECT id, user_id, study_set_id, kind, status, total, imported, errors, error_msg, minio_key, file_size_bytes, created_at, updated_at
 		FROM import_jobs
 		WHERE user_id = $1` + whereExtra + `
 		ORDER BY created_at DESC

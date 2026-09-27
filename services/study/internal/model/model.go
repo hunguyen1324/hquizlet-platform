@@ -339,13 +339,16 @@ type ImportJob struct {
 	Kind       ImportJobKind   `json:"kind"`
 	Status     ImportJobStatus `json:"status"`
 	// Progress counters (updated as chunks are saved)
-	Total     int `json:"total"`     // total rows parsed
-	Imported  int `json:"imported"`  // rows successfully saved so far
+	Total    int `json:"total"`    // total rows parsed
+	Imported int `json:"imported"` // rows successfully saved so far
+	// Blob reference (internal; omitted from API responses)
+	MinIOKey        string `json:"-"`
+	FileSizeBytes   int64  `json:"-"`
 	// Result (populated on done/failed)
-	Errors    []ImportError `json:"errors,omitempty"`
-	ErrorMsg  string        `json:"errorMsg,omitempty"` // fatal error message
-	CreatedAt time.Time     `json:"createdAt"`
-	UpdatedAt time.Time     `json:"updatedAt"`
+	Errors   []ImportError `json:"errors,omitempty"`
+	ErrorMsg string        `json:"errorMsg,omitempty"` // fatal error message
+	CreatedAt time.Time    `json:"createdAt"`
+	UpdatedAt time.Time    `json:"updatedAt"`
 }
 
 // CreateImportJobInput is the payload to create a pending job.

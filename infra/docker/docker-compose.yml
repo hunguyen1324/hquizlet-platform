@@ -100,11 +100,16 @@ services:
       PORT: "8082"
       DATABASE_URL:     "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
+      MINIO_ENDPOINT:        "${MINIO_ENDPOINT:-http://minio:9000}"
+      MINIO_ACCESS_KEY:      "${MINIO_ACCESS_KEY:-minioadmin}"
+      MINIO_SECRET_KEY:      "${MINIO_SECRET_KEY:-minioadmin}"
+      MINIO_IMPORT_BUCKET:   "${MINIO_IMPORT_BUCKET:-hquizlet-imports}"
     expose:
       - "8082"
     depends_on:
       postgres: { condition: service_healthy }
       auth:     { condition: service_healthy }
+      minio:    { condition: service_healthy }
     restart: on-failure
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
@@ -320,7 +325,9 @@ services:
       /bin/sh -c "
         mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
         mc mb --ignore-existing local/${STORAGE_BUCKET:-hquizlet} &&
-        mc anonymous set download local/${STORAGE_BUCKET:-hquizlet}
+        mc anonymous set download local/${STORAGE_BUCKET:-hquizlet} &&
+        mc mb --ignore-existing local/${MINIO_IMPORT_BUCKET:-hquizlet-imports} &&
+        mc ilm rule add --expire-days 1 local/${MINIO_IMPORT_BUCKET:-hquizlet-imports} --prefix imports/ || true
       "
     restart: "no"
 
