@@ -130,7 +130,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   }
 
   async function openFolderDialog() {
-    try { setFolders(await folderApi.listFolders(token)); setFolderDialogOpen(true); setMenuOpen(false); }
+    try { const result = await folderApi.listFolders(token, { per_page: 100 }); setFolders(result.items); setFolderDialogOpen(true); setMenuOpen(false); }
     catch (error) { setActionError(error instanceof Error ? error.message : "Không tải được thư mục"); }
   }
 

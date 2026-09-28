@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FolderDetail, FolderSummary } from "../../lib/api";
+import type { FolderDetail, FolderListResult, FolderSummary } from "../../lib/api";
 
 describe("folder API contract", () => {
   it("uses title and an explicit study-set count in summaries", () => {
@@ -11,5 +11,10 @@ describe("folder API contract", () => {
   it("keeps detail count aligned with its study-set collection", () => {
     const folder: FolderDetail = { id: 1, title: "English", description: "", studySetCount: 0, studySets: [], createdAt: "2026-09-01T10:00:00Z", updatedAt: "2026-09-01T10:00:00Z" };
     expect(folder.studySets).toHaveLength(folder.studySetCount);
+  });
+
+  it("wraps folder summaries in pagination metadata", () => {
+    const result: FolderListResult = { items: [], page: 1, perPage: 20, total: 0, totalPages: 0 };
+    expect(result.items).toEqual([]);
   });
 });

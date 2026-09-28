@@ -102,10 +102,12 @@ export const flashcardApi = {
 
 export type FolderSummary = { id: number; title: string; description: string; studySetCount: number; createdAt: string; updatedAt: string };
 export type FolderDetail = FolderSummary & { studySets: StudySet[] };
+export type FolderListParams = { search?: string; sort?: "updated" | "created" | "title"; page?: number; per_page?: number };
+export type FolderListResult = { items: FolderSummary[]; total: number; page: number; perPage: number; totalPages: number };
 export type CreateFolderInput = { title: string; description?: string };
 export type UpdateFolderInput = CreateFolderInput;
 export const folderApi = {
-  listFolders: (token: string): Promise<FolderSummary[]> => apiFetch("/v1/folders", token),
+  listFolders: (token: string, params?: FolderListParams): Promise<FolderListResult> => apiFetch("/v1/folders", token, {}, params),
   createFolder: (token: string, payload: CreateFolderInput): Promise<FolderSummary> => apiFetch("/v1/folders", token, { method: "POST", body: JSON.stringify(payload) }),
   getFolder: (token: string, id: number): Promise<FolderDetail> => apiFetch(`/v1/folders/${id}`, token),
   updateFolder: (token: string, id: number, payload: UpdateFolderInput): Promise<FolderSummary> => apiFetch(`/v1/folders/${id}`, token, { method: "PUT", body: JSON.stringify(payload) }),

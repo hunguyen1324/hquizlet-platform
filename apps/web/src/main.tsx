@@ -29,6 +29,11 @@ import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDe
 import { AppShell } from "./components/layout/AppShell";
 import { HomePage } from "./components/home/HomePage";
 
+const savedTheme = window.localStorage.getItem("hquizlet-theme");
+const initialDark = savedTheme === "dark" || (savedTheme === null && window.matchMedia("(prefers-color-scheme: dark)").matches);
+document.documentElement.classList.toggle("dark", initialDark);
+document.documentElement.classList.toggle("light", !initialDark);
+
 const VIEW_PATHS: Partial<Record<AppView, string>> = {
   home: "/", dashboard: "/library", folders: "/folders", live: "/live-quiz",
   classes: "/classes", activity: "/notifications", wallet: "/wallet",

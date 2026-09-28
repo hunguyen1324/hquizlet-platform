@@ -21,7 +21,7 @@
 }
 
 .login-hero p:not(.eyebrow) {
-  color: #475569;
+  color: var(--muted-foreground);
   font-size: 1.12rem;
   line-height: 1.7;
   margin: 0;
@@ -30,8 +30,8 @@
 
 .service-strip {
   align-items: center;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
   display: flex;
@@ -52,8 +52,9 @@
 }
 
 .login-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
   padding: 28px;
@@ -66,7 +67,7 @@
 }
 
 .login-form label {
-  color: #334155;
+  color: var(--foreground);
   display: grid;
   font-size: 0.92rem;
   font-weight: 800;
@@ -74,9 +75,10 @@
 }
 
 .login-form input {
-  border: 1px solid #cbd5e1;
+  background: var(--background);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: #172033;
+  color: var(--foreground);
   font: inherit;
   outline: none;
   padding: 13px 14px;
@@ -102,10 +104,10 @@
 }
 
 .login-message {
-  background: #f8fafc;
-  border: 1px solid #eef2f7;
+  background: var(--muted);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: #475569;
+  color: var(--muted-foreground);
   line-height: 1.5;
   margin: 18px 0 0;
   padding: 12px;

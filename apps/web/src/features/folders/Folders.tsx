@@ -40,7 +40,8 @@ export function Folders({ onBack, onOpenSet }: Props) {
     setLoading(true);
     setError("");
     try {
-      setFolders(await folderApi.listFolders(token));
+      const result = await folderApi.listFolders(token, { per_page: 100 });
+      setFolders(result.items);
     } catch (value) {
       handleError(value);
     } finally {

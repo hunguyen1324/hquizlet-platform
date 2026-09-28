@@ -21,6 +21,7 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
   const [showDropdown, setShowDropdown] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showUser, setShowUser] = useState(false);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
   const createRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -36,6 +37,15 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
   }, []);
 
   const initials = user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+
+  function toggleTheme() {
+    const nextDark = !isDark;
+    document.documentElement.classList.toggle("dark", nextDark);
+    document.documentElement.classList.toggle("light", !nextDark);
+    window.localStorage.setItem("hquizlet-theme", nextDark ? "dark" : "light");
+    setIsDark(nextDark);
+    setShowUser(false);
+  }
 
   function handleSearchChange(value: string) {
     setSearchQuery(value);
@@ -176,9 +186,9 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
                 <svg className="hq-di-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h3v-4h-3z"/></svg>
                 Ví của tôi
               </button>
-              <button className="hq-dropdown-item" onClick={() => { document.documentElement.classList.toggle("dark"); setShowUser(false); }}>
+              <button className="hq-dropdown-item" onClick={toggleTheme} aria-pressed={isDark}>
                 <svg className="hq-di-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-                Chế độ tối
+                {isDark ? "Chế độ sáng" : "Chế độ tối"}
               </button>
               <div className="hq-dropdown-divider" />
               <button className="hq-dropdown-item hq-dropdown-item--danger" onClick={() => { setShowUser(false); onLogout(); }}>

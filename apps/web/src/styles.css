@@ -2,13 +2,14 @@
 
 /* ── Design Tokens (shadcn/ui pattern) ──────────────────────────────── */
 :root {
+  color-scheme: light;
   --background: #ffffff;
-  --foreground: #0f172a;
+  --foreground: #111111;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --border: #e2e8f0;
+  --card-foreground: #111111;
+  --muted: #f5f5f5;
+  --muted-foreground: #525252;
+  --border: #dedede;
   --primary: #4255ff;
   --primary-foreground: #ffffff;
   --accent: #f0f2ff;
@@ -16,58 +17,61 @@
   --destructive: #ef4444;
   --ring: #4255ff;
   --radius: 0.75rem;
-  color: #282e3e;
-  background: #f6f7fb;
+  color: var(--foreground);
+  background: var(--background);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .dark {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --card: #1e293b;
-  --card-foreground: #f8fafc;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --border: #334155;
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #0a0a0a;
+  --card-foreground: #ffffff;
+  --muted: #171717;
+  --muted-foreground: #b3b3b3;
+  --border: #333333;
   --primary: #4255ff;
   --primary-foreground: #ffffff;
-  --accent: #1e293b;
-  --accent-foreground: #f8fafc;
+  --accent: #171717;
+  --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --ring: #4255ff;
-  color: #f8fafc;
-  background: #0f172a;
+  color: var(--foreground);
+  background: var(--background);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --background: #0f172a;
-    --foreground: #f8fafc;
-    --card: #1e293b;
-    --card-foreground: #f8fafc;
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
-    --border: #334155;
+    color-scheme: dark;
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #0a0a0a;
+    --card-foreground: #ffffff;
+    --muted: #171717;
+    --muted-foreground: #b3b3b3;
+    --border: #333333;
     --primary: #4255ff;
     --primary-foreground: #ffffff;
-    --accent: #1e293b;
-    --accent-foreground: #f8fafc;
+    --accent: #171717;
+    --accent-foreground: #ffffff;
     --destructive: #dc2626;
     --ring: #4255ff;
-    color: #f8fafc;
-    background: #0f172a;
+    color: var(--foreground);
+    background: var(--background);
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; }
+html, body, #root { min-height: 100%; }
+body { margin: 0; background: var(--background); color: var(--foreground); }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 .auth-shell, .app-shell { margin: 0 auto; max-width: 1180px; padding: 28px; }
 .auth-shell { align-items: center; display: grid; gap: 24px; grid-template-columns: 1.1fr 0.9fr; min-height: 100vh; }
 h1 { font-size: 2.45rem; letter-spacing: 0; line-height: 1.05; margin: 0; }
 h2 { margin: 0; }
-.auth-hero p, .page-heading p, .message, .empty { color: #64748b; line-height: 1.55; }
-.eyebrow { color: #64748b; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; margin: 0 0 8px; text-transform: uppercase; }
+.auth-hero p, .page-heading p, .message, .empty { color: var(--muted-foreground); line-height: 1.55; }
+.eyebrow { color: var(--muted-foreground); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; margin: 0 0 8px; text-transform: uppercase; }
 .panel, .metric-card, .set-card, .draft-card, .create-meta, .empty-panel { background: var(--card, #fff); color: var(--card-foreground, #0f172a); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06); }
 .panel, .empty-panel { padding: 20px; }
 .auth-card { max-width: 440px; width: 100%; }
@@ -81,13 +85,13 @@ h2 { margin: 0; }
 .tab { background: transparent; border: 0; border-radius: 6px; color: var(--muted-foreground, #475569); flex: 1; font-weight: 800; padding: 10px; }
 .tab.active { background: var(--card, #fff); color: var(--card-foreground, #172033); }
 .stack, .set-list, .card-list, .test-list, .learn-box, .cards-editor { display: grid; gap: 12px; }
-label { color: #334155; display: grid; font-weight: 800; gap: 7px; }
+label { color: var(--foreground); display: grid; font-weight: 800; gap: 7px; }
 input, textarea { background: var(--card, #fff); border: 1px solid var(--border, #cbd5e1); border-radius: 8px; color: var(--card-foreground, #172033); padding: 12px 13px; width: 100%; }
 textarea { min-height: 92px; resize: vertical; }
 .primary-button, .secondary-button, .ghost-button, .danger-button, .user-menu button, .learn-box button, .pager button, .icon-button, .add-row { border: 0; border-radius: 8px; font-weight: 900; padding: 11px 14px; }
 .primary-button { background: #4255ff; color: #fff; }
 .secondary-button { background: #f0f2ff; color: #4255ff; }
-.ghost-button { background: #eef2f7; color: #172033; }
+.ghost-button { background: var(--muted); color: var(--foreground); }
 .danger-button { background: #fee2e2; color: #991b1b; }
 .danger { background: #fee2e2 !important; border: 0; border-radius: 8px; color: #991b1b !important; font-weight: 900; padding: 11px 14px; }
 .topbar { border-bottom: 1px solid #e2e8f0; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; }
@@ -317,15 +321,15 @@ textarea { min-height: 92px; resize: vertical; }
 /* ── Dark mode for existing elements ──────────────────────────────────── */
 .dark .loading-overlay { background: rgba(15, 23, 42, 0.7); }
 .dark .skeleton-row { background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%); background-size: 200% 100%; }
-.dark .panel, .dark .metric-card, .dark .set-card, .dark .draft-card, .dark .create-meta, .dark .empty-panel { background: #1e293b; border-color: #334155; }
-.dark .draft-title strong { color: #f8fafc; }
-.dark .auth-card, .dark .folder-dialog { background: #1e293b; border-color: #334155; }
-.dark input, .dark textarea { background: #0f172a; border-color: #475569; color: #f8fafc; }
-.dark .ghost-button { background: #334155; color: #f8fafc; }
+.dark .panel, .dark .metric-card, .dark .set-card, .dark .draft-card, .dark .create-meta, .dark .empty-panel { background: var(--card); border-color: var(--border); }
+.dark .draft-title strong { color: var(--foreground); }
+.dark .auth-card, .dark .folder-dialog { background: var(--card); border-color: var(--border); }
+.dark input, .dark textarea, .dark select { background: var(--background); border-color: var(--border); color: var(--foreground); }
+.dark .ghost-button { background: var(--muted); color: var(--foreground); }
 .dark .danger-button { background: #7f1d1d; color: #fecaca; }
-.dark .tab.active { background: #1e293b; color: #f8fafc; }
-.dark .mini-card { background: #1e293b; border-color: #334155; }
-.dark .match-pair { background: #1e293b; border-color: #334155; }
+.dark .tab.active { background: var(--card); color: var(--foreground); }
+.dark .mini-card { background: var(--card); border-color: var(--border); }
+.dark .match-pair { background: var(--card); border-color: var(--border); }
 .dark .topbar { border-color: #334155; }
 .dark .user-menu span { color: #94a3b8; }
 .dark .amount-btn { background: #1e293b; border-color: #475569; color: #f8fafc; }
@@ -336,7 +340,7 @@ textarea { min-height: 92px; resize: vertical; }
 .dark .admin-table th { background: #1e293b; color: #94a3b8; }
 .dark .admin-table td { border-color: #334155; }
 .dark .loading-overlay { background: rgba(15, 23, 42, 0.7); }
-.dark .service-strip { background: #1e293b; border-color: #334155; }
+.dark .service-strip { background: var(--card); border-color: var(--border); }
 .dark .paywall-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-color: #334155; }
 
 /* ── Mobile improvements ──────────────────────────────────────────────── */
@@ -468,6 +472,6 @@ textarea { min-height: 92px; resize: vertical; }
 }
 
 /* Dark mode */
-.dark .cf-dialog-content { background: #1e293b; }
+.dark .cf-dialog-content { background: var(--card); color: var(--foreground); }
 .dark .cf-field input,
 .dark .cf-field textarea { border-color: #334155; }

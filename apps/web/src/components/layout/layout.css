@@ -10,12 +10,12 @@
   --hq-accent-hover:  #3547e5;
   --hq-accent-pale:   #eef0ff;
   --hq-accent-mid:    #8c9dff;
-  --hq-bg:            #f6f7fb;
+  --hq-bg:            #ffffff;
   --hq-surface:       #ffffff;
   --hq-border:        #e2e8f0;
-  --hq-text:          #2e3856;
-  --hq-text-sub:      #586380;
-  --hq-text-muted:    #939bb4;
+  --hq-text:          #111111;
+  --hq-text-sub:      #404040;
+  --hq-text-muted:    #737373;
   --hq-nav-h:         56px;
   --hq-sidebar-w:     220px;
   --hq-radius-sm:     8px;
@@ -24,13 +24,13 @@
 }
 
 .dark {
-  --hq-bg:        #0f172a;
-  --hq-surface:   #1e293b;
-  --hq-border:    #334155;
-  --hq-text:      #f1f5f9;
-  --hq-text-sub:  #94a3b8;
-  --hq-text-muted:#64748b;
-  --hq-accent-pale: #1e2d5a;
+  --hq-bg:        #000000;
+  --hq-surface:   #0a0a0a;
+  --hq-border:    #333333;
+  --hq-text:      #ffffff;
+  --hq-text-sub:  #d4d4d4;
+  --hq-text-muted:#a3a3a3;
+  --hq-accent-pale: #171717;
 }
 
 /* ── AppShell ── */
@@ -39,6 +39,7 @@
   flex-direction: column;
   min-height: 100vh;
   background: var(--hq-bg);
+  color: var(--hq-text);
 }
 
 .hq-body {
