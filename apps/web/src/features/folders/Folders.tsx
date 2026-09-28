@@ -121,7 +121,7 @@ export function Folders({ onBack, onOpenSet }: Props) {
   }
 
   const included = useMemo(
-    () => new Set(folder?.studySets.map((set) => set.id) ?? []),
+    () => new Set((folder?.studySets ?? []).map((set) => set.id)),
     [folder],
   );
 
@@ -164,7 +164,7 @@ export function Folders({ onBack, onOpenSet }: Props) {
         )}
 
         <section className="set-grid folder-grid">
-          {folder.studySets.length === 0 ? (
+          {(folder.studySets ?? []).length === 0 ? (
             <div className="empty-panel">
               <h2>Thư mục còn trống</h2>
               <p>Thêm một học phần để bắt đầu sắp xếp thư viện.</p>
@@ -173,7 +173,7 @@ export function Folders({ onBack, onOpenSet }: Props) {
               </button>
             </div>
           ) : (
-            folder.studySets.map((set) => (
+            (folder.studySets ?? []).map((set) => (
               <article className="set-card" key={set.id}>
                 <span>{set.flashcardCount ?? 0} thẻ</span>
                 <strong>{set.title}</strong>

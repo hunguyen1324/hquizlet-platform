@@ -393,7 +393,7 @@ type Folder struct {
 	StudySetCount int        `json:"studySetCount"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
-	StudySets     []StudySet `json:"studySets,omitempty"`
+	StudySets     []StudySet `json:"studySets"`
 }
 
 // CreateFolderInput is the validated payload for creating a folder.
