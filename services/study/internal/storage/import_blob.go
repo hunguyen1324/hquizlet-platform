@@ -2,6 +2,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -61,6 +62,14 @@ func NewMinIOImportStorage(cfg MinIOConfig) (ImportBlobStorage, error) {
 type minioImportStorage struct {
 	client *s3.Client
 	bucket string
+}
+
+func (m *minioImportStorage) PutAudio(ctx context.Context, key string, data []byte, mime string) error {
+	_, err := m.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(m.bucket), Key: aws.String(key), Body: bytes.NewReader(data),
+		ContentType: aws.String(mime), CacheControl: aws.String("private, no-store"),
+	})
+	return err
 }
 
 func (m *minioImportStorage) Put(ctx context.Context, key string, r io.Reader) (int64, error) {

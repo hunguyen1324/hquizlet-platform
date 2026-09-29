@@ -1,3 +1,4 @@
+import { protectedQuizApi } from "../../lib/api/protectedQuiz";
 // QuizSetEditor — tạo/sửa quiz set (multiple choice, true/false, written)
 // Tham chiếu: hquizlet/apps/nextjs/src/components/study-set/quiz-set-form.tsx
 
@@ -70,13 +71,25 @@ function QuestionCard({
   onChange,
   onRemove,
   disabled,
+  studySetId,
 }: {
+  studySetId?: number;
   question: QuizQuestion;
   index: number;
   onChange: (q: QuizQuestion) => void;
   onRemove: () => void;
   disabled: boolean;
 }) {
+  const { token } = useAuth();
+  const [audioUploading, setAudioUploading] = React.useState(false);
+  const [audioError, setAudioError] = React.useState("");
+  async function uploadAudio(file?: File) {
+    if (!file || !studySetId) return;
+    setAudioUploading(true); setAudioError("");
+    try { const result = await protectedQuizApi.uploadAudio(token, studySetId, file); setField("audioUrl", result.audioUrl); }
+    catch (error) { setAudioError(error instanceof Error ? error.message : "Không tải được file nghe."); }
+    finally { setAudioUploading(false); }
+  }
   function setField<K extends keyof QuizQuestion>(key: K, value: QuizQuestion[K]) {
     onChange({ ...question, [key]: value });
   }
@@ -299,11 +312,17 @@ function QuestionCard({
           </>
         )}
 
+        <label>Tải file nghe vào kho riêng (tối đa 30 MB)
+          <input type="file" accept="audio/*" disabled={disabled || audioUploading || !studySetId} onChange={(e) => void uploadAudio(e.target.files?.[0])} />
+          {!studySetId && <small>Lưu bài trước, sau đó mở chỉnh sửa để tải file nghe.</small>}
+          {audioUploading && <small>Đang tải file nghe…</small>}
+          {audioError && <small role="alert">{audioError}</small>}
+        </label>
         {/* Audio URL */}
         <label>
-          URL âm thanh (tùy chọn)
+          Nguồn âm thanh (mã kho riêng hoặc URL được phép)
           <input
-            type="url"
+            type="text"
             placeholder="https://...mp3"
             value={question.audioUrl}
             onChange={(e) => setField("audioUrl", e.target.value)}
@@ -594,6 +613,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
 
         {questions.map((q, idx) => (
           <QuestionCard
+            studySetId={existingSetId}
             key={q.key}
             question={q}
             index={idx}

@@ -51,6 +51,10 @@ func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (m
 	if set.UserID != userID && set.Visibility == "private" {
 		return model.StudySet{}, ErrForbidden
 	}
+	if set.ContentType == "quiz" {
+		set.Flashcards = nil
+		return set, nil
+	}
 	// Load first 50 cards inline for backward compat; detail page will lazy-load more
 	cards, total, err := s.cards.ListByStudySetPaged(ctx, id, 1, 50)
 	if err != nil {
@@ -78,6 +82,9 @@ func (s *StudySetService) GetAllCardsForInternal(ctx context.Context, id, userID
 	if set.UserID != userID && set.Visibility == "private" {
 		return model.StudySet{}, ErrForbidden
 	}
+	if set.ContentType == "quiz" && set.UserID != userID {
+		return model.StudySet{}, ErrForbidden
+	}
 	cards, err := s.cards.ListByStudySet(ctx, id)
 	if err != nil {
 		return model.StudySet{}, err
@@ -98,6 +105,9 @@ func (s *StudySetService) GetFlashcardsPaged(ctx context.Context, id, userID int
 		return model.FlashcardListResult{}, ErrUnauthorized
 	}
 	if set.UserID != userID && set.Visibility == "private" {
+		return model.FlashcardListResult{}, ErrForbidden
+	}
+	if set.ContentType == "quiz" && set.UserID != userID {
 		return model.FlashcardListResult{}, ErrForbidden
 	}
 	page, perPage := model.ClampPage(f.Page, f.PerPage, 200)

@@ -13,10 +13,13 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/storage"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/templates"
 )
 
 type Handler struct {
+	protectedQuiz *service.ProtectedQuizService
+	quizAudio     *storage.QuizAudio
 	sets          *service.StudySetService
 	cards         *service.FlashcardService
 	folders       *service.FolderService
@@ -31,7 +34,14 @@ func New(sets *service.StudySetService, cards *service.FlashcardService, folders
 	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, quizQuestions: quizQuestions, importSvc: importSvc, importJobSvc: importJobSvc, db: db}
 }
 
+func (h *Handler) WithProtectedQuiz(s *service.ProtectedQuizService, audio *storage.QuizAudio) *Handler {
+	h.protectedQuiz = s
+	h.quizAudio = audio
+	return h
+}
+
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/quiz-audio", h.streamQuizAudio)
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /v1/study-sets", h.listStudySets)
 	mux.HandleFunc("POST /v1/study-sets", h.createStudySet)
@@ -107,6 +117,11 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) >= 2 && parts[1] == "play" {
+		h.protectedQuizRouter(w, r, setID, parts[2:])
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "flashcards" {
 		if r.Method == http.MethodPost {
 			h.createFlashcard(w, r, setID)
@@ -130,7 +145,7 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 && parts[1] == "quiz-questions" {
 		if r.Method == http.MethodGet {
 			h.listQuizQuestions(w, r, setID)
-		} else if r.Method == http.MethodPost {
+		} else if r.Method == http.MethodPost || r.Method == http.MethodPut {
 			h.bulkSaveQuizQuestions(w, r, setID)
 		} else if r.Method == http.MethodDelete {
 			h.deleteQuizQuestions(w, r, setID)

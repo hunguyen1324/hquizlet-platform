@@ -21,15 +21,8 @@ func NewQuizQuestionService(quizQuestions repository.QuizQuestions, sets reposit
 // ListByStudySet returns all quiz questions for a study set.
 // Visibility enforcement: private sets can only be accessed by the owner.
 func (s *QuizQuestionService) ListByStudySet(ctx context.Context, studySetID, userID int64) ([]model.QuizQuestion, error) {
-	if err := requireUserID(userID); err != nil {
+	if err := s.checkOwner(ctx, studySetID, userID); err != nil {
 		return nil, err
-	}
-	set, err := s.sets.Get(ctx, studySetID)
-	if err != nil {
-		return nil, err
-	}
-	if set.Visibility == "private" && set.UserID != userID {
-		return nil, ErrForbidden
 	}
 	return s.quizQuestions.ListByStudySet(ctx, studySetID)
 }
@@ -77,4 +70,8 @@ func (s *QuizQuestionService) checkOwner(ctx context.Context, id, userID int64) 
 		return ErrForbidden
 	}
 	return nil
+}
+
+func (s *QuizQuestionService) RequireOwner(ctx context.Context, setID, uid int64) error {
+	return s.checkOwner(ctx, setID, uid)
 }

@@ -7,20 +7,20 @@ import (
 
 // StudySet represents a collection of flashcards owned by a user.
 type StudySet struct {
-	ID                 int64             `json:"id"`
-	UserID             int64             `json:"userId"`
-	Title              string            `json:"title"`
-	Description        string            `json:"description"`
-	ThumbnailURL       *string           `json:"thumbnailUrl,omitempty"`
-	ContentType        string            `json:"contentType"`
-	TermLanguage       string            `json:"termLanguage"`
-	DefinitionLanguage string            `json:"definitionLanguage"`
-	Visibility         string            `json:"visibility"`
-	CreatedAt          time.Time         `json:"createdAt"`
-	UpdatedAt          time.Time         `json:"updatedAt"`
-	FlashcardCount     int               `json:"flashcardCount"`
-	Flashcards         []Flashcard       `json:"flashcards,omitempty"`
-	QuizQuestions      []QuizQuestion    `json:"quizQuestions,omitempty"`
+	ID                 int64          `json:"id"`
+	UserID             int64          `json:"userId"`
+	Title              string         `json:"title"`
+	Description        string         `json:"description"`
+	ThumbnailURL       *string        `json:"thumbnailUrl,omitempty"`
+	ContentType        string         `json:"contentType"`
+	TermLanguage       string         `json:"termLanguage"`
+	DefinitionLanguage string         `json:"definitionLanguage"`
+	Visibility         string         `json:"visibility"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
+	FlashcardCount     int            `json:"flashcardCount"`
+	Flashcards         []Flashcard    `json:"flashcards,omitempty"`
+	QuizQuestions      []QuizQuestion `json:"quizQuestions,omitempty"`
 }
 
 // Flashcard is a single term/definition card inside a StudySet.
@@ -122,8 +122,32 @@ const (
 
 // QuizQuestion represents a single quiz question within a study set.
 type QuizQuestion struct {
-	ID                int64               `json:"id"`
-	StudySetID        int64               `json:"studySetId"`
+	ID                int64                `json:"id"`
+	StudySetID        int64                `json:"studySetId"`
+	Position          int                  `json:"position"`
+	QuestionText      string               `json:"questionText"`
+	QuestionType      string               `json:"questionType"`
+	CorrectAnswer     *string              `json:"correctAnswer,omitempty"`
+	TimeInSeconds     *int                 `json:"timeInSeconds,omitempty"`
+	AudioURL          *string              `json:"audioUrl,omitempty"`
+	AnswerExplanation *string              `json:"answerExplanation,omitempty"`
+	ParagraphText     *string              `json:"paragraphText,omitempty"`
+	SubQuestions      json.RawMessage      `json:"subQuestions,omitempty"`
+	Tags              []string             `json:"tags,omitempty"`
+	Options           []QuizQuestionOption `json:"options,omitempty"`
+}
+
+// QuizQuestionOption represents an answer option for a quiz question.
+type QuizQuestionOption struct {
+	ID         int64  `json:"id"`
+	QuestionID int64  `json:"questionId"`
+	Text       string `json:"text"`
+	Position   int    `json:"position"`
+	IsCorrect  bool   `json:"isCorrect,omitempty"`
+}
+
+// CreateQuizQuestionInput is the payload for creating a quiz question.
+type CreateQuizQuestionInput struct {
 	Position          int                 `json:"position"`
 	QuestionText      string              `json:"questionText"`
 	QuestionType      string              `json:"questionType"`
@@ -134,38 +158,14 @@ type QuizQuestion struct {
 	ParagraphText     *string             `json:"paragraphText,omitempty"`
 	SubQuestions      json.RawMessage     `json:"subQuestions,omitempty"`
 	Tags              []string            `json:"tags,omitempty"`
-	Options           []QuizQuestionOption `json:"options,omitempty"`
-}
-
-// QuizQuestionOption represents an answer option for a quiz question.
-type QuizQuestionOption struct {
-	ID        int64  `json:"id"`
-	QuestionID int64 `json:"questionId"`
-	Text      string `json:"text"`
-	Position  int    `json:"position"`
-	IsCorrect bool   `json:"isCorrect"`
-}
-
-// CreateQuizQuestionInput is the payload for creating a quiz question.
-type CreateQuizQuestionInput struct {
-	Position          int                    `json:"position"`
-	QuestionText      string                 `json:"questionText"`
-	QuestionType      string                 `json:"questionType"`
-	CorrectAnswer     *string                `json:"correctAnswer,omitempty"`
-	TimeInSeconds     *int                   `json:"timeInSeconds,omitempty"`
-	AudioURL          *string                `json:"audioUrl,omitempty"`
-	AnswerExplanation *string                `json:"answerExplanation,omitempty"`
-	ParagraphText     *string                `json:"paragraphText,omitempty"`
-	SubQuestions      json.RawMessage        `json:"subQuestions,omitempty"`
-	Tags              []string               `json:"tags,omitempty"`
-	Options           []CreateOptionInput    `json:"options,omitempty"`
+	Options           []CreateOptionInput `json:"options,omitempty"`
 }
 
 // CreateOptionInput is the payload for a quiz question option.
 type CreateOptionInput struct {
 	Text      string `json:"text"`
 	Position  int    `json:"position"`
-	IsCorrect bool   `json:"isCorrect"`
+	IsCorrect bool   `json:"isCorrect,omitempty"`
 }
 
 // BulkSaveQuizQuestionsInput replaces all quiz questions for a study set.
@@ -275,19 +275,20 @@ type ImportFlashcardRow struct {
 
 // ImportQuizRow represents one row from a quiz Excel import.
 type ImportQuizRow struct {
-	Row                int    `json:"row"`
-	Question           string `json:"question"`
-	Type               string `json:"type"`
-	OptionA            string `json:"optionA,omitempty"`
-	OptionB            string `json:"optionB,omitempty"`
-	OptionC            string `json:"optionC,omitempty"`
-	OptionD            string `json:"optionD,omitempty"`
-	CorrectAnswer      string `json:"correctAnswer"`
-	TimeSeconds        int    `json:"timeSeconds,omitempty"`
-	AudioURL           string `json:"audioUrl,omitempty"`
-	AnswerExplanation  string `json:"answerExplanation,omitempty"`
-	ParagraphText      string          `json:"paragraphText,omitempty"`
-	SubQuestions       json.RawMessage `json:"subQuestions,omitempty"`
+	Row               int             `json:"row"`
+	Question          string          `json:"question"`
+	Type              string          `json:"type"`
+	OptionA           string          `json:"optionA,omitempty"`
+	OptionB           string          `json:"optionB,omitempty"`
+	OptionC           string          `json:"optionC,omitempty"`
+	OptionD           string          `json:"optionD,omitempty"`
+	CorrectAnswer     string          `json:"correctAnswer"`
+	TimeSeconds       int             `json:"timeSeconds,omitempty"`
+	AudioURL          string          `json:"audioUrl,omitempty"`
+	AnswerExplanation string          `json:"answerExplanation,omitempty"`
+	ParagraphText     string          `json:"paragraphText,omitempty"`
+	SubQuestions      json.RawMessage `json:"subQuestions,omitempty"`
+	Part              string          `json:"part,omitempty"`
 }
 
 // ImportError describes a validation error in a specific row/field.
@@ -325,10 +326,10 @@ const (
 type ImportJobStatus string
 
 const (
-	ImportStatusPending   ImportJobStatus = "pending"
-	ImportStatusRunning   ImportJobStatus = "running"
-	ImportStatusDone      ImportJobStatus = "done"
-	ImportStatusFailed    ImportJobStatus = "failed"
+	ImportStatusPending ImportJobStatus = "pending"
+	ImportStatusRunning ImportJobStatus = "running"
+	ImportStatusDone    ImportJobStatus = "done"
+	ImportStatusFailed  ImportJobStatus = "failed"
 )
 
 // ImportJob is the persistent record of one async import operation.
@@ -342,13 +343,13 @@ type ImportJob struct {
 	Total    int `json:"total"`    // total rows parsed
 	Imported int `json:"imported"` // rows successfully saved so far
 	// Blob reference (internal; omitted from API responses)
-	MinIOKey        string `json:"-"`
-	FileSizeBytes   int64  `json:"-"`
+	MinIOKey      string `json:"-"`
+	FileSizeBytes int64  `json:"-"`
 	// Result (populated on done/failed)
-	Errors   []ImportError `json:"errors,omitempty"`
-	ErrorMsg string        `json:"errorMsg,omitempty"` // fatal error message
-	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt"`
+	Errors    []ImportError `json:"errors,omitempty"`
+	ErrorMsg  string        `json:"errorMsg,omitempty"` // fatal error message
+	CreatedAt time.Time     `json:"createdAt"`
+	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
 // CreateImportJobInput is the payload to create a pending job.

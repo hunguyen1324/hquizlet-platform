@@ -42,6 +42,8 @@ func main() {
 	paymentURL := env("PAYMENT_SERVICE_URL", "http://localhost:8085")
 	fileURL := env("FILE_SERVICE_URL", "http://localhost:8086")
 	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
+	// Study verifies a scoped, expiring audio ticket for native media Range requests.
+	mux.HandleFunc("GET /v1/quiz-audio", reverseProxy(studyURL))
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/study-sets/", routeStudySets(authURL, studyURL, quizURL))

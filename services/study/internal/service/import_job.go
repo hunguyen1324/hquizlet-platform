@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
@@ -429,6 +430,10 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 	explainIdx := optionalHeader("answer explanation")
 	paragraphIdx := optionalHeader("paragraph text")
 	subQuestionsIdx := optionalHeader("sub questions (json)")
+	partIdx := optionalHeader("part")
+	if partIdx == -1 {
+		partIdx = optionalHeader("part number")
+	}
 
 	typeMap := map[string]string{
 		"MC": "multiple_choice", "TF": "true_false",
@@ -487,6 +492,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			fmt.Sscanf(t, "%d", &n)
 			item.TimeSeconds = n
 		}
+		item.Part = strings.TrimSpace(getCell(row, partIdx))
 		items = append(items, item)
 	}
 
@@ -550,9 +556,29 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			CorrectAnswer: correct, TimeInSeconds: timeSec,
 			AudioURL: audioURL, AnswerExplanation: explain, Options: opts,
 			ParagraphText: paragraphText, SubQuestions: item.SubQuestions,
+			Tags: partToTags(item.Part),
 		})
 	}
 	return
+}
+
+// partToTags normalises a Part cell value (e.g. "Part 3", "3", "part3") into
+// a []string tag slice like ["part3"]. Returns nil if the value is empty or
+// does not contain a valid part number (1-7).
+func partToTags(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	re := regexp.MustCompile(`(?i)^(?:part[\s_-]*)?([1-7])$`)
+	m := re.FindStringSubmatch(strings.TrimSpace(raw))
+	if m == nil {
+		return nil
+	}
+	n := m[1]
+	if n >= "1" && n <= "7" {
+		return []string{"part" + n}
+	}
+	return nil
 }
 
 // parseFlashcardExcel parses the Excel bytes and returns valid items + row errors.

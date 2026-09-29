@@ -11,7 +11,7 @@ import { StudyModes } from "./StudyModes";
 import { FlashcardListCard } from "./FlashcardListCard";
 import { FlashcardSearchBar } from "./FlashcardSearchBar";
 import { InlineFlashcardEditor } from "./InlineFlashcardEditor";
-import { QuizPlayer } from "./QuizPlayer";
+import { ProtectedQuizPlayer } from "./ProtectedQuizPlayer";
 import "./StudyDetail.css";
 
 type Props = {
@@ -154,7 +154,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   }, [allCards, searchQuery, sortOrder]);
 
   const totalItems =
-    set.contentType === "quiz" ? (set.quizQuestions?.length ?? 0) : cardTotal;
+    set.contentType === "quiz" ? set.flashcardCount : cardTotal;
 
   const isFlashcardSet = set.contentType === "flashcard" || !set.contentType;
 
@@ -402,36 +402,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
         </div>
       )}
 
-      {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
-        <QuizPlayer studySetId={set.id} questions={set.quizQuestions} />
-      )}
-
-      {set.contentType === "quiz" && (!set.quizQuestions || set.quizQuestions.length === 0) && (
-        <div className="sd-empty sd-empty--quiz">
-          <h2>Quiz chưa có câu hỏi</h2>
-          <p>Dữ liệu Excel chưa được lưu vào quiz này. Hãy nhập lại file để bắt đầu luyện tập hoặc thi thử.</p>
-          <button type="button" className="primary-button" onClick={onEdit}>Nhập câu hỏi từ Excel</button>
-        </div>
-      )}
-
-      {set.contentType === "quiz" && set.quizQuestions && set.quizQuestions.length > 0 && (
-        <div className="sd-termlist">
-          <div className="sd-termlist-header">
-            <h2 className="sd-termlist-title">Câu hỏi Quiz<span className="sd-termlist-count">({set.quizQuestions.length})</span></h2>
-          </div>
-          <div className="sd-cards">
-            {set.quizQuestions.map((q, i) => (
-              <article className="sd-card" key={q.id ?? i}>
-                <div className="sd-card-body">
-                  <div className="sd-card-term">
-                    {i + 1}. {q.questionText || q.paragraphText || "Câu hỏi đoạn văn"}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
+      {set.contentType === "quiz" && <ProtectedQuizPlayer key={set.id} studySetId={set.id} />}
 
       {folderDialogOpen && <div className="sd-modal-backdrop" role="presentation" onMouseDown={() => setFolderDialogOpen(false)}><section className="sd-folder-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><p className="eyebrow">Sắp xếp quiz</p><h2>Thêm vào thư mục</h2></div><button className="ghost-button" onClick={() => setFolderDialogOpen(false)}>×</button></header>{folders.length === 0 ? <p>Bạn chưa có thư mục. Hãy tạo thư mục từ thanh bên trước.</p> : <div className="sd-folder-options">{folders.map((folder) => <button key={folder.id} onClick={() => void addToFolder(folder.id)}><span>📁</span><div><strong>{folder.title}</strong><small>{folder.studySetCount} học phần</small></div><b>Thêm</b></button>)}</div>}</section></div>}
     </div>

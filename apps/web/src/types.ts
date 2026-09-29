@@ -84,6 +84,8 @@ export type QuizQuestion = {
   correctAnswer?: string;
   timeInSeconds?: number;
   audioUrl?: string;
+  srtUrl?: string;
+  imageUrl?: string | null;
   answerExplanation?: string;
   paragraphText?: string;
   subQuestions?: unknown;

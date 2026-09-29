@@ -66,7 +66,7 @@ func (s *AccessService) GetAccessInfo(ctx context.Context, userID, studySetID in
 	if pricingType == "one_time" && priceVnd > 0 {
 		if isOwner {
 			hasAccess = true
-		} else if ent != nil {
+		} else if ent != nil && (ent.ExpiresAt == nil || ent.ExpiresAt.After(time.Now())) {
 			hasAccess = true
 			grantedVia = &ent.GrantedVia
 		} else {

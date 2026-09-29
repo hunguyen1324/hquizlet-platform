@@ -169,3 +169,8 @@ func TestFolderList_OnlyReturnsOwnFolders(t *testing.T) {
 		}
 	}
 }
+
+func (r *fakeFolderRepo) ListWithFilter(ctx context.Context, uid int64, f model.FolderFilter) (model.FolderListResult, error) {
+	items, err := r.List(ctx, uid)
+	return model.FolderListResult{Items: items}, err
+}

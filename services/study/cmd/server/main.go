@@ -30,6 +30,20 @@ func main() {
 		log.Fatalf("migration failed: %v", err)
 	}
 
+	// Expired snapshots contain answers and should not accumulate indefinitely.
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, err := db.ExecContext(ctx, `DELETE FROM protected_quiz_sessions WHERE expires_at<now()`)
+			if err != nil {
+				log.Printf("[study] expired quiz session cleanup failed")
+			}
+			cancel()
+		}
+	}()
+
 	// Repositories
 	setRepo := repository.NewStudySetRepository(db)
 	cardRepo := repository.NewFlashcardRepository(db)
@@ -52,14 +66,22 @@ func main() {
 	importJobSvc := service.NewImportJobService(importJobRepo, cardRepo, quizRepo, setRepo, importBlob)
 
 	// HTTP
+	quizAudio := storage.NewQuizAudio(db, cfg.AudioAllowedHosts)
+	if backup, ok := importBlob.(storage.AudioBackup); ok {
+		quizAudio.WithBackup(backup)
+	}
+	go quizAudio.RunSync(context.Background())
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).Register(mux)
+	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithProtectedQuiz(
+		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL),
+		quizAudio,
+	).Register(mux)
 
 	// All /v1 study resources require a user identity. Health remains public.
 	handler := middleware.Chain(mux,
 		middleware.RequestID,
 		middleware.Logging,
-		middleware.RequireUserID,
+		middleware.VerifyBearer(cfg.AuthServiceURL),
 	)
 
 	log.Printf("[study] listening on :%s", cfg.Port)

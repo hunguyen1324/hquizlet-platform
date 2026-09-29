@@ -346,3 +346,11 @@ func TestGetLatestByMode_ReturnsCorrectSession(t *testing.T) {
 		t.Fatalf("expected mode %q, got %q", model.ModLearn, session.Mode)
 	}
 }
+
+func (f *fakeFlashcards) ListByStudySetPaged(ctx context.Context, setID int64, page, perPage int) ([]model.Flashcard, int, error) {
+	items, err := f.ListByStudySet(ctx, setID)
+	return items, len(items), err
+}
+func (f *fakeFlashcards) NextFlashcardPosition(ctx context.Context, setID int64) (int, error) {
+	return len(f.cards), nil
+}

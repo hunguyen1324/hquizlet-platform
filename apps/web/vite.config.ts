@@ -6,5 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     allowedHosts: [".trycloudflare.com"],
+    // Docker bind mounts on Windows can miss native filesystem notifications.
+    watch: { usePolling: true, interval: 1000 },
   },
 });

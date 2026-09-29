@@ -121,3 +121,38 @@ func flashcardWorkbook(t *testing.T, header []string, row []string) []byte {
 	}
 	return buf.Bytes()
 }
+
+func TestPartToTagsRejectsAmbiguousCells(t *testing.T) {
+	for _, raw := range []string{"Q1: Part 3\nQ2: Part 4", "Part 12", "8", ""} {
+		if got := partToTags(raw); len(got) != 0 {
+			t.Errorf("partToTags(%q) = %v", raw, got)
+		}
+	}
+	for _, raw := range []string{"Part 3", "part3", "3", " PART_3 "} {
+		if got := partToTags(raw); len(got) != 1 || got[0] != "part3" {
+			t.Errorf("partToTags(%q) = %v", raw, got)
+		}
+	}
+}
+
+func TestParseQuizRowsPreservesPartAndAudio(t *testing.T) {
+	subs := `[{"questionType":"multiple_choice","questionText":"Child","tags":["part4"],"correctAnswer":"A"}]`
+	rows := [][]string{
+		{"Question", "Type", "Correct Answer", "Audio URL", "Part", "Sub Questions (JSON)"},
+		{"Passage", "PG", "", "https://example.com/listen.mp3", "Part 3", subs},
+	}
+	_, errs, questions := parseQuizRows(rows)
+	if len(errs) > 0 || len(questions) != 1 {
+		t.Fatalf("unexpected import: %v %v", errs, questions)
+	}
+	q := questions[0]
+	if len(q.Tags) != 1 || q.Tags[0] != "part3" {
+		t.Fatalf("lost parent Part: %v", q.Tags)
+	}
+	if string(q.SubQuestions) != subs {
+		t.Fatalf("lost child Part: %s", q.SubQuestions)
+	}
+	if q.AudioURL == nil || *q.AudioURL != "https://example.com/listen.mp3" {
+		t.Fatalf("lost audio: %v", q.AudioURL)
+	}
+}

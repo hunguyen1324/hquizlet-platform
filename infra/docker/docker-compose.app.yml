@@ -74,6 +74,8 @@ services:
     image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-study:${IMAGE_TAG:-latest}
     environment:
       PORT: "8082"
+      PAYMENT_SERVICE_URL: "http://payment:8085"
+      QUIZ_AUDIO_ALLOWED_HOSTS: "${QUIZ_AUDIO_ALLOWED_HOSTS:-}"
       DATABASE_URL:     "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
       AUTH_SERVICE_URL: "http://auth:8081"
       MINIO_ENDPOINT:      "http://${DATA_HOST}:9000"

@@ -4,10 +4,13 @@ import "os"
 
 // Config holds all study service configuration read from environment.
 type Config struct {
-	Port        string
-	DatabaseURL string
-	AuthSecret  string // shared secret for verifying auth tokens from auth service
-	MinIO       MinIOConfig
+	AuthServiceURL    string
+	PaymentServiceURL string
+	AudioAllowedHosts string
+	Port              string
+	DatabaseURL       string
+	AuthSecret        string // shared secret for verifying auth tokens from auth service
+	MinIO             MinIOConfig
 }
 
 // MinIOConfig holds S3-compatible storage for async import file buffering.
@@ -23,9 +26,12 @@ type MinIOConfig struct {
 // Load reads configuration from environment variables with sane defaults.
 func Load() Config {
 	return Config{
-		Port:        env("PORT", "8082"),
-		DatabaseURL: env("DATABASE_URL", "postgres://hquizlet:hquizlet@localhost:5432/hquizlet?sslmode=disable"),
-		AuthSecret:  env("AUTH_SECRET", ""),
+		AuthServiceURL:    env("AUTH_SERVICE_URL", "http://localhost:8081"),
+		PaymentServiceURL: env("PAYMENT_SERVICE_URL", "http://localhost:8085"),
+		AudioAllowedHosts: env("QUIZ_AUDIO_ALLOWED_HOSTS", ""),
+		Port:              env("PORT", "8082"),
+		DatabaseURL:       env("DATABASE_URL", "postgres://hquizlet:hquizlet@localhost:5432/hquizlet?sslmode=disable"),
+		AuthSecret:        env("AUTH_SECRET", ""),
 		MinIO: MinIOConfig{
 			Endpoint:        env("MINIO_ENDPOINT", ""),
 			AccessKeyID:     env("MINIO_ACCESS_KEY", env("STORAGE_ACCESS_KEY", "minioadmin")),
