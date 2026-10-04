@@ -30,7 +30,7 @@ export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string, public readonly field?: string, public readonly requestId?: string) { super(message); this.name = "ApiError"; }
 }
 export async function apiFetch<T>(path: string, token: string, init: RequestInit = {}, params?: Record<string, string | number | undefined>): Promise<T> {
-  const url = new URL(`${gatewayUrl}${path}`);
+  const url = new URL(`${gatewayUrl}${path}`, window.location.origin);
   if (params) for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
   const isFormData = init.body instanceof FormData;
   const res = await fetch(url.toString(), {
@@ -293,7 +293,7 @@ export const grammarApi = {
 
 export type ImportResult = { imported: number; errors: Array<{ row: number; field: string; reason: string }> };
 async function uploadExcel(token: string, path: string, file: File): Promise<ImportResult> {
-  const url = new URL(`${gatewayUrl}${path}`);
+  const url = new URL(`${gatewayUrl}${path}`, window.location.origin);
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(url.toString(), {
@@ -323,7 +323,7 @@ export const languageApi = {
 
 export const ttsApi = {
   getAudio: async (token: string, text: string, lang: string): Promise<Blob> => {
-    const url = new URL(`${gatewayUrl}/v1/tts`);
+    const url = new URL(`${gatewayUrl}/v1/tts`, window.location.origin);
     url.searchParams.set("text", text);
     url.searchParams.set("lang", lang);
     const res = await fetch(url.toString(), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
