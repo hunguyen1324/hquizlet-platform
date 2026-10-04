@@ -43,6 +43,9 @@ func WriteValidationError(w http.ResponseWriter, status int, field, message stri
 
 func WriteServiceError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, repository.ErrQuizRateLimit):
+		w.Header().Set("Retry-After", "60")
+		WriteError(w, http.StatusTooManyRequests, "too many content requests, please retry later")
 	case errors.Is(err, repository.ErrNotFound):
 		WriteError(w, http.StatusNotFound, "resource not found")
 	case errors.Is(err, service.ErrUnauthorized):

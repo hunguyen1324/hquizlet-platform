@@ -5,19 +5,101 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 )
 
 type StudySetService struct {
-	sets  repository.StudySets
-	cards repository.Flashcards
+	sets    repository.StudySets
+	cards   repository.Flashcards
+	limiter ContentLimiter
+	policy  ContentPolicy
+}
+
+// ContentLimiter charges n units to a shared (multi-replica) fixed-window counter.
+type ContentLimiter interface {
+	AllowN(ctx context.Context, uid int64, bucket string, n, max int, window time.Duration) error
+}
+
+// ContentPolicy holds anti-bulk-collection thresholds for non-owner readers.
+// These are abuse limits, not product quotas; tune from telemetry.
+type ContentPolicy struct {
+	MaxPageSize    int           // hard cap per request for non-owners
+	RequestsPerMin int           // content requests per account per minute
+	CardsPerWindow int           // delivered cards per account per CardWindow
+	CardWindow     time.Duration // window for CardsPerWindow
+	EnforceLimits  bool          // false = log only (observe-first rollout)
+}
+
+// DefaultContentPolicy mirrors the starting values from the protection plan.
+// Rate budgets start in observe-only mode (log, do not block); the page-size
+// cap and all permission checks are always enforced regardless of this flag.
+func DefaultContentPolicy() ContentPolicy {
+	return ContentPolicy{MaxPageSize: 20, RequestsPerMin: 60, CardsPerWindow: 300, CardWindow: 10 * time.Minute, EnforceLimits: false}
+}
+
+// ChargeContent is used by the Quiz service after it delivers n cards from a
+// set to userID. Access is re-verified here; owners are exempt.
+func (s *StudySetService) ChargeContent(ctx context.Context, id, userID int64, n int) error {
+	if err := requireUserID(userID); err != nil {
+		return err
+	}
+	set, err := s.sets.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if set.UserID == userID {
+		return nil
+	}
+	if set.Visibility == "private" || set.ContentType == "quiz" {
+		return ErrForbidden
+	}
+	if n < 1 || n > 5000 {
+		return ErrValidation
+	}
+	return s.chargeContent(ctx, userID, id, n)
 }
 
 func NewStudySetService(sets repository.StudySets, cards repository.Flashcards) *StudySetService {
-	return &StudySetService{sets: sets, cards: cards}
+	return &StudySetService{sets: sets, cards: cards, policy: DefaultContentPolicy()}
+}
+
+// WithLimiter enables content budgets for non-owner flashcard reads.
+func (s *StudySetService) WithLimiter(l ContentLimiter, p ContentPolicy) *StudySetService {
+	s.limiter, s.policy = l, p
+	return s
+}
+
+// chargeContent reserves budget BEFORE content is returned. Only genuine
+// over-limit results are enforced; limiter infrastructure errors fail open
+// for the learning flow (access checks have already passed) and are logged.
+func (s *StudySetService) chargeContent(ctx context.Context, uid int64, setID int64, cards int) error {
+	if s.limiter == nil {
+		return nil
+	}
+	p := s.policy
+	check := func(err error, bucket string) error {
+		if err == nil {
+			return nil
+		}
+		if errors.Is(err, repository.ErrQuizRateLimit) {
+			log.Printf("[content-protection] event=content_rate_limited user=%d set=%d bucket=%s cards=%d enforce=%t", uid, setID, bucket, cards, p.EnforceLimits)
+			if p.EnforceLimits {
+				return err
+			}
+			return nil
+		}
+		log.Printf("[content-protection] limiter_error bucket=%s err=%v", bucket, err)
+		return nil
+	}
+	if err := check(s.limiter.AllowN(ctx, uid, "cards_req", 1, p.RequestsPerMin, time.Minute), "cards_req"); err != nil {
+		return err
+	}
+	return check(s.limiter.AllowN(ctx, uid, "cards_content", cards, p.CardsPerWindow, p.CardWindow), "cards_content")
 }
 
 // List returns only study sets owned by the authenticated user.
@@ -55,10 +137,20 @@ func (s *StudySetService) GetWithCards(ctx context.Context, id, userID int64) (m
 		set.Flashcards = nil
 		return set, nil
 	}
-	// Load first 50 cards inline for backward compat; detail page will lazy-load more
-	cards, total, err := s.cards.ListByStudySetPaged(ctx, id, 1, 50)
+	// Load first page inline for backward compat; detail page lazy-loads more.
+	// Non-owners get a smaller preview and the content budget is charged.
+	perPage := 50
+	if set.UserID != userID {
+		perPage = s.policy.MaxPageSize
+	}
+	cards, total, err := s.cards.ListByStudySetPaged(ctx, id, 1, perPage)
 	if err != nil {
 		return model.StudySet{}, err
+	}
+	if set.UserID != userID {
+		if err := s.chargeContent(ctx, userID, id, len(cards)); err != nil {
+			return model.StudySet{}, err
+		}
 	}
 	set.Flashcards = cards
 	set.FlashcardCount = total
@@ -110,10 +202,19 @@ func (s *StudySetService) GetFlashcardsPaged(ctx context.Context, id, userID int
 	if set.ContentType == "quiz" && set.UserID != userID {
 		return model.FlashcardListResult{}, ErrForbidden
 	}
-	page, perPage := model.ClampPage(f.Page, f.PerPage, 200)
+	maxPer := 200
+	if set.UserID != userID {
+		maxPer = s.policy.MaxPageSize
+	}
+	page, perPage := model.ClampPage(f.Page, f.PerPage, maxPer)
 	items, total, err := s.cards.ListByStudySetPaged(ctx, id, page, perPage)
 	if err != nil {
 		return model.FlashcardListResult{}, err
+	}
+	if set.UserID != userID {
+		if err := s.chargeContent(ctx, userID, id, len(items)); err != nil {
+			return model.FlashcardListResult{}, err
+		}
 	}
 	return model.FlashcardListResult{
 		Items: items,

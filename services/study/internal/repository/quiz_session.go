@@ -27,14 +27,23 @@ func NewQuizSessionRepository(db *sql.DB) *QuizSessionRepository {
 
 // A database counter is shared by all replicas. No per-process bypass.
 func (r *QuizSessionRepository) Allow(ctx context.Context, uid int64, bucket string, max int, window time.Duration) error {
+	return r.AllowN(ctx, uid, bucket, 1, max, window)
+}
+
+// AllowN atomically charges n units (e.g. cards delivered) against a fixed
+// window shared by all replicas. Requests that exceed the budget are rejected.
+func (r *QuizSessionRepository) AllowN(ctx context.Context, uid int64, bucket string, n, max int, window time.Duration) error {
+	if n < 1 {
+		n = 1
+	}
 	var hits int
 	seconds := int64(window / time.Second)
 	err := r.db.QueryRowContext(ctx, `INSERT INTO protected_quiz_limits(user_id,bucket,window_start,hits)
- VALUES($1,$2,floor(extract(epoch from now())/$3)::bigint,1)
+ VALUES($1,$2,floor(extract(epoch from now())/$3)::bigint,$4)
  ON CONFLICT(user_id,bucket) DO UPDATE SET
  window_start=EXCLUDED.window_start,
- hits=CASE WHEN protected_quiz_limits.window_start=EXCLUDED.window_start THEN protected_quiz_limits.hits+1 ELSE 1 END
- RETURNING hits`, uid, bucket, seconds).Scan(&hits)
+ hits=CASE WHEN protected_quiz_limits.window_start=EXCLUDED.window_start THEN protected_quiz_limits.hits+EXCLUDED.hits ELSE EXCLUDED.hits END
+ RETURNING hits`, uid, bucket, seconds, n).Scan(&hits)
 	if err != nil {
 		return err
 	}

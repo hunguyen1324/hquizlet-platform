@@ -10,6 +10,7 @@ import { ExamQuestionLayout, CustomAudioPlayer } from "./exam/ExamQuestionLayout
 import { QuestionNavigatorPanel } from "./exam/QuestionNavigatorPanel";
 import { RichTextContent } from "./exam/RichTextContent";
 import { PART_LABELS } from "./exam/toeic";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import type { ExamItem } from "./exam/types";
 import type { QuizQuestion } from "../../types";
 
@@ -160,6 +161,7 @@ export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
    </main>}
  </>;
  return <section {...contentProtection} className={view.layout === "toeic" ? "fixed inset-0 z-[130] flex flex-col bg-white" : "quiz-session"}>
+   <ViewerWatermark />
    <header className="quiz-session-toolbar"><button disabled={busy} className="quiz-exit" onClick={() => setView(null)}>← Lưu và thoát</button><strong>{view.submitted ? "Kết quả" : "Làm bài"}</strong><span>{answeredCount}/{manifest.length} câu</span>{view.deadline && !view.submitted && <ExamTimer secondsLeft={timeLeft} />}<button disabled={busy || view.submitted} className="primary-button" onClick={() => setConfirmSubmit(true)}>Nộp bài</button></header>
    {error && <p role="alert" className="quiz-security-error">{error}{timeLeft === 0 && view.deadline && !view.submitted && <button onClick={submit}>Thử nộp lại</button>}</p>}
    {busy && <p role="status" className="text-center text-sm">Đang lưu / tải câu hỏi…</p>}

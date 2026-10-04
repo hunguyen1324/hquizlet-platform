@@ -395,6 +395,31 @@ func (s *server) generate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid mode, seed, or limit")
 		return
 	}
+	if set.UserID != 0 && strconv.FormatInt(set.UserID, 10) != userID {
+		distinct := map[int64]struct{}{}
+		for _, it := range items {
+			distinct[it.FlashcardID] = struct{}{}
+		}
+		uid, _ := strconv.ParseInt(userID, 10, 64)
+		if n := len(distinct); n > 0 {
+			switch err := s.study.ChargeContent(r.Context(), set.ID, uid, n); {
+			case err == nil:
+			case errors.Is(err, studyclient.ErrRateLimited):
+				status = http.StatusTooManyRequests
+				log.Printf("[content-protection] event=content_rate_limited request_id=%s uid=%s set=%d cards=%d", reqID, userID, set.ID, n)
+				w.Header().Set("Retry-After", "60")
+				writeError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "too many content requests, please retry later")
+				return
+			case errors.Is(err, studyclient.ErrForbidden), errors.Is(err, studyclient.ErrNotFound):
+				status = http.StatusForbidden
+				writeError(w, r, http.StatusForbidden, "FORBIDDEN", "study set is not accessible")
+				return
+			default:
+				log.Printf("[content-protection] limiter_error request_id=%s err=%v", reqID, err)
+			}
+		}
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
 	writeJSON(w, http.StatusOK, generateResponse{Mode: req.Mode, Seed: req.Seed, Items: items, Total: len(set.Flashcards), ContractVersion: engine.ContractVersion})
 }
 

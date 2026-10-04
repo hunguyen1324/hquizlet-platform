@@ -5,6 +5,7 @@ import { buildExamItems, PART_LABELS } from "./exam/toeic";
 import { ExamTimer } from "./exam/ExamTimer";
 import { contentProtection } from "./exam/contentProtection";
 import { ExamGame } from "./exam/ExamGame";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import { quizQuestionToLike } from "./exam/types";
 
 type QuizMode = "practice" | "exam";
@@ -158,7 +159,7 @@ export function QuizPlayer({ studySetId, questions }: { studySetId: number; ques
   function leave() { saveSession(true); setMode(null); }
 
   if (!allQuestions.length) return <div className="quiz-player-empty">Quiz chưa có câu hỏi có thể làm.</div>;
-  if (preview) return <section {...contentProtection} className="quiz-preview"><header><div><p className="eyebrow">Xem trước</p><h2>Toàn bộ {allQuestions.length} câu hỏi</h2></div><button className="secondary-button" onClick={() => setPreview(false)}>Đóng xem trước</button></header>{allQuestions.map((question, i) => <article key={question.key}><b>Câu {i + 1}</b>{question.paragraphText && <p className="quiz-preview-passage">{question.paragraphText}</p>}<h3>{question.questionText}</h3>{question.options.length > 0 && <ol type="A">{question.options.map((o) => <li key={o.text}>{o.text}</li>)}</ol>}<details><summary>Xem đáp án</summary><strong>{correctOptionText(question)}</strong>{question.answerExplanation && <p>{question.answerExplanation}</p>}</details></article>)}</section>;
+  if (preview) return <section {...contentProtection} className="quiz-preview"><ViewerWatermark /><header><div><p className="eyebrow">Xem trước</p><h2>Toàn bộ {allQuestions.length} câu hỏi</h2></div><button className="secondary-button" onClick={() => setPreview(false)}>Đóng xem trước</button></header>{allQuestions.map((question, i) => <article key={question.key}><b>Câu {i + 1}</b>{question.paragraphText && <p className="quiz-preview-passage">{question.paragraphText}</p>}<h3>{question.questionText}</h3>{question.options.length > 0 && <ol type="A">{question.options.map((o) => <li key={o.text}>{o.text}</li>)}</ol>}<details><summary>Xem đáp án</summary><strong>{correctOptionText(question)}</strong>{question.answerExplanation && <p>{question.answerExplanation}</p>}</details></article>)}</section>;
 
   if (mode && uiLayout === "toeic") {
     return (
@@ -212,7 +213,7 @@ export function QuizPlayer({ studySetId, questions }: { studySetId: number; ques
   if (finished) {
     const percent = Math.round((score / playable.length) * 100);
     const typeStats = Object.entries(playable.reduce<Record<string, { total: number; correct: number }>>((stats, q) => { const row = stats[q.questionType] ?? { total: 0, correct: 0 }; row.total++; if (isAnswerCorrect(q, answers[q.key] ?? "")) row.correct++; stats[q.questionType] = row; return stats; }, {}));
-    return <section {...contentProtection} className="quiz-player quiz-player-result"><p className="eyebrow">Phân tích kết quả</p><h2>{percent}%</h2><p>Đúng <strong>{score}/{playable.length}</strong> · Sai hoặc bỏ trống <strong>{playable.length - score}</strong></p>
+    return <section {...contentProtection} className="quiz-player quiz-player-result"><ViewerWatermark /><p className="eyebrow">Phân tích kết quả</p><h2>{percent}%</h2><p>Đúng <strong>{score}/{playable.length}</strong> · Sai hoặc bỏ trống <strong>{playable.length - score}</strong></p>
       <div className="quiz-analytics">{typeStats.map(([type, stat]) => <div key={type}><span>{type.replace("_", " ")}</span><strong>{stat.correct}/{stat.total}</strong><progress max={stat.total} value={stat.correct} /></div>)}</div>
       <div className="quiz-result-actions"><button className="secondary-button" onClick={() => setMode(null)}>Đổi chế độ</button>{wrongQuestions.length > 0 && <button className="secondary-button" onClick={() => start("practice", wrongQuestions.map((q) => q.key))}>Luyện lại {wrongQuestions.length} câu sai</button>}<button className="primary-button" onClick={() => start(mode)}>Làm lại toàn bộ</button></div>
       <div className="quiz-result-review">{playable.map((question, i) => { const submitted = answers[question.key] ?? ""; const correct = isAnswerCorrect(question, submitted); return <div key={question.key} className={correct ? "correct" : "wrong"}><b>{i + 1}</b><span>{question.questionText}<small>Bạn trả lời: {submitted || "Bỏ trống"}</small></span><strong>{correct ? "Đúng" : `Đáp án: ${correctOptionText(question)}`}</strong></div>; })}</div>
@@ -222,6 +223,7 @@ export function QuizPlayer({ studySetId, questions }: { studySetId: number; ques
   const options = current.questionType === "true_false" ? [{ text: "true", label: "Đúng" }, { text: "false", label: "Sai" }] : current.options.map((option) => ({ text: option.text, label: option.text }));
   const currentCorrect = isAnswerCorrect(current, answer);
   return <section {...contentProtection} className="quiz-session">
+    <ViewerWatermark />
     <header className="quiz-session-toolbar"><button className="quiz-exit" onClick={leave}>← Thoát</button><strong>{mode === "practice" ? "Làm bài · Luyện tập" : "Làm bài · Thi thử"}</strong><div>{deadline && <ExamTimer secondsLeft={timeLeft} />}<button className="secondary-button" onClick={() => saveSession(true)}>▣ Lưu</button><span>{savedNotice || `Đã trả lời ${Object.keys(answers).length}/${playable.length}`}</span></div></header>
     <div className="quiz-player-progress"><span style={{ width: `${((index + 1) / playable.length) * 100}%` }} /></div>
     <div className={`quiz-session-layout${instantFeedback && revealed ? " has-detail" : ""}`}><main className="quiz-player quiz-player--active"><div className="quiz-player-progress-row"><span>Câu {index + 1}/{playable.length}</span><span>{instantFeedback ? `${score} câu đúng` : "Chọn đáp án phù hợp"}</span></div>

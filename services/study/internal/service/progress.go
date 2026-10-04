@@ -109,10 +109,16 @@ func (s *ProgressService) GetLatestByMode(
 }
 
 func (s *ProgressService) GetLatest(ctx context.Context, userID, studySetID int64) ([]model.LearningSession, error) {
-	if userID == 0 { return nil, ErrUnauthorized }
+	if userID == 0 {
+		return nil, ErrUnauthorized
+	}
 	owned, err := s.sets.IsOwner(ctx, studySetID, userID)
-	if err != nil { return nil, err }
-	if !owned { return nil, ErrForbidden }
+	if err != nil {
+		return nil, err
+	}
+	if !owned {
+		return nil, ErrForbidden
+	}
 	return s.progress.GetLatest(ctx, userID, studySetID)
 }
 
@@ -162,7 +168,8 @@ func validateSaveProgressInput(in model.SaveProgressInput) error {
 	return nil
 }
 
-type ProgressValidationError struct { Message string }
+type ProgressValidationError struct{ Message string }
+
 func (e ProgressValidationError) Error() string { return e.Message }
 func IsProgressValidationError(err error) bool {
 	var target ProgressValidationError

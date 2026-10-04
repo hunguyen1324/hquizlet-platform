@@ -105,10 +105,40 @@ func (c *Client) GetFlashcards(ctx context.Context, studySetID, userID int64) (*
 	}
 }
 
+// ChargeContent reports n delivered cards to the Study service's shared
+// content budget. Returns ErrRateLimited when the account is over budget.
+func (c *Client) ChargeContent(ctx context.Context, studySetID, userID int64, n int) error {
+	url := fmt.Sprintf("%s/internal/study-sets/%d/charge?cards=%d", c.baseURL, studySetID, n)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("X-User-ID", strconv.FormatInt(userID, 10))
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return &UpstreamError{Op: "ChargeContent", Err: err}
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusTooManyRequests:
+		return ErrRateLimited
+	case http.StatusForbidden:
+		return ErrForbidden
+	case http.StatusNotFound:
+		return ErrNotFound
+	default:
+		return &UpstreamError{Op: "ChargeContent", Err: fmt.Errorf("study service returned %d", resp.StatusCode)}
+	}
+}
+
 // Sentinel errors for typed error handling.
 var (
-	ErrForbidden = &ServiceError{Code: "FORBIDDEN", Message: "study set not owned by caller"}
-	ErrNotFound  = &ServiceError{Code: "NOT_FOUND", Message: "study set not found"}
+	ErrForbidden   = &ServiceError{Code: "FORBIDDEN", Message: "study set not owned by caller"}
+	ErrNotFound    = &ServiceError{Code: "NOT_FOUND", Message: "study set not found"}
+	ErrRateLimited = &ServiceError{Code: "RATE_LIMITED", Message: "content budget exceeded"}
 )
 
 // ServiceError represents a typed error from the Study service.

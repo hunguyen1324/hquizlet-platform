@@ -6,7 +6,8 @@
 // PostgreSQL instance only when DATABASE_URL is set, skipping otherwise.
 //
 // To run locally:
-//   DATABASE_URL=postgres://... go test ./internal/migration/...
+//
+//	DATABASE_URL=postgres://... go test ./internal/migration/...
 package migration_test
 
 import (

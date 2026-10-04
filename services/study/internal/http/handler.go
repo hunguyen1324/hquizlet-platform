@@ -28,6 +28,7 @@ type Handler struct {
 	importSvc     *service.ImportService
 	importJobSvc  *service.ImportJobService
 	db            *sql.DB
+	markSecret    []byte
 }
 
 func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, quizQuestions *service.QuizQuestionService, importSvc *service.ImportService, importJobSvc *service.ImportJobService, db *sql.DB) *Handler {
@@ -45,6 +46,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /v1/study-sets", h.listStudySets)
 	mux.HandleFunc("POST /v1/study-sets", h.createStudySet)
+	mux.HandleFunc("GET /v1/study-sets/viewer-mark", h.viewerMark)
 	mux.HandleFunc("/v1/study-sets/", h.studySetRouter)
 	mux.HandleFunc("/v1/flashcards/", h.flashcardRouter)
 	mux.HandleFunc("GET /v1/folders", h.listFolders)
@@ -220,6 +222,7 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		// Ownership is mandatory: the authenticated user ID flows into the service.
+		protectedHeaders(w)
 		set, err := h.sets.GetWithCards(r.Context(), setID, userID)
 		if err != nil {
 			WriteServiceError(w, err)
@@ -255,6 +258,7 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 
 // listFlashcardsPaged handles GET /v1/study-sets/{id}/flashcards?page=1&per_page=50
 func (h *Handler) listFlashcardsPaged(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	protectedHeaders(w)
 	q := r.URL.Query()
 	filter := model.FlashcardFilter{
 		Page:    intQueryParam(q.Get("page"), 1),
@@ -531,6 +535,7 @@ func (h *Handler) getLatestProgress(w http.ResponseWriter, r *http.Request, stud
 // Phase 10: Quiz Question handlers
 
 func (h *Handler) listQuizQuestions(w http.ResponseWriter, r *http.Request, studySetID int64) {
+	protectedHeaders(w)
 	questions, err := h.quizQuestions.ListByStudySet(r.Context(), studySetID, userIDFromHeader(r))
 	if err != nil {
 		WriteServiceError(w, err)
@@ -726,6 +731,19 @@ func (h *Handler) internalRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 2 && parts[1] == "flashcards" && r.Method == http.MethodGet {
 		h.getFlashcardsInternal(w, r, setID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "charge" && r.Method == http.MethodPost {
+		n, err := strconv.Atoi(r.URL.Query().Get("cards"))
+		if err != nil {
+			WriteError(w, http.StatusBadRequest, "invalid cards")
+			return
+		}
+		if err := h.sets.ChargeContent(r.Context(), setID, userIDFromHeader(r), n); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		return
 	}
 	WriteError(w, http.StatusNotFound, "endpoint not found")

@@ -2328,3 +2328,8 @@
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }
 }
+
+/* Viewer watermark: low-contrast, non-interactive, tiled overlay (traceability only). */
+.ql-root { position: relative; }
+.viewer-watermark { position: absolute; inset: 0; z-index: 2; pointer-events: none; user-select: none; overflow: hidden; display: grid; grid-template-columns: repeat(3, 1fr); align-items: center; justify-items: center; opacity: .09; font-size: .75rem; font-weight: 600; letter-spacing: .04em; color: currentColor; transform: rotate(-18deg) scale(1.4); }
+@media print { .viewer-watermark { opacity: .2; } }

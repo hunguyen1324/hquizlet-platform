@@ -11,6 +11,7 @@ import { useQuizGeneration } from "./useQuizGeneration";
 import { LearnSettingsDialog } from "./LearnSettingsDialog";
 import type { LearnSettings } from "./LearnSettingsDialog";
 import { TrueFalseQuestion } from "./TrueFalseQuestion";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
 
 type Props = { cards: Flashcard[]; studySetId: number };
@@ -255,7 +256,12 @@ export function LearnMode({ cards, studySetId }: Props) {
     return <LearningEmptyState message="Cần ít nhất 2 thẻ để học." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
   }
   if (generation.state.state === "loading") {
-    return <div className="learn-loading" role="status">Đang tạo bài học…</div>;
+    return (
+      <div className="learn-loading" role="status">
+        <ViewerWatermark />
+        Đang tạo bài học…
+      </div>
+    );
   }
   if (generation.state.state === "error") {
     return (
@@ -281,6 +287,7 @@ export function LearnMode({ cards, studySetId }: Props) {
     const pct = items.length ? Math.round((score / items.length) * 100) : 0;
     return (
       <div className="learn-done">
+        <ViewerWatermark />
         <div className="test-result-hero">
           <div className={`test-result-score-ring ${pct >= 80 ? "ring--green" : pct >= 50 ? "ring--yellow" : "ring--red"}`}>
             <svg viewBox="0 0 100 100" className="score-ring-svg" style={{ "--pct": pct } as React.CSSProperties}>
@@ -326,13 +333,19 @@ export function LearnMode({ cards, studySetId }: Props) {
     );
   }
 
-  if (!current) return <div className="learn-loading" role="status">Đang chuẩn bị câu hỏi…</div>;
+  if (!current) return (
+    <div className="learn-loading" role="status">
+      <ViewerWatermark />
+      Đang chuẩn bị câu hỏi…
+    </div>
+  );
 
   const useMcq = questionType === "multipleChoice" && (current.choices?.length ?? 0) >= 2;
   const useTF = questionType === "trueFalse";
 
   return (
     <div className="learn-mode learn-mode--quizlet">
+      <ViewerWatermark />
       {showSettings && (
         <LearnSettingsDialog
           settings={settings}

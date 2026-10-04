@@ -10,6 +10,7 @@ import { ProgressSaveStatus } from "./ProgressSaveStatus";
 import { useQuizGeneration } from "./useQuizGeneration";
 import { FlashcardsSettingsDialog } from "./FlashcardsSettingsDialog";
 import type { FlashcardsSettings } from "./FlashcardsSettingsDialog";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
 
 /** Phát âm text qua Web Speech API */
@@ -208,6 +209,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   return (
     <div className="ql-root">
+      <ViewerWatermark />
       {showSettings && (
         <FlashcardsSettingsDialog
           settings={fcSettings}

@@ -11,6 +11,7 @@ import { useQuizGeneration } from "./useQuizGeneration";
 import type { TestSettings, QuestionTypeOption } from "./TestSettingsForm";
 import { MultipleChoiceQuestion } from "./MultipleChoiceQuestion";
 import { TrueFalseQuestion } from "./TrueFalseQuestion";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
 
 type Props = { cards: Flashcard[]; studySetId: number };
@@ -231,7 +232,12 @@ export function TestMode({ cards, studySetId }: Props) {
     return <LearningEmptyState message="Cần ít nhất 2 thẻ để làm bài kiểm tra." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
   }
   if (generation.state.state === "loading") {
-    return <div className="learn-loading" role="status">Đang tạo bài kiểm tra…</div>;
+    return (
+      <div className="learn-loading" role="status">
+        <ViewerWatermark />
+        Đang tạo bài kiểm tra…
+      </div>
+    );
   }
   if (generation.state.state === "error") {
     return (
@@ -250,6 +256,7 @@ export function TestMode({ cards, studySetId }: Props) {
     const maxCards = Math.min(cards.length, 20);
     return (
       <div className="test-prestart-screen">
+        <ViewerWatermark />
         <div className="test-prestart-icon" aria-hidden="true">
           <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
@@ -430,6 +437,7 @@ export function TestMode({ cards, studySetId }: Props) {
     const ringClass = pct >= 80 ? "ring--green" : pct >= 50 ? "ring--yellow" : "ring--red";
     return (
       <div className="learn-done">
+        <ViewerWatermark />
         <div className="test-result-hero">
           <div className={`test-result-score-ring ${ringClass}`}>
             <svg viewBox="0 0 100 100" className="score-ring-svg" style={{ "--pct": pct } as React.CSSProperties}>
@@ -505,6 +513,7 @@ export function TestMode({ cards, studySetId }: Props) {
   /* ── Question list (in-progress) ── */
   return (
     <>
+      <ViewerWatermark />
       {showSettings && (
         <TestSettingsDialog
           settings={settings}

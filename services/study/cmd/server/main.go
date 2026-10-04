@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -53,7 +54,7 @@ func main() {
 	importJobRepo := repository.NewImportJobRepository(db)
 
 	// Services
-	setSvc := service.NewStudySetService(setRepo, cardRepo)
+	setSvc := service.NewStudySetService(setRepo, cardRepo).WithLimiter(repository.NewQuizSessionRepository(db), contentPolicyFromEnv())
 	cardSvc := service.NewFlashcardService(setRepo, cardRepo)
 	folderSvc := service.NewFolderService(folderRepo, setRepo)
 	progressSvc := service.NewProgressService(progressRepo, setRepo, cardRepo)
@@ -75,7 +76,7 @@ func main() {
 	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithProtectedQuiz(
 		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL),
 		quizAudio,
-	).Register(mux)
+	).WithViewerMarkSecret(os.Getenv("WATERMARK_SECRET")).Register(mux)
 
 	// All /v1 study resources require a user identity. Health remains public.
 	handler := middleware.Chain(mux,

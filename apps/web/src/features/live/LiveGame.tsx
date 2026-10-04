@@ -12,6 +12,7 @@ import { PlayerLobby } from "./PlayerLobby";
 import { PlayerGame } from "./PlayerGame";
 import { LiveLeaderboard } from "./LiveLeaderboard";
 import { useLiveHostSession, useLivePlayerSession } from "./useLiveSession";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./live.css";
 
 type Flow = "home" | "creating" | "host-lobby" | "host-game" | "joining" | "player-lobby" | "player-game";
@@ -118,6 +119,7 @@ export function LiveGame() {
 
   return (
     <div className="live-game-container">
+      <ViewerWatermark />
       {/* Connection status indicator */}
       {(flow.startsWith("host") || flow.startsWith("player")) && (
         <div

@@ -8,6 +8,7 @@ import { LearningEmptyState } from "../../components/learning/LearningEmptyState
 import { useProgressSave } from "./useProgressSave";
 import { useQuizGeneration } from "./useQuizGeneration";
 import { MatchEndScreen } from "./MatchEndScreen";
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
 
 type Props = { cards: Flashcard[]; studySetId: number };
@@ -81,7 +82,12 @@ export function MatchMode({ cards, studySetId }: Props) {
 
   /* ── Guard states ── */
   if (cards.length < 2) return <LearningEmptyState message="Cần ít nhất 2 thẻ để chơi ghép cặp." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
-  if (generation.state.state === "loading" && phase !== "start") return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
+  if (generation.state.state === "loading" && phase !== "start") return (
+    <div className="learn-loading" role="status">
+      <ViewerWatermark />
+      Đang tạo bộ ghép cặp…
+    </div>
+  );
   if (generation.state.state === "error") return (
     <div className="learn-error" role="alert">
       Không thể tạo Match: {generation.state.error.message}
@@ -94,6 +100,7 @@ export function MatchMode({ cards, studySetId }: Props) {
   if (phase === "start") {
     return (
       <div className="ql-match-start-screen">
+        <ViewerWatermark />
         <div className="ql-match-start-icon" aria-hidden="true">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -161,7 +168,9 @@ export function MatchMode({ cards, studySetId }: Props) {
   /* ── Done screen ── */
   if (phase === "done") {
     return (
-      <MatchEndScreen
+      <>
+        <ViewerWatermark />
+        <MatchEndScreen
         elapsedMs={elapsed}
         wrongCount={wrongCount}
         score={result?.score ?? matched.size}
@@ -173,6 +182,7 @@ export function MatchMode({ cards, studySetId }: Props) {
         onRestart={restart}
         onNewRound={newRound}
       />
+      </>
     );
   }
 
@@ -246,11 +256,17 @@ export function MatchMode({ cards, studySetId }: Props) {
 
   /* ── Playing ── */
   if (generation.state.state === "loading") {
-    return <div className="learn-loading" role="status">Đang tạo bộ ghép cặp…</div>;
+    return (
+      <div className="learn-loading" role="status">
+        <ViewerWatermark />
+        Đang tạo bộ ghép cặp…
+      </div>
+    );
   }
 
   return (
     <div className="match-mode">
+      <ViewerWatermark />
       <div className="learn-header">
         <span className="flashcards-counter">{matched.size} / {totalPairs} cặp</span>
         <span className="match-timer-display">{formatTime(elapsed)}</span>

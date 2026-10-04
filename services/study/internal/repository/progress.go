@@ -199,13 +199,17 @@ func (r *LearningProgressRepository) GetLatest(ctx context.Context, userID, stud
 		FROM learning_sessions
 		WHERE user_id = $1 AND study_set_id = $2
 		ORDER BY mode, created_at DESC`, userID, studySetID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	sessions := make([]model.LearningSession, 0, 4)
 	for rows.Next() {
 		var s model.LearningSession
 		if err := rows.Scan(&s.ID, &s.UserID, &s.StudySetID, &s.Mode, &s.Score, &s.Total,
-			&s.StartedAt, &s.CompletedAt, &s.IdempotencyKey, &s.CreatedAt); err != nil { return nil, err }
+			&s.StartedAt, &s.CompletedAt, &s.IdempotencyKey, &s.CreatedAt); err != nil {
+			return nil, err
+		}
 		sessions = append(sessions, s)
 	}
 	return sessions, rows.Err()
