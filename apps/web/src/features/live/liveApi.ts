@@ -1,7 +1,7 @@
 // apps/web/src/features/live/liveApi.ts
 // Dev 4 - [P6-FE-API-01] Shared Live Quiz API client
 
-const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+import { gatewayUrl } from "../../lib/api/gateway";
 
 // ---- Types ----
 

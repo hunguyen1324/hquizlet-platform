@@ -1,5 +1,6 @@
 // HomePage — assembler: fetches study sets once, renders all 5 sections
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { StudySet } from "../../types";
 import { useAuth } from "../../features/auth/AuthContext";
 import { studySetApi } from "../../lib/api";
@@ -17,30 +18,13 @@ type Props = {
 
 export function HomePage({ onOpenSet, onNavigate }: Props) {
   const { token } = useAuth();
-  const [sets, setSets] = useState<StudySet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const result = await studySetApi.list(token, { sort: "updated", per_page: 50 });
-        if (!cancelled) {
-          setSets(result.items ?? []);
-          setError("");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Không tải được dữ liệu.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    void load();
-    return () => { cancelled = true; };
-  }, [token]);
+  const { data: result, isLoading: loading, error } = useQuery({
+    queryKey: ["studySets", "updated", 50],
+    queryFn: () => studySetApi.list(token, { sort: "updated", per_page: 50 }),
+  });
+
+  const sets = result?.items ?? [];
 
   if (loading) {
     return (
@@ -53,7 +37,9 @@ export function HomePage({ onOpenSet, onNavigate }: Props) {
   if (error) {
     return (
       <div className="max-w-4xl mx-auto py-8 text-center">
-        <p className="text-[var(--muted-foreground)] mb-4">{error}</p>
+        <p className="text-[var(--muted-foreground)] mb-4">
+          {error instanceof Error ? error.message : "Không tải được dữ liệu."}
+        </p>
         <button className="primary-button" onClick={() => window.location.reload()}>Thử lại</button>
       </div>
     );

@@ -2,6 +2,7 @@
 // Dev 4/5 - [P6-FE-API-01] Shared live session state hook
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { gatewayUrl } from "../../lib/api/gateway";
 import { liveApi, type LiveSession, type LiveParticipant, type LiveQuestion, type LiveSessionStatus, type LeaderboardEntry } from "./liveApi";
 
 export interface LiveSessionState {
@@ -285,7 +286,7 @@ export function useLivePlayerSession(participantToken: string | null, sessionId:
     if (!participantToken || !sessionId) return;
     try {
       // Player doesn't have leaderboard endpoint auth, but try
-      const res = await fetch(`${import.meta.env.VITE_GATEWAY_URL ?? "http://localhost:8080"}/v1/live-sessions/${sessionId}/leaderboard`, {
+      const res = await fetch(`${gatewayUrl}/v1/live-sessions/${sessionId}/leaderboard`, {
         headers: { Authorization: `Bearer ${participantToken}` },
       });
       if (res.ok) {

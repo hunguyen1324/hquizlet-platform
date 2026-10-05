@@ -3,7 +3,12 @@
 
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./styles.css";
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 30_000, gcTime: 5 * 60_000, refetchOnWindowFocus: false } },
+});
 
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { AuthScreen } from "./features/auth/AuthScreen";
@@ -322,9 +327,11 @@ function RootApp() {
 
 function App() {
   return (
-    <AuthProvider>
-      <RootApp />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <RootApp />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 

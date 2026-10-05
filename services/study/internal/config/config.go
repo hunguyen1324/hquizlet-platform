@@ -9,6 +9,7 @@ type Config struct {
 	AudioAllowedHosts string
 	Port              string
 	DatabaseURL       string
+	RedisURL          string
 	AuthSecret        string // shared secret for verifying auth tokens from auth service
 	MinIO             MinIOConfig
 }
@@ -31,6 +32,7 @@ func Load() Config {
 		AudioAllowedHosts: env("QUIZ_AUDIO_ALLOWED_HOSTS", ""),
 		Port:              env("PORT", "8082"),
 		DatabaseURL:       env("DATABASE_URL", "postgres://hquizlet:hquizlet@localhost:5432/hquizlet?sslmode=disable"),
+		RedisURL:          env("REDIS_URL", "redis://localhost:6379"),
 		AuthSecret:        env("AUTH_SECRET", ""),
 		MinIO: MinIOConfig{
 			Endpoint:        env("MINIO_ENDPOINT", ""),

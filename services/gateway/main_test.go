@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestAuthenticatedProxyUsesVerifiedIdentity(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/auth/verify" {
 			t.Fatalf("unexpected auth path: %s", r.URL.Path)
@@ -84,6 +86,7 @@ func TestOptionalAuthenticatedProxyAllowsAnonymousAndStripsSpoofedHeaders(t *tes
 }
 
 func TestOptionalAuthenticatedProxyInjectsVerifiedIdentityWhenBearerPresent(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer valid" {
 			t.Fatalf("authorization was not forwarded")
@@ -116,6 +119,7 @@ func TestOptionalAuthenticatedProxyInjectsVerifiedIdentityWhenBearerPresent(t *t
 // ─── Phase 4: routeStudySets ─────────────────────────────────────────────────
 
 func TestRouteStudySetsSendsQuizToQuizService(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 42})
 	}))
@@ -159,6 +163,7 @@ func TestRouteStudySetsSendsQuizToQuizService(t *testing.T) {
 }
 
 func TestRouteStudySetsSendsProgressToStudyService(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 42})
 	}))
@@ -231,6 +236,7 @@ func TestClassRoutesRequireAuth(t *testing.T) {
 }
 
 func TestClassRoutesStripsSpoofedHeaders(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 42, Email: "a@example.com", Name: "A", Role: "user"})
 	}))
@@ -285,6 +291,7 @@ func TestActivityRouteRequiresAuth(t *testing.T) {
 }
 
 func TestClassRoutesForwardToClassService(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 42})
 	}))
@@ -317,6 +324,7 @@ func TestClassRoutesForwardToClassService(t *testing.T) {
 }
 
 func TestRouteStudySetsStripsSpoofedUserID(t *testing.T) {
+	authCache = newTokenCache(60 * time.Second)
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(verifiedIdentity{Authenticated: true, UserID: 99})
 	}))

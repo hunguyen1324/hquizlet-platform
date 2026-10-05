@@ -9,7 +9,7 @@ type Props = {
   mode: Mode;
   initialTerm?: string;
   initialDefinition?: string;
-  onSave: (term: string, definition: string) => Promise<void>;
+  onSave: (term: string, definition: string) => void | Promise<void>;
   onCancel: () => void;
 };
 

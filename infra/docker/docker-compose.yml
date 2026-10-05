@@ -14,15 +14,16 @@ services:
 
   # ── Nginx (entry point duy nhất) ──────────────────────────────────────
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: ../..
+      dockerfile: infra/docker/web-prod.Dockerfile
     ports:
       - "${NGINX_PORT:-80}:80"
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx-cache:/var/cache/nginx
     depends_on:
       gateway:
-        condition: service_healthy
-      web:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -47,6 +48,7 @@ services:
       CLASS_SERVICE_URL:   "${CLASS_SERVICE_URL:-http://class:8084}"
       PAYMENT_SERVICE_URL: "${PAYMENT_SERVICE_URL:-http://payment:8085}"
       FILE_SERVICE_URL:    "${FILE_SERVICE_URL:-http://file:8086}"
+      INTERNAL_SIGNING_KEY: "${INTERNAL_SIGNING_KEY:-}"
     # Không expose port ra host – nginx gọi qua Docker network
     expose:
       - "8080"
@@ -106,6 +108,7 @@ services:
       MINIO_ACCESS_KEY:      "${MINIO_ACCESS_KEY:-minioadmin}"
       MINIO_SECRET_KEY:      "${MINIO_SECRET_KEY:-minioadmin}"
       MINIO_IMPORT_BUCKET:   "${MINIO_IMPORT_BUCKET:-hquizlet-imports}"
+      INTERNAL_SIGNING_KEY:  "${INTERNAL_SIGNING_KEY:-}"
     expose:
       - "8082"
     depends_on:
@@ -163,6 +166,7 @@ services:
       STUDY_SERVICE_URL:     "${STUDY_SERVICE_URL:-http://study:8082}"
       NATS_URL:              "${NATS_URL:-nats://nats:4222}"
       CLASS_INTERNAL_TOKEN:  "${CLASS_INTERNAL_TOKEN:-dev-internal-token}"
+      INTERNAL_SIGNING_KEY:  "${INTERNAL_SIGNING_KEY:-}"
     expose:
       - "8084"
     depends_on:
@@ -196,6 +200,7 @@ services:
       SEPAY_API_TOKEN:            "${SEPAY_API_TOKEN:-}"
       SEPAY_BIDV_BANK_ACCOUNT_ID: "${SEPAY_BIDV_BANK_ACCOUNT_ID:-}"
       SEPAY_WEBHOOK_API_KEY:      "${SEPAY_WEBHOOK_API_KEY:-}"
+      INTERNAL_SIGNING_KEY:       "${INTERNAL_SIGNING_KEY:-}"
     expose:
       - "8085"
     depends_on:
@@ -354,3 +359,4 @@ volumes:
   web-node-modules:
   nats-data:
   minio-data:
+  nginx-cache:

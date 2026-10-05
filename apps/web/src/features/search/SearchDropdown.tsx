@@ -1,5 +1,6 @@
 // SearchDropdown — kết quả tìm kiếm global từ Navbar
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { studySetApi } from "../../lib/api/client";
 import type { StudySet } from "../../types";
 
@@ -16,39 +17,33 @@ type SearchState =
   | { status: "done"; results: StudySet[] }
   | { status: "error"; message: string };
 
-export function SearchDropdown({ query, token, onSelect, onClose }: Props) {
-  const [state, setState] = React.useState<SearchState>({ status: "idle" });
-  const abortRef = React.useRef<AbortController | null>(null);
-
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = React.useState<T>(value);
   React.useEffect(() => {
-    if (!query.trim()) {
-      setState({ status: "idle" });
-      return;
-    }
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
-    // Debounce 300ms
-    const timer = window.setTimeout(async () => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setState({ status: "loading" });
-      try {
-        const result = await studySetApi.list(token, { search: query, per_page: 8 }, controller.signal);
-        if (!controller.signal.aborted) {
-          setState({ status: "done", results: result.items });
-        }
-      } catch (e) {
-        if (!controller.signal.aborted) {
-          setState({ status: "error", message: e instanceof Error ? e.message : "Lỗi tìm kiếm" });
-        }
-      }
-    }, 300);
+export function SearchDropdown({ query, token, onSelect, onClose }: Props) {
+  const debouncedQuery = useDebounce(query.trim(), 300);
 
-    return () => {
-      window.clearTimeout(timer);
-      abortRef.current?.abort();
-    };
-  }, [query, token]);
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["search", debouncedQuery],
+    queryFn: async ({ signal }) => {
+      if (!debouncedQuery) return { items: [] };
+      return studySetApi.list(token, { search: debouncedQuery, per_page: 8 }, signal);
+    },
+    enabled: !!debouncedQuery,
+  });
+
+  const state: SearchState = React.useMemo(() => {
+    if (!debouncedQuery) return { status: "idle" };
+    if (isLoading) return { status: "loading" };
+    if (isError) return { status: "error", message: error instanceof Error ? error.message : "Lỗi tìm kiếm" };
+    return { status: "done", results: data?.items ?? [] };
+  }, [debouncedQuery, isLoading, isError, error, data]);
 
   // Close on Escape
   React.useEffect(() => {

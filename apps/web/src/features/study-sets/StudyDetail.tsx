@@ -1,6 +1,7 @@
 // StudyDetail — header + chế độ học + inline edit flashcard
 
 import React from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { StudySet, Flashcard } from "../../types";
 import type { LearningMode } from "../learning/types";
 import { LearningContainer } from "../learning";
@@ -26,6 +27,7 @@ const INFINITE_PAGE_SIZE = 30; // thẻ mỗi lần load
 
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const [studyMode, setStudyMode] = React.useState<LearningMode>("flashcards");
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -159,38 +161,57 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
   const isFlashcardSet = set.contentType === "flashcard" || !set.contentType;
 
   /* ── Inline edit handlers ── */
-  async function handleSaveEdit(card: Flashcard, term: string, definition: string) {
+  const updateMutation = useMutation({
+    mutationFn: ({ cardId, term, definition }: { cardId: number, term: string, definition: string }) => flashcardApi.update(token, cardId, { term, definition }),
+    onSuccess: (_, { cardId, term, definition }) => {
+      setAllCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, term, definition } : c)));
+      queryClient.invalidateQueries({ queryKey: ["studySets"] });
+      setEditingCardId(null);
+      showToast("Đã cập nhật thẻ");
+    },
+    onError: (e) => setActionError(e instanceof Error ? e.message : "Không thể cập nhật thẻ"),
+  });
+
+  function handleSaveEdit(card: Flashcard, term: string, definition: string) {
     setActionError(null);
-    await flashcardApi.update(token, card.id, { term, definition });
-    // Optimistic update
-    setAllCards((prev) =>
-      prev.map((c) => (c.id === card.id ? { ...c, term, definition } : c)),
-    );
-    setEditingCardId(null);
-    showToast("Đã cập nhật thẻ");
+    updateMutation.mutate({ cardId: card.id, term, definition });
   }
 
-  async function handleDelete(card: Flashcard) {
-    setActionError(null);
-    try {
-      await flashcardApi.delete(token, card.id);
-      setAllCards((prev) => prev.filter((c) => c.id !== card.id));
+  const deleteMutation = useMutation({
+    mutationFn: (cardId: number) => flashcardApi.delete(token, cardId),
+    onSuccess: (_, cardId) => {
+      setAllCards((prev) => prev.filter((c) => c.id !== cardId));
       setCardTotal((t) => t - 1);
+      queryClient.invalidateQueries({ queryKey: ["studySets"] });
       setDeleteConfirmId(null);
       showToast("Đã xóa thẻ");
-    } catch (e) {
+    },
+    onError: (e) => {
       setActionError(e instanceof Error ? e.message : "Không thể xóa thẻ");
       setDeleteConfirmId(null);
     }
+  });
+
+  function handleDelete(card: Flashcard) {
+    setActionError(null);
+    deleteMutation.mutate(card.id);
   }
 
-  async function handleAddCard(term: string, definition: string) {
+  const addMutation = useMutation({
+    mutationFn: ({ term, definition }: { term: string, definition: string }) => flashcardApi.add(token, set.id, { term, definition }),
+    onSuccess: (newCard) => {
+      setAllCards((prev) => [...prev, newCard]);
+      setCardTotal((t) => t + 1);
+      queryClient.invalidateQueries({ queryKey: ["studySets"] });
+      setAddingCard(false);
+      showToast("Đã thêm thẻ mới");
+    },
+    onError: (e) => setActionError(e instanceof Error ? e.message : "Không thể thêm thẻ")
+  });
+
+  function handleAddCard(term: string, definition: string) {
     setActionError(null);
-    const newCard = await flashcardApi.add(token, set.id, { term, definition });
-    setAllCards((prev) => [...prev, newCard]);
-    setCardTotal((t) => t + 1);
-    setAddingCard(false);
-    showToast("Đã thêm thẻ mới");
+    addMutation.mutate({ term, definition });
   }
 
   return (

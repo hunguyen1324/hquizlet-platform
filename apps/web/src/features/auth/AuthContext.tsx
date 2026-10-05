@@ -7,6 +7,7 @@ import type { User, AuthResponse } from "../../types";
 import { authApi, apiFetch } from "../../lib/api";
 
 const TOKEN_KEY = "hquizlet.sessionToken";
+const USER_KEY = "hquizlet.user";
 
 type AuthContextValue = {
   user: User | null;
@@ -21,7 +22,10 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    try { return JSON.parse(localStorage.getItem(USER_KEY) ?? "null"); }
+    catch { return null; }
+  });
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,20 +36,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authApi
       .me(token)
       .then((res) => {
-        if (res.authenticated) setUser(res.user);
-        else clearSession();
+        if (res.authenticated) {
+          setUser(res.user);
+          localStorage.setItem(USER_KEY, JSON.stringify({
+            id: res.user.id,
+            name: res.user.name,
+            image: res.user.image,
+            role: res.user.role,
+          }));
+        } else {
+          clearSession();
+        }
       })
       .catch(() => clearSession());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function clearSession() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setToken("");
     setUser(null);
   }
 
   function persistSession(res: AuthResponse) {
     localStorage.setItem(TOKEN_KEY, res.token);
+    localStorage.setItem(USER_KEY, JSON.stringify({
+      id: res.user.id,
+      name: res.user.name,
+      image: res.user.image,
+      role: res.user.role,
+    }));
     setToken(res.token);
     setUser(res.user);
   }

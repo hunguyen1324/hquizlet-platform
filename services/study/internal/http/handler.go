@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/hunguyen1324/hquizlet-platform/pkg/cache"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
@@ -28,11 +30,17 @@ type Handler struct {
 	importSvc     *service.ImportService
 	importJobSvc  *service.ImportJobService
 	db            *sql.DB
+	cache         *cache.Cache
 	markSecret    []byte
 }
 
 func New(sets *service.StudySetService, cards *service.FlashcardService, folders *service.FolderService, progress *service.ProgressService, quizQuestions *service.QuizQuestionService, importSvc *service.ImportService, importJobSvc *service.ImportJobService, db *sql.DB) *Handler {
 	return &Handler{sets: sets, cards: cards, folders: folders, progress: progress, quizQuestions: quizQuestions, importSvc: importSvc, importJobSvc: importJobSvc, db: db}
+}
+
+func (h *Handler) WithCache(c *cache.Cache) *Handler {
+	h.cache = c
+	return h
 }
 
 func (h *Handler) WithProtectedQuiz(s *service.ProtectedQuizService, audio *storage.QuizAudio) *Handler {
@@ -81,11 +89,30 @@ func (h *Handler) listStudySets(w http.ResponseWriter, r *http.Request) {
 		Search: strings.TrimSpace(q.Get("search")), SortBy: q.Get("sort"),
 		Page: intQueryParam(q.Get("page"), 1), PerPage: intQueryParam(q.Get("per_page"), 20),
 	}
+
+	if userID == 0 && h.cache != nil {
+		cacheKey := "study:sets:search:" + q.Encode()
+		if val, err := h.cache.Get(r.Context(), cacheKey); err == nil && val != "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(val))
+			return
+		}
+	}
+
 	result, err := h.sets.ListWithFilter(r.Context(), userID, filter)
 	if err != nil {
 		WriteServiceError(w, err)
 		return
 	}
+
+	if userID == 0 && h.cache != nil {
+		if b, err := json.Marshal(result); err == nil {
+			cacheKey := "study:sets:search:" + q.Encode()
+			h.cache.Set(r.Context(), cacheKey, string(b), 5*time.Minute)
+		}
+	}
+
 	WriteJSON(w, http.StatusOK, result)
 }
 
@@ -777,15 +804,39 @@ func (h *Handler) templateRouter(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "template not found")
 		return
 	}
+
+	if h.cache != nil {
+		cacheKey := "study:templates:" + name
+		if val, err := h.cache.Get(r.Context(), cacheKey); err == nil && val != "" {
+			w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+			w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(val))
+			return
+		}
+	}
+
 	data, err := templates.GetTemplate(name)
 	if err != nil {
 		WriteError(w, http.StatusNotFound, "template not found")
 		return
 	}
+	
+	b, err := io.ReadAll(data)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "error reading template")
+		return
+	}
+
+	if h.cache != nil {
+		cacheKey := "study:templates:" + name
+		h.cache.Set(r.Context(), cacheKey, string(b), 24*time.Hour)
+	}
+
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, data)
+	w.Write(b)
 }
 
 func userIDFromHeader(r *http.Request) int64 {

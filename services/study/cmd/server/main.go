@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/hunguyen1324/hquizlet-platform/pkg/cache"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/config"
 	studyhttp "github.com/hunguyen1324/hquizlet-platform/services/study/internal/http"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/middleware"
@@ -72,8 +73,13 @@ func main() {
 		quizAudio.WithBackup(backup)
 	}
 	go quizAudio.RunSync(context.Background())
+	redisCache, err := cache.New(cfg.RedisURL)
+	if err != nil {
+		log.Printf("[study] warning: failed to connect to redis cache: %v", err)
+	}
+
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithProtectedQuiz(
+	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithCache(redisCache).WithProtectedQuiz(
 		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL),
 		quizAudio,
 	).WithViewerMarkSecret(os.Getenv("WATERMARK_SECRET")).Register(mux)

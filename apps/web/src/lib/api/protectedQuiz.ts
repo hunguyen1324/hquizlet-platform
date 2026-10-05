@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import { gatewayUrl as gateway } from "./gateway";
 import type { QuizQuestion } from "../../types";
 
 export type QuizStart = { mode: "practice" | "exam"; instant: boolean; layout: "default" | "toeic"; part: number; durationSeconds: number };
@@ -10,7 +11,6 @@ export type ProtectedQuizView = {
  answers: Record<number, string>; results: Record<number, boolean>; score?: number; timeUsed: number;
 };
 const path = (setId: number) => `/v1/study-sets/${setId}/play`;
-const gateway = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 export const protectedQuizApi = {
  summary: (token: string, setId: number) => apiFetch<{ total: number; parts: Record<number, number>; sessions: string[] }>(path(setId), token),
  start: (token: string, setId: number, input: QuizStart) => apiFetch<ProtectedQuizView>(path(setId), token, { method: "POST", body: JSON.stringify(input) }),

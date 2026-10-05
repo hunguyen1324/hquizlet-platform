@@ -24,7 +24,7 @@ import type {
   WalletTransactionList,
 } from "../../types";
 
-const gatewayUrl = import.meta.env.VITE_GATEWAY_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+import { gatewayUrl } from "./gateway";
 export type ApiErrorBody = { code?: string; message?: string; field?: string; error?: string; requestId?: string; details?: Record<string, unknown> };
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string, public readonly field?: string, public readonly requestId?: string) { super(message); this.name = "ApiError"; }

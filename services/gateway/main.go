@@ -3,6 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log"
@@ -29,6 +32,37 @@ type verifiedIdentity struct {
 	Role          string `json:"role"`
 }
 
+var authCache = newTokenCache(60 * time.Second)
+var internalSigningKey = env("INTERNAL_SIGNING_KEY", "")
+
+func signInternalIdentity(userID int64, role string, ts int64) string {
+	if internalSigningKey == "" {
+		return ""
+	}
+	msg := strconv.FormatInt(userID, 10) + "|" + role + "|" + strconv.FormatInt(ts, 10)
+	mac := hmac.New(sha256.New, []byte(internalSigningKey))
+	mac.Write([]byte(msg))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func injectIdentityHeaders(r *http.Request, identity verifiedIdentity) {
+	r.Header.Del("X-User-ID")
+	r.Header.Del("X-User-Role")
+	r.Header.Del("X-Participant-ID")
+	r.Header.Del("X-Live-Role")
+	r.Header.Del("X-Class-Role")
+	r.Header.Del("X-Member-ID")
+	r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
+	r.Header.Set("X-User-Role", identity.Role)
+	
+	if internalSigningKey != "" {
+		ts := time.Now().Unix()
+		sig := signInternalIdentity(identity.UserID, identity.Role, ts)
+		r.Header.Set("X-Internal-Ts", strconv.FormatInt(ts, 10))
+		r.Header.Set("X-Internal-Sig", sig)
+	}
+}
+
 func main() {
 	port := env("PORT", "8080")
 	mux := http.NewServeMux()
@@ -41,7 +75,7 @@ func main() {
 	classURL := env("CLASS_SERVICE_URL", "http://localhost:8084")
 	paymentURL := env("PAYMENT_SERVICE_URL", "http://localhost:8085")
 	fileURL := env("FILE_SERVICE_URL", "http://localhost:8086")
-	mux.HandleFunc("/v1/auth/", reverseProxy(authURL))
+	mux.HandleFunc("/v1/auth/", authProxy(authURL))
 	// Study verifies a scoped, expiring audio ticket for native media Range requests.
 	mux.HandleFunc("GET /v1/quiz-audio", reverseProxy(studyURL))
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
@@ -192,15 +226,8 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 			writeGatewayError(w, r, status, "AUTH_UNAVAILABLE", "authentication service unavailable")
 			return
 		}
-		// Strip all client-supplied identity headers [P6-SEC-01]
-		r.Header.Del("X-User-ID")
-		r.Header.Del("X-User-Role")
-		r.Header.Del("X-Participant-ID")
-		r.Header.Del("X-Live-Role")
-		r.Header.Del("X-Class-Role")
-		r.Header.Del("X-Member-ID")
-		r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
-		r.Header.Set("X-User-Role", identity.Role)
+		// Strip all client-supplied identity headers and inject
+		injectIdentityHeaders(r, identity)
 		reverseProxy(serviceTarget)(w, r)
 	}
 }
@@ -227,8 +254,7 @@ func optionalAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFu
 				writeGatewayError(w, r, status, "AUTH_UNAVAILABLE", "authentication service unavailable")
 				return
 			}
-			r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
-			r.Header.Set("X-User-Role", identity.Role)
+			injectIdentityHeaders(r, identity)
 		}
 
 		reverseProxy(serviceTarget)(w, r)
@@ -257,11 +283,8 @@ func authenticatedOrParticipantProxy(authTarget, serviceTarget string) http.Hand
 			_, status, err := verifyIdentity(r.Context(), authTarget, auth)
 			if err == nil && status == http.StatusOK {
 				// Host authenticated
-				r.Header.Del("X-User-ID")
-				r.Header.Del("X-Participant-ID")
-				r.Header.Del("X-Live-Role")
 				identity, _, _ := verifyIdentity(r.Context(), authTarget, auth)
-				r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
+				injectIdentityHeaders(r, identity)
 				reverseProxy(serviceTarget)(w, r)
 				return
 			}
@@ -294,10 +317,7 @@ func sseProxy(authTarget, serviceTarget string) http.HandlerFunc {
 			identity, status, err := verifyIdentity(r.Context(), authTarget, auth)
 			if err == nil && status == http.StatusOK {
 				isHost = true
-				r.Header.Del("X-User-ID")
-				r.Header.Del("X-Participant-ID")
-				r.Header.Del("X-Live-Role")
-				r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
+				injectIdentityHeaders(r, identity)
 			}
 		}
 		if !isHost {
@@ -360,6 +380,11 @@ func verifyIdentity(ctx context.Context, authTarget, authorization string) (veri
 	if !strings.HasPrefix(authorization, "Bearer ") || token == "" {
 		return identity, http.StatusUnauthorized, context.Canceled
 	}
+
+	if id, ok := authCache.Get(token); ok {
+		return id, http.StatusOK, nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(authTarget, "/")+"/internal/auth/verify", nil)
@@ -384,6 +409,8 @@ func verifyIdentity(ctx context.Context, authTarget, authorization string) (veri
 	if !identity.Authenticated || identity.UserID <= 0 {
 		return identity, http.StatusUnauthorized, context.Canceled
 	}
+
+	authCache.Set(token, identity)
 	return identity, http.StatusOK, nil
 }
 
@@ -460,6 +487,19 @@ func (rw *responseWriter) WriteHeader(code int) {
 func health(service string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"service": service, "status": "ok"})
+	}
+}
+
+func authProxy(target string) http.HandlerFunc {
+	proxy := reverseProxy(target)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/logout") || strings.HasSuffix(r.URL.Path, "/logout-all") || strings.HasSuffix(r.URL.Path, "/refresh")) {
+			token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+			if token != "" {
+				authCache.Delete(token)
+			}
+		}
+		proxy(w, r)
 	}
 }
 

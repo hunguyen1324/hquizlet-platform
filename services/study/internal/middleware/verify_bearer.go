@@ -1,13 +1,37 @@
 package middleware
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var internalSigningKey = os.Getenv("INTERNAL_SIGNING_KEY")
+
+func verifyInternalSignature(userID, role, tsStr, sig string) bool {
+	if internalSigningKey == "" || sig == "" {
+		return false
+	}
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return false
+	}
+	if time.Now().Unix()-ts > 30 || time.Now().Unix()-ts < -30 {
+		return false
+	}
+	msg := userID + "|" + role + "|" + tsStr
+	mac := hmac.New(sha256.New, []byte(internalSigningKey))
+	mac.Write([]byte(msg))
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(sig), []byte(expectedSig))
+}
 
 // VerifyBearer authenticates even direct /v1 calls; X-User-ID is not proof of identity.
 // Internal service endpoints must remain on the private service network.
@@ -19,8 +43,23 @@ func VerifyBearer(authURL string) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+
+			rawUserID := r.Header.Get("X-User-ID")
+			rawRole := r.Header.Get("X-User-Role")
+			rawTs := r.Header.Get("X-Internal-Ts")
+			rawSig := r.Header.Get("X-Internal-Sig")
+
 			r.Header.Del("X-User-ID")
 			r.Header.Del("X-User-Role")
+
+			if verifyInternalSignature(rawUserID, rawRole, rawTs, rawSig) {
+				r.Header.Set("X-User-ID", rawUserID)
+				r.Header.Set("X-User-Role", rawRole)
+				w.Header().Set("Cache-Control", "private, no-store")
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			auth := r.Header.Get("Authorization")
 			if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(auth, "Bearer ")) == "" {
 				http.Error(w, "authentication required", 401)
