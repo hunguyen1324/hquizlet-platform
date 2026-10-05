@@ -32,6 +32,7 @@ interface QuizQuestion {
   correctAnswer: string;
   answerExplanation: string;
   paragraphText: string;
+  imageUrl: string;
   audioUrl: string;
   options: QuizOption[];
   position: number;
@@ -54,6 +55,7 @@ function newQuestion(position: number): QuizQuestion {
     correctAnswer: "",
     answerExplanation: "",
     paragraphText: "",
+    imageUrl: "",
     audioUrl: "",
     options: [
       { text: "", position: 0 },
@@ -318,6 +320,7 @@ function QuestionCard({
           {audioUploading && <small>Đang tải file nghe…</small>}
           {audioError && <small role="alert">{audioError}</small>}
         </label>
+        <label>Link / đường dẫn ảnh<input value={question.imageUrl} onChange={(e) => setField("imageUrl", e.target.value)} placeholder="https://... hoặc /images/question.png" /></label>
         {/* Audio URL */}
         <label>
           Nguồn âm thanh (mã kho riêng hoặc URL được phép)
@@ -372,7 +375,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
         setQuestions(loadedQuestions.map((q, index) => ({
           key: String(q.id ?? crypto.randomUUID()), questionText: q.questionText, questionType: q.questionType,
           correctAnswer: q.correctAnswer ?? "", answerExplanation: q.answerExplanation ?? "", paragraphText: q.paragraphText ?? "",
-          audioUrl: q.audioUrl ?? "", options: (q.options ?? []).map((o, optionIndex) => ({ text: o.text, position: optionIndex })),
+          imageUrl: q.imageUrl ?? "", audioUrl: q.audioUrl ?? "", options: (q.options ?? []).map((o, optionIndex) => ({ text: o.text, position: optionIndex })),
           position: q.position ?? index, subQuestions: q.subQuestions, tags: q.tags, timeInSeconds: q.timeInSeconds,
         })));
       })
@@ -451,7 +454,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
         if (!importFile) await quizQuestionApi.bulkSave(token, existingSetId, questions.map((q, i) => ({
           questionText: q.questionText.trim(), questionType: q.questionType, correctAnswer: q.correctAnswer || undefined,
           answerExplanation: q.answerExplanation.trim() || undefined, paragraphText: q.paragraphText?.trim() || undefined,
-          audioUrl: q.audioUrl || undefined, timeInSeconds: q.timeInSeconds, subQuestions: q.subQuestions, tags: q.tags, position: i,
+          imageUrl: q.imageUrl.trim() || undefined, audioUrl: q.audioUrl || undefined, timeInSeconds: q.timeInSeconds, subQuestions: q.subQuestions, tags: q.tags, position: i,
           options: q.options.filter((o) => o.text.trim()).map((o, idx) => ({ text: o.text.trim(), position: idx, isCorrect: q.correctAnswer.toUpperCase() === String.fromCharCode(65 + idx) || q.correctAnswer === o.text })),
         })));
         if (importFile) { const result = await importQuizIntoSet(existingSetId, importFile); if (result.errors.length > 0) return; }
@@ -546,7 +549,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
             <div style={{ marginTop: 12 }}>
               <div style={{ display: "flex", gap: 12, justifyContent: "space-between", alignItems: "center" }}>
                 <p style={{ fontSize: 14, color: "var(--muted-foreground)", margin: 0 }}>
-                  Chọn file .xlsx với cột: Question, Type, Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation
+                  Chọn file .xlsx với cột: Question, Type, Option A-D, Correct Answer, Time (s), Audio URL, Image URL, Answer Explanation
                 </p>
                 <a className="secondary-button" href={importApi.templateUrl("quiz_template.xlsx")} download style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
                   Tải file mẫu

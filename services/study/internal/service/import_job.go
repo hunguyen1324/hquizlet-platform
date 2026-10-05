@@ -404,7 +404,7 @@ func runQuizImportData(
 func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.ImportError, questions []model.CreateQuizQuestionInput) {
 	header := make(map[string]int)
 	for i, cell := range rows[0] {
-		header[strings.ToLower(strings.TrimSpace(cell))] = i
+		header[normalizeHeader(cell)] = i
 	}
 
 	qIdx, hasQ := header["question"]
@@ -427,6 +427,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 	optDIdx := optionalHeader("option d")
 	timeIdx := optionalHeader("time (s)")
 	audioIdx := optionalHeader("audio url")
+	imageIdx, _ := firstHeaderIndex(header, "image url", "image", "image_url", "imageurl", "image path")
 	explainIdx := optionalHeader("answer explanation")
 	paragraphIdx := optionalHeader("paragraph text")
 	subQuestionsIdx := optionalHeader("sub questions (json)")
@@ -483,7 +484,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 			Row: rowIdx + 1, Question: question, Type: mappedType,
 			OptionA: getCell(row, optAIdx), OptionB: getCell(row, optBIdx),
 			OptionC: getCell(row, optCIdx), OptionD: getCell(row, optDIdx),
-			CorrectAnswer: correctAnswer, AudioURL: getCell(row, audioIdx),
+			CorrectAnswer: correctAnswer, AudioURL: importMediaLink(getCell(row, audioIdx)), ImageURL: importMediaLink(getCell(row, imageIdx)),
 			AnswerExplanation: getCell(row, explainIdx),
 			ParagraphText:     getCell(row, paragraphIdx), SubQuestions: subQuestions,
 		}
@@ -531,6 +532,10 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 		if item.TimeSeconds > 0 {
 			timeSec = &item.TimeSeconds
 		}
+		var imageURL *string
+		if item.ImageURL != "" {
+			imageURL = &item.ImageURL
+		}
 		var audioURL *string
 		if item.AudioURL != "" {
 			audioURL = &item.AudioURL
@@ -554,7 +559,7 @@ func parseQuizRows(rows [][]string) (items []model.ImportQuizRow, errs []model.I
 		questions = append(questions, model.CreateQuizQuestionInput{
 			Position: i, QuestionText: questionText, QuestionType: item.Type,
 			CorrectAnswer: correct, TimeInSeconds: timeSec,
-			AudioURL: audioURL, AnswerExplanation: explain, Options: opts,
+			ImageURL: imageURL, AudioURL: audioURL, AnswerExplanation: explain, Options: opts,
 			ParagraphText: paragraphText, SubQuestions: item.SubQuestions,
 			Tags: partToTags(item.Part),
 		})
@@ -680,4 +685,13 @@ func normalizeHeader(s string) string {
 	normalized = strings.ReplaceAll(normalized, "_", " ")
 	normalized = strings.ReplaceAll(normalized, "-", " ")
 	return strings.Join(strings.Fields(normalized), " ")
+}
+
+func importMediaLink(raw string) string {
+	raw = strings.TrimSpace(raw)
+	re := regexp.MustCompile(`^!?\[[^\]]*\]\(([^\s]+)\)$`)
+	if m := re.FindStringSubmatch(raw); m != nil {
+		return m[1]
+	}
+	return raw
 }

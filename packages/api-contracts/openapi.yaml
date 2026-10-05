@@ -646,6 +646,7 @@ components:
         correctAnswer: { type: [string, 'null'] }
         timeInSeconds: { type: [integer, 'null'] }
         audioUrl: { type: [string, 'null'], description: 'Audio URL to auto-play when question starts' }
+        imageUrl: { type: [string, 'null'], description: 'Question illustration URL or web-relative path' }
         answerExplanation: { type: [string, 'null'] }
         paragraphText: { type: [string, 'null'], description: 'Full paragraph text for paragraph-type questions' }
         subQuestions: { type: [object, 'null'], description: 'JSON sub-questions for paragraph type' }
@@ -1789,7 +1790,7 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: 'Excel file with columns: Question, Type (MC/TF/WR/PG/SO), Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation'
+                  description: 'Excel file with columns: Question, Type (MC/TF/WR/PG/SO), Option A-D, Correct Answer, Time (s), Audio URL, Answer Explanation, Sub Questions (JSON), Paragraph Text, Part, Image URL'
       responses:
         '200':
           description: Import summary

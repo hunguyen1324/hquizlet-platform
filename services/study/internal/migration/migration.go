@@ -251,4 +251,5 @@ var migrations = []string{
 	// 023 – import job blob reference (MinIO / spool)
 	`ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS minio_key TEXT NOT NULL DEFAULT ''`,
 	`ALTER TABLE import_jobs ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT NOT NULL DEFAULT 0`,
+	`ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS image_url TEXT`,
 }

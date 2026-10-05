@@ -156,3 +156,19 @@ func TestParseQuizRowsPreservesPartAndAudio(t *testing.T) {
 		t.Fatalf("lost audio: %v", q.AudioURL)
 	}
 }
+
+func TestParseQuizRowsImportsImageLinks(t *testing.T) {
+	for _, source := range []string{"https://example.com/q.png", "/images/q.png", "[photo](https://example.com/q.png)"} {
+		_, errs, questions := parseQuizRows([][]string{{"Question", "Type", "Option A", "Correct Answer", "Image URL"}, {"Question 1", "MC", "A", "A", source}})
+		if len(errs) != 0 || len(questions) != 1 {
+			t.Fatalf("parse failed: %v", errs)
+		}
+		want := source
+		if strings.HasPrefix(source, "[") {
+			want = "https://example.com/q.png"
+		}
+		if questions[0].ImageURL == nil || *questions[0].ImageURL != want {
+			t.Fatalf("image lost: %#v", questions[0])
+		}
+	}
+}

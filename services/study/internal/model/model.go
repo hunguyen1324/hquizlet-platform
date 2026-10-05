@@ -129,6 +129,7 @@ type QuizQuestion struct {
 	QuestionType      string               `json:"questionType"`
 	CorrectAnswer     *string              `json:"correctAnswer,omitempty"`
 	TimeInSeconds     *int                 `json:"timeInSeconds,omitempty"`
+	ImageURL          *string              `json:"imageUrl,omitempty"`
 	AudioURL          *string              `json:"audioUrl,omitempty"`
 	AnswerExplanation *string              `json:"answerExplanation,omitempty"`
 	ParagraphText     *string              `json:"paragraphText,omitempty"`
@@ -153,6 +154,7 @@ type CreateQuizQuestionInput struct {
 	QuestionType      string              `json:"questionType"`
 	CorrectAnswer     *string             `json:"correctAnswer,omitempty"`
 	TimeInSeconds     *int                `json:"timeInSeconds,omitempty"`
+	ImageURL          *string             `json:"imageUrl,omitempty"`
 	AudioURL          *string             `json:"audioUrl,omitempty"`
 	AnswerExplanation *string             `json:"answerExplanation,omitempty"`
 	ParagraphText     *string             `json:"paragraphText,omitempty"`
@@ -284,6 +286,7 @@ type ImportQuizRow struct {
 	OptionD           string          `json:"optionD,omitempty"`
 	CorrectAnswer     string          `json:"correctAnswer"`
 	TimeSeconds       int             `json:"timeSeconds,omitempty"`
+	ImageURL          string          `json:"imageUrl,omitempty"`
 	AudioURL          string          `json:"audioUrl,omitempty"`
 	AnswerExplanation string          `json:"answerExplanation,omitempty"`
 	ParagraphText     string          `json:"paragraphText,omitempty"`

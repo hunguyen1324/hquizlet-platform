@@ -157,7 +157,12 @@ func quizRowsToFlashcards(items []model.ImportQuizRow, existing []model.Flashcar
 		})
 	}
 	for i, item := range items {
+		var imageURL *string
+		if item.ImageURL != "" {
+			imageURL = &item.ImageURL
+		}
 		cards = append(cards, model.BulkFlashcardItem{
+			ImageURL:   imageURL,
 			Term:       item.Question,
 			Definition: quizDefinition(item),
 			Position:   i,

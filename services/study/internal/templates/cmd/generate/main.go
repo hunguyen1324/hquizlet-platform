@@ -68,7 +68,7 @@ func generateQuizTemplate() error {
 	f.SetSheetName(sheet, "Quiz")
 
 	// Headers
-	headers := []string{"Question", "Type", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Time (s)", "Audio URL", "Answer Explanation"}
+	headers := []string{"Question", "Type", "Option A", "Option B", "Option C", "Option D", "Correct Answer", "Time (s)", "Audio URL", "Answer Explanation", "Sub Questions (JSON)", "Paragraph Text", "Part", "Image URL"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue("Quiz", cell, h)

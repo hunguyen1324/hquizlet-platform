@@ -362,6 +362,9 @@ func sessionItems(questions []model.QuizQuestion) ([]model.SessionItem, error) {
 			if child.QuestionType == "" {
 				child.QuestionType = "multiple_choice"
 			}
+			if child.ImageURL == nil || *child.ImageURL == "" {
+				child.ImageURL = q.ImageURL
+			}
 			if child.AudioURL == nil || *child.AudioURL == "" {
 				child.AudioURL = q.AudioURL
 			}

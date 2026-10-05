@@ -47,6 +47,8 @@ export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
  const [flags, setFlags] = React.useState<boolean[]>([]);
  const [confirmSubmit, setConfirmSubmit] = React.useState(false);
  const [audio, setAudio] = React.useState<{ key: string; url: string } | null>(null);
+ const mediaCache = React.useRef(new Map<string, { url: string; bytes: number }>());
+ React.useEffect(() => () => { for (const entry of mediaCache.current.values()) URL.revokeObjectURL(entry.url); mediaCache.current.clear(); }, [token, studySetId]);
  const [audioError, setAudioError] = React.useState("");
  const [audioRetry, setAudioRetry] = React.useState(0);
  const [muted, setMuted] = React.useState(false);
@@ -108,9 +110,25 @@ export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
    setAudio(null); setAudioError("");
    if (!view || !audioItem) return;
    const controller = new AbortController();
-   protectedQuizApi.audio(token, studySetId, view.id, audioItem.index, controller.signal).then((url) => {
+   protectedQuizApi.audio(token, studySetId, view.id, audioItem.index, controller.signal).then(async (url) => {
+     const cached = mediaCache.current.get(audioKey);
+     if (cached) { if (!controller.signal.aborted) setAudio({ key: audioKey, url: cached.url }); return; }
+     // Download once, then reuse the bounded in-memory copy.
+     const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+     if (!response.ok) throw new Error("Không tải được âm thanh.");
+     const blob = await response.blob();
      if (controller.signal.aborted) return;
-     setAudio({ key: audioKey, url });
+     if (blob.size > 30 * 1024 * 1024) { setAudio({ key: audioKey, url }); return; }
+     let bytes = [...mediaCache.current.values()].reduce((sum, entry) => sum + entry.bytes, 0);
+     while (mediaCache.current.size && (bytes + blob.size > 40 * 1024 * 1024 || mediaCache.current.size >= 8)) {
+       const key = mediaCache.current.keys().next().value!;
+       const entry = mediaCache.current.get(key)!;
+       bytes -= entry.bytes; URL.revokeObjectURL(entry.url); mediaCache.current.delete(key);
+     }
+     const cachedUrl = URL.createObjectURL(blob);
+     mediaCache.current.set(audioKey, { url: cachedUrl, bytes: blob.size });
+     setAudio({ key: audioKey, url: cachedUrl });
+     return;
    }).catch((e: Error) => { if (!controller.signal.aborted) setAudioError(e.message); });
    return () => { controller.abort(); };
  }, [audioKey, audioRetry, token, studySetId]); // Only fetch when the displayed media changes.
@@ -147,13 +165,14 @@ export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
 
  const questionContent = <>
    {audioNotice}
-   {audioUrl && <button className="secondary-button" onClick={() => setAudioRetry((n) => n + 1)}>Tải lại âm thanh</button>}
+   {audioUrl && <button className="secondary-button" onClick={() => { const entry = mediaCache.current.get(audioKey); if (entry) URL.revokeObjectURL(entry.url); mediaCache.current.delete(audioKey); setAudioRetry((n) => n + 1); }}>Tải lại âm thanh</button>}
    {view.layout === "toeic" ? <div className="min-h-0 flex-1 overflow-hidden"><ExamQuestionLayout group={group} groupStart={view.page[0]?.index ?? 0} answers={answers} onAnswer={answer} muted={muted} lockAudio={view.mode === "exam" && !view.submitted} instantFeedback={view.instant || view.submitted} readOnly={busy || view.submitted} resultByIndex={view.results} /></div> : <main className="quiz-player quiz-player--active">
      {audioUrl && <CustomAudioPlayer key={audioUrl} src={audioUrl} muted={false} />}
      {view.page.map((item) => <article key={item.index}>
        <p className="eyebrow">Câu {view.manifest[item.index]?.number} / {view.manifest.length}</p>
        {item.question.paragraphText && <RichTextContent value={item.question.paragraphText} className="quiz-player-passage" />}
        <RichTextContent value={item.question.questionText} className="quiz-player-question" />
+       {item.question.imageUrl && <img src={item.question.imageUrl} alt="Hình minh họa câu hỏi" decoding="async" style={{ maxWidth: "100%", maxHeight: 400, objectFit: "contain" }} draggable={false} />}
        <AnswerInput key={`${view.id}:${item.index}`} question={item.question} selected={view.answers[item.index]} disabled={busy || view.submitted || (view.instant && view.answers[item.index] !== undefined)} onAnswer={(value) => answer(item.index, value)} />
        {item.revealed && <div className={`quiz-player-feedback ${view.results[item.index] ? "correct" : "wrong"}`}><strong>{view.results[item.index] ? "Chính xác" : "Chưa đúng"}</strong><p>Đáp án: {item.question.options?.find((o) => o.isCorrect)?.text ?? item.question.correctAnswer}</p><RichTextContent value={item.question.answerExplanation} /></div>}
        {view.submitted && !item.revealed && <p>Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}

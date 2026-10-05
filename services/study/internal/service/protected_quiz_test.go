@@ -258,3 +258,14 @@ func TestQuizHTMLDoesNotShipEmbeddedURLs(t *testing.T) {
 		t.Fatalf("formatting lost: %s", clean)
 	}
 }
+
+func TestSessionItemsInheritParagraphImage(t *testing.T) {
+	image := "/images/passage.png"
+	items, err := sessionItems([]model.QuizQuestion{{QuestionType: "paragraph", ImageURL: &image, SubQuestions: json.RawMessage("[{\"questionText\":\"Q\",\"questionType\":\"written\"}]")}})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items: %v, %v", items, err)
+	}
+	if items[0].Question.ImageURL == nil || *items[0].Question.ImageURL != image {
+		t.Fatal("parent image was lost")
+	}
+}
