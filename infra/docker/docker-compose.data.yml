@@ -79,7 +79,7 @@ services:
         mc mb --ignore-existing local/${STORAGE_BUCKET:-hquizlet} &&
         mc anonymous set download local/${STORAGE_BUCKET:-hquizlet} &&
         mc mb --ignore-existing local/${MINIO_IMPORT_BUCKET:-hquizlet-imports} &&
-        mc ilm rule add --expire-days 1 local/${MINIO_IMPORT_BUCKET:-hquizlet-imports} --prefix imports/ || true
+        mc ilm rule add --expire-days 1 local/${MINIO_IMPORT_BUCKET:-hquizlet-imports} --prefix imports/
       "
     restart: "no"
 
