@@ -12,7 +12,7 @@
 services:
 
   nginx:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-web:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-web:${IMAGE_TAG:-latest}
     ports:
       - "${NGINX_PORT:-80}:80"
     volumes:
@@ -28,7 +28,7 @@ services:
       start_period: 5s
 
   gateway:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-gateway:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-gateway:${IMAGE_TAG:-latest}
     environment:
       PORT: "8080"
       AUTH_SERVICE_URL:    "http://auth:8081"
@@ -54,7 +54,7 @@ services:
       start_period: 10s
 
   auth:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-auth:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-auth:${IMAGE_TAG:-latest}
     environment:
       PORT: "8081"
       DATABASE_URL: "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
@@ -70,7 +70,7 @@ services:
       start_period: 15s
 
   study:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-study:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-study:${IMAGE_TAG:-latest}
     environment:
       PORT: "8082"
       PAYMENT_SERVICE_URL: "http://payment:8085"
@@ -100,7 +100,7 @@ services:
       start_period: 15s
 
   quiz:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-quiz:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-quiz:${IMAGE_TAG:-latest}
     environment:
       PORT: "8083"
       DATABASE_URL:      "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
@@ -121,7 +121,7 @@ services:
       start_period: 15s
 
   class:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-class:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-class:${IMAGE_TAG:-latest}
     environment:
       PORT: "8084"
       DATABASE_URL:         "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
@@ -141,7 +141,7 @@ services:
       start_period: 15s
 
   payment:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-payment:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-payment:${IMAGE_TAG:-latest}
     environment:
       PORT: "8085"
       DATABASE_URL:               "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
@@ -163,7 +163,7 @@ services:
       start_period: 15s
 
   file:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-file:${IMAGE_TAG:-latest}
+    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-file:${IMAGE_TAG:-latest}
     environment:
       PORT: "8086"
       DATABASE_URL:            "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"

@@ -60,12 +60,12 @@ jobs:
       - name: Build & push ${{ matrix.service }}
         run: |
           docker build -f infra/docker/go-service.Dockerfile --build-arg SERVICE=${{ matrix.service }} `
-            -t ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:${{ github.sha }} `
-            -t ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:latest .
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-platform-${{ matrix.service }}:${{ github.sha }} `
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-platform-${{ matrix.service }}:latest .
           if ($LASTEXITCODE -ne 0) { throw "Image build failed" }
-          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-platform-${{ matrix.service }}:${{ github.sha }}
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
-          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-${{ matrix.service }}:latest
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-platform-${{ matrix.service }}:latest
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
 
   build-and-push-web:
@@ -80,12 +80,12 @@ jobs:
       - name: Build & push web
         run: |
           docker build -f infra/docker/web-prod.Dockerfile --build-arg VITE_GATEWAY_URL=/api `
-            -t ghcr.io/${{ github.repository_owner }}/hquizlet-web:${{ github.sha }} `
-            -t ghcr.io/${{ github.repository_owner }}/hquizlet-web:latest .
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-platform-web:${{ github.sha }} `
+            -t ghcr.io/${{ github.repository_owner }}/hquizlet-platform-web:latest .
           if ($LASTEXITCODE -ne 0) { throw "Image build failed" }
-          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-web:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-platform-web:${{ github.sha }}
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
-          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-web:latest
+          docker push ghcr.io/${{ github.repository_owner }}/hquizlet-platform-web:latest
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
 
   # ── 3. Deploy DATA layer (chỉ chạy khi bấm workflow_dispatch + tick chọn) ─
