@@ -33,6 +33,10 @@ jobs:
     runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
+      - name: Install frontend dependencies
+        run: |
+          npm ci --prefix apps/web
+          if ($LASTEXITCODE -ne 0) { throw "Frontend dependency installation failed" }
       - name: Run CI gate
         run: |
           make ci-gate
@@ -120,6 +124,7 @@ jobs:
         shell: pwsh
         env:
           SSH_KEY: ${{ secrets.APP_SERVER_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $keyPath = "$env:RUNNER_TEMP\app_deploy_key"
           Set-Content -Path $keyPath -Value $env:SSH_KEY -NoNewline
@@ -127,6 +132,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
           $target = "${{ secrets.APP_SERVER_USER }}@${{ secrets.APP_SERVER_HOST }}"
           $port   = "${{ secrets.APP_SERVER_PORT }}"
+          $env:GHCR_TOKEN | ssh -i $keyPath -p $port -o StrictHostKeyChecking=accept-new $target "docker login ghcr.io -u ${{ github.actor }} --password-stdin"
+          if ($LASTEXITCODE -ne 0) { throw "Server GHCR login failed" }
           ssh -i $keyPath -p $port -o StrictHostKeyChecking=accept-new $target "cd /opt/hquizlet && test -f .env && mkdir -p deploy-backups/${{ github.sha }} && cp infra/docker/docker-compose.app.yml infra/nginx/nginx.conf deploy-backups/${{ github.sha }}/"
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
           scp -i $keyPath -P $port -o StrictHostKeyChecking=accept-new setup-nat-mini.sh "${target}:/opt/hquizlet/setup-nat-mini.sh"
