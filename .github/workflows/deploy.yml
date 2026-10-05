@@ -102,7 +102,7 @@ jobs:
         run: |
           $keyPath = "$env:RUNNER_TEMP\data_deploy_key"
           Set-Content -Path $keyPath -Value $env:SSH_KEY -NoNewline
-          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:(R)"
+          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:(F)"
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
           $target = "${{ secrets.DATA_SERVER_USER }}@${{ secrets.DATA_SERVER_HOST }}"
           $port   = "${{ secrets.DATA_SERVER_PORT }}"
@@ -128,7 +128,7 @@ jobs:
         run: |
           $keyPath = "$env:RUNNER_TEMP\app_deploy_key"
           Set-Content -Path $keyPath -Value $env:SSH_KEY -NoNewline
-          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:(R)"
+          icacls $keyPath /inheritance:r /grant:r "${env:USERNAME}:(F)"
           if ($LASTEXITCODE -ne 0) { throw "Deployment command failed" }
           $target = "${{ secrets.APP_SERVER_USER }}@${{ secrets.APP_SERVER_HOST }}"
           $port   = "${{ secrets.APP_SERVER_PORT }}"
