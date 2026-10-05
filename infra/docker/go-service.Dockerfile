@@ -6,11 +6,12 @@ FROM golang:1.25-alpine AS build
 ARG SERVICE
 WORKDIR /src/services/${SERVICE}
 
-# Copy chỉ service cần build – mỗi service có go.mod riêng, không cần workspace
-COPY services/${SERVICE} .
+# Include workspace modules such as pkg/cache used by Study.
+COPY go.work go.work.sum /src/
+COPY services /src/services
+COPY pkg /src/pkg
 
-# Ensure service modules have checksums for imports introduced by each dev branch.
-RUN go mod tidy
+# Download and verify dependencies without changing module manifests.
 RUN go mod download
 RUN go mod verify
 

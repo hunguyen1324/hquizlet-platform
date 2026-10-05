@@ -30,7 +30,7 @@ export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string, public readonly field?: string, public readonly requestId?: string) { super(message); this.name = "ApiError"; }
 }
 export async function apiFetch<T>(path: string, token: string, init: RequestInit = {}, params?: Record<string, string | number | undefined>): Promise<T> {
-  const url = new URL(`${gatewayUrl}${path}`, window.location.origin);
+  const url = new URL(`${gatewayUrl}${path}`, globalThis.location?.origin ?? "http://localhost");
   if (params) for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
   const isFormData = init.body instanceof FormData;
   const res = await fetch(url.toString(), {

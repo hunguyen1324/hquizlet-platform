@@ -1848,6 +1848,7 @@ paths:
     get:
       tags: [import]
       summary: Download an Excel template file (no auth required)
+      security: []
       responses:
         '200':
           description: Template file

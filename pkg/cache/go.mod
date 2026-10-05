@@ -1,6 +1,6 @@
 module github.com/hunguyen1324/hquizlet-platform/pkg/cache
 
-go 1.27.0
+go 1.25.0
 
 require github.com/redis/go-redis/v9 v9.22.0
 
