@@ -2,6 +2,12 @@
 
 Ngày lập: 06/10/2026.
 
+## Tiến độ triển khai
+
+- Giai đoạn 1–2: người dùng đã xác minh API và trang chủ qua Worker trả 200, tunnel trực tiếp trả 403, health nội bộ hoạt động. Các luồng chức năng vẫn cần nghiệm thu.
+- Giai đoạn 3: đã chuẩn bị code Workers Static Assets, SPA routing, build frontend cùng origin `/api`, cache headers và test proxy. Cần cập nhật Build command trên Cloudflare theo `infra/cloudflare/README.md`, deploy và kiểm tra thực tế để hoàn thành.
+- Giai đoạn 4–6: chưa triển khai.
+
 ## Mục tiêu
 
 - Có URL cố định khi chưa mua tên miền.

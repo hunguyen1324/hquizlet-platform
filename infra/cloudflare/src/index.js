@@ -10,6 +10,13 @@ function errorResponse(message, status) {
 
 export default {
   async fetch(request, env) {
+    const publicUrl = new URL(request.url);
+    const isBackend = publicUrl.pathname === "/api" || publicUrl.pathname.startsWith("/api/") ||
+      publicUrl.pathname === "/files" || publicUrl.pathname.startsWith("/files/");
+    if (!isBackend) {
+      return env.ASSETS.fetch(request);
+    }
+
     if (!env.UPSTREAM_ORIGIN) {
       return errorResponse("Chưa cấu hình UPSTREAM_ORIGIN trên Worker", 503);
     }
@@ -25,7 +32,6 @@ export default {
       return errorResponse("UPSTREAM_ORIGIN phải là HTTPS origin, không kèm đường dẫn", 503);
     }
 
-    const publicUrl = new URL(request.url);
     if (upstream.origin === publicUrl.origin) {
       return errorResponse("UPSTREAM_ORIGIN không được trỏ tới chính Worker", 503);
     }

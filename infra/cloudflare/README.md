@@ -1,6 +1,6 @@
 # HQuizlet Worker proxy
 
-Worker cung cấp URL cố định `https://hquizlet.<account>.workers.dev` và proxy tới Quick Tunnel. Đây là giai đoạn proxy, chưa hosting frontend bằng Static Assets.
+Worker cung cấp URL cố định `https://hquizlet.<account>.workers.dev`. Frontend được phục vụ bằng Workers Static Assets; chỉ `/api`, `/api/*`, `/files` và `/files/*` được proxy tới Quick Tunnel. SPA, assets và template không phụ thuộc tunnel.
 
 ## Cloudflare Workers Builds từ GitHub
 
@@ -8,11 +8,40 @@ Worker cung cấp URL cố định `https://hquizlet.<account>.workers.dev` và 
 2. Chọn repo `hunguyen1324/hquizlet-platform`, branch `main`.
 3. Worker name: `hquizlet` (khớp `wrangler.jsonc`).
 4. Root directory: `infra/cloudflare`.
-5. Build command: `npm run check`.
+5. Build command: `npm run check && npm test && npm run build`.
 6. Deploy command: `npm run deploy`.
 7. Sau deploy, Settings → Variables and Secrets → thêm biến **runtime** Text `UPSTREAM_ORIGIN`, giá trị URL tunnel HTTPS đang hoạt động, không kèm đường dẫn.
 
 `keep_vars: true` giữ biến dashboard khi deploy lại. Biến build không thay thế biến runtime. Không commit token hoặc secret.
+
+### Cấu hình đang dùng root `/`
+
+Giữ build variable `SKIP_DEPENDENCY_INSTALL=1`. Thay Build command bằng:
+
+```bash
+npm --prefix infra/cloudflare install && npm --prefix infra/cloudflare run check && npm --prefix infra/cloudflare test && npm --prefix infra/cloudflare run build
+```
+
+Giữ Deploy command:
+
+```bash
+cd infra/cloudflare && npx wrangler deploy
+```
+
+Build script cài dependency frontend bằng `npm ci`, ép `VITE_GATEWAY_URL=/api`, build vào `apps/web/dist` và copy `_headers` riêng cho Cloudflare. Không cấu hình gateway thành localhost hoặc URL tunnel trong frontend. Runtime `UPSTREAM_ORIGIN` và `ORIGIN_PROXY_SECRET` giữ nguyên.
+
+Assets có hash được cache dài; HTML kiểm tra lại, API/file động vẫn no-store. SPA fallback phục vụ trang con. Static frontend là công khai; quyền truy cập dữ liệu vẫn kiểm tra ở backend.
+
+### Xác minh giai đoạn 3
+
+- Trang chủ, refresh trang con, JS/CSS và `/templates/flashcard_template.xlsx` tải được.
+- Mở `/api/healthz/services` trực tiếp trong trình duyệt vẫn trả JSON, không phải SPA HTML.
+- Đăng nhập, tạo bộ thẻ, học/quiz, upload/download hoạt động.
+- Thử ở môi trường kiểm tra với upstream không kết nối: frontend vẫn tải, API báo lỗi. Không cố ý dừng tunnel đang phục vụ người dùng để thử.
+- Dashboard xác nhận assets không gọi Worker script không cần thiết.
+- URL file tuyệt đối hoặc presigned từ backend vẫn cần kiểm tra thực tế; không tự đổi chữ ký URL.
+
+Rollback: chọn deployment proxy trước đó trên Cloudflare và khôi phục Build command cũ. Giữ frontend Nginx trên server làm phương án quay lại. Sau rollback, kiểm tra biến runtime và secret.
 
 ## Kiểm tra
 
@@ -35,6 +64,8 @@ Secret `ORIGIN_PROXY_SECRET` là tùy chọn; chỉ thêm khi Nginx đã đượ
 ```bash
 npm install
 npm run check
+npm test
+npm run build
 npx wrangler deploy --dry-run
 ```
 
