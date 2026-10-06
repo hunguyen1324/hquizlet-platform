@@ -27,7 +27,10 @@ def tunnel_origin(logs):
 
 
 def healthy(origin, secret=None):
-    headers = {"Cache-Control": "no-cache"}
+    # Explicit headers verified against the public endpoint; urllib's default
+    # request received 403 while this health-check request received JSON 200.
+    headers = {"Cache-Control": "no-cache", "User-Agent": "curl/8.0",
+               "Accept": "application/json"}
     if secret:
         headers["X-Origin-Proxy-Secret"] = secret
     request = urllib.request.Request(origin.rstrip("/") + "/api/healthz/services", headers=headers)

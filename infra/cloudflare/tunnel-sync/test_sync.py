@@ -1,5 +1,7 @@
 import importlib.util
 import tempfile
+import io
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +12,17 @@ spec.loader.exec_module(module)
 
 
 class SyncTests(unittest.TestCase):
+    def test_health_headers_and_service_validation(self):
+        payload = json.dumps({"services": [
+            {"name": name, "status": "ok"} for name in module.EXPECTED
+        ]}).encode()
+        with patch.object(module.urllib.request, "urlopen", return_value=io.BytesIO(payload)) as fetch:
+            module.healthy("https://app.workers.dev")
+            request = fetch.call_args.args[0]
+            self.assertEqual(request.get_header("User-agent"), "curl/8.0")
+            self.assertEqual(request.get_header("Accept"), "application/json")
+            self.assertIsNone(request.get_header("X-origin-proxy-secret"))
+
     def config(self):
         return {"account_id": "a" * 32, "worker_name": "hquizlet",
                 "public_origin": "https://app.workers.dev", "origin_proxy_secret": "test",
