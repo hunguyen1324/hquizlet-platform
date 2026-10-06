@@ -1,0 +1,9 @@
+{
+  "account_id": "YOUR_32_CHARACTER_ACCOUNT_ID",
+  "worker_name": "hquizlet",
+  "public_origin": "https://hquizlet.h2quiz.workers.dev",
+  "compose_project": "docker",
+  "api_token": "YOUR_CLOUDFLARE_API_TOKEN",
+  "origin_proxy_secret": "SAME_SECRET_AS_NGINX_AND_WORKER",
+  "initial_origin": "https://YOUR_CURRENT_TUNNEL.trycloudflare.com"
+}

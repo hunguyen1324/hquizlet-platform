@@ -6,7 +6,9 @@ Ngày lập: 06/10/2026.
 
 - Giai đoạn 1–2: người dùng đã xác minh API và trang chủ qua Worker trả 200, tunnel trực tiếp trả 403, health nội bộ hoạt động. Các luồng chức năng vẫn cần nghiệm thu.
 - Giai đoạn 3: đã chuẩn bị code Workers Static Assets, SPA routing, build frontend cùng origin `/api`, cache headers và test proxy. Cần cập nhật Build command trên Cloudflare theo `infra/cloudflare/README.md`, deploy và kiểm tra thực tế để hoàn thành.
-- Giai đoạn 4–6: chưa triển khai.
+- Giai đoạn 3: Cloudflare đã báo deploy thành công Static Assets; cần nghiệm thu các luồng chức năng.
+- Giai đoạn 4: đã chuẩn bị script Python đồng bộ upstream, systemd timer, config mẫu và hướng dẫn tại `infra/cloudflare/tunnel-sync/README.md`. Cần token và cài đặt trên nat-mini để bật; chưa nghiệm thu API thật.
+- Giai đoạn 5–6: chưa triển khai.
 
 ## Mục tiêu
 

@@ -1,5 +1,7 @@
 # HQuizlet Worker proxy
 
+Giai đoạn 4 (tự cập nhật tunnel): xem [tunnel-sync/README.md](tunnel-sync/README.md).
+
 Worker cung cấp URL cố định `https://hquizlet.<account>.workers.dev`. Frontend được phục vụ bằng Workers Static Assets; chỉ `/api`, `/api/*`, `/files` và `/files/*` được proxy tới Quick Tunnel. SPA, assets và template không phụ thuộc tunnel.
 
 ## Cloudflare Workers Builds từ GitHub

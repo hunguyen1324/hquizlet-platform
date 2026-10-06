@@ -1,0 +1,13 @@
+[Unit]
+Description=Verify Quick Tunnel and synchronize Cloudflare Worker upstream
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/hquizlet/infra/cloudflare/tunnel-sync/sync.py
+UMask=0077
+TimeoutStartSec=180
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true

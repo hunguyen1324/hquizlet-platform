@@ -1,0 +1,11 @@
+[Unit]
+Description=Check HQuizlet Quick Tunnel every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=60s
+RandomizedDelaySec=5s
+Unit=hquizlet-tunnel-sync.service
+
+[Install]
+WantedBy=timers.target

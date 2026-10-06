@@ -25,5 +25,6 @@ if [[ -f infra/docker/docker-compose.quicktunnel.yml ]]; then
 fi
 if [[ -n "${1:-}" ]]; then printf 'IMAGE_TAG=%s\n' "$1" > .image_tag.env; fi
 "${compose[@]}" ps
-"${compose[@]}" exec -T nginx wget -T 10 -qO- http://127.0.0.1/api/healthz/services
+# Query gateway inside Docker so the public Nginx secret gate stays enforced.
+"${compose[@]}" exec -T gateway wget -T 10 -qO- http://127.0.0.1:8080/healthz/services
 echo
