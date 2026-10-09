@@ -35,10 +35,10 @@ func (r *FileRepository) CreateFile(ctx context.Context, f model.UploadedFile) (
 func (r *FileRepository) GetFile(ctx context.Context, id string) (model.UploadedFile, error) {
 	var f model.UploadedFile
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, user_id, upload_type, filename, content_type, size_bytes, COALESCE(public_url,''), status, created_at, confirmed_at, deleted_at
+			SELECT id, user_id, upload_type, storage_key, filename, content_type, size_bytes, COALESCE(public_url,''), status, created_at, confirmed_at, deleted_at
 		FROM uploaded_file
 		WHERE id = $1 AND status != 'deleted'
-	`, id).Scan(&f.ID, &f.UserID, &f.UploadType, &f.Filename, &f.ContentType, &f.SizeBytes, &f.PublicURL, &f.Status, &f.CreatedAt, &f.ConfirmedAt, &f.DeletedAt)
+		`, id).Scan(&f.ID, &f.UserID, &f.UploadType, &f.StorageKey, &f.Filename, &f.ContentType, &f.SizeBytes, &f.PublicURL, &f.Status, &f.CreatedAt, &f.ConfirmedAt, &f.DeletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.UploadedFile{}, ErrNotFound
 	}
@@ -112,7 +112,7 @@ func (r *FileRepository) ListByUser(ctx context.Context, userID int64, limit, of
 		SELECT id, upload_type, filename, content_type, size_bytes, COALESCE(public_url,''), status, created_at, confirmed_at
 		FROM uploaded_file
 		WHERE user_id = $1 AND status != 'deleted'
-		ORDER BY created_at DESC
+			ORDER BY created_at DESC, id DESC
 		LIMIT $2 OFFSET $3
 	`, userID, limit, offset)
 	if err != nil {

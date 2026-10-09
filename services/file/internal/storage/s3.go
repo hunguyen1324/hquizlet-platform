@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -89,7 +90,7 @@ func (s *s3Storage) HeadObject(ctx context.Context, key string) (int64, string, 
 
 func (s *s3Storage) PublicURL(_ context.Context, key string, _ time.Duration) (string, error) {
 	if s.publicBaseURL != "" {
-		return fmt.Sprintf("%s/%s", s.publicBaseURL, key), nil
+		return fmt.Sprintf("%s/%s", strings.TrimRight(s.publicBaseURL, "/"), key), nil
 	}
 	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s.bucket, "us-east-1", key), nil
 }

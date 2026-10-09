@@ -1,0 +1,51 @@
+# Overlay on docker-compose.data.yml (production) or docker-compose.yml (local).
+# Credentials are passed only to this data-server worker, never to the frontend.
+services:
+  backup:
+    build:
+      context: ../..
+      dockerfile: infra/docker/backup.Dockerfile
+    environment:
+      BACKUP_ENABLED: "${BACKUP_ENABLED:-false}"
+      BACKUP_PROVIDER: "${BACKUP_PROVIDER:-r2}"
+      BACKUP_PREFIX: "${BACKUP_PREFIX:-hquizlet-backup}"
+      BACKUP_ENCRYPTION_PASSWORD: "${BACKUP_ENCRYPTION_PASSWORD:-}"
+      BACKUP_ENCRYPTION_SALT: "${BACKUP_ENCRYPTION_SALT:-}"
+      BACKUP_INTERVAL_SECONDS: "${BACKUP_INTERVAL_SECONDS:-900}"
+      BACKUP_DATABASE_INTERVAL_SECONDS: "${BACKUP_DATABASE_INTERVAL_SECONDS:-86400}"
+      BACKUP_BWLIMIT: "${BACKUP_BWLIMIT:-5M}"
+      BACKUP_TPSLIMIT: "${BACKUP_TPSLIMIT:-10}"
+      BACKUP_HEALTH_MAX_AGE_SECONDS: "${BACKUP_HEALTH_MAX_AGE_SECONDS:-7200}"
+      BACKUP_MINIO_ENDPOINT: "http://minio:9000"
+      BACKUP_SOURCE_BUCKETS: "${BACKUP_SOURCE_BUCKETS:-}"
+      STORAGE_BUCKET: "${STORAGE_BUCKET:-hquizlet}"
+      MINIO_IMPORT_BUCKET: "${MINIO_IMPORT_BUCKET:-hquizlet-imports}"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
+      POSTGRES_USER: "${POSTGRES_USER:-hquizlet}"
+      POSTGRES_DB: "${POSTGRES_DB:-hquizlet}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+      R2_ACCOUNT_ID: "${R2_ACCOUNT_ID:-}"
+      R2_ENDPOINT: "${R2_ENDPOINT:-}"
+      R2_ACCESS_KEY_ID: "${R2_ACCESS_KEY_ID:-}"
+      R2_SECRET_ACCESS_KEY: "${R2_SECRET_ACCESS_KEY:-}"
+      R2_BUCKET_NAME: "${R2_BUCKET_NAME:-}"
+    volumes:
+      - backup-state:/var/lib/hquizlet-backup
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+    cpus: 0.50
+    mem_limit: 256m
+    pids_limit: 64
+    healthcheck:
+      # Includes grace for initial backup; failure/retry never marks API services down.
+      test: ["CMD-SHELL", "test -f /var/lib/hquizlet-backup/last-success && test $$(($$(date +%s) - $$(cat /var/lib/hquizlet-backup/last-success))) -lt $${BACKUP_HEALTH_MAX_AGE_SECONDS:-7200}"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30m
+
+volumes:
+  backup-state:

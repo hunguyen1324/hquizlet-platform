@@ -17,6 +17,10 @@ func Open(dsn string) *sql.DB {
 		log.Fatalf("[file] db open: %v", err)
 	}
 	ctx := context.Background()
+	// Bound API connections independently of the backup sidecar.
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(30 * time.Minute)
 	for attempt := 1; attempt <= 20; attempt++ {
 		if err := db.PingContext(ctx); err == nil {
 			log.Printf("[file] connected to database")
@@ -61,4 +65,7 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_uf_user_status ON uploaded_file (user_id, status)`,
 	`CREATE INDEX IF NOT EXISTS idx_uf_user_type_active ON uploaded_file (user_id, upload_type) WHERE status = 'active'`,
 	`CREATE INDEX IF NOT EXISTS idx_uf_pending_created ON uploaded_file (created_at) WHERE status = 'pending'`,
+	// Build without blocking file writes on existing production tables.
+	`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_uf_user_list ON uploaded_file (user_id, created_at DESC, id DESC) WHERE status != 'deleted'`,
+	`CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_uf_user_active_bytes ON uploaded_file (user_id) INCLUDE (size_bytes) WHERE status = 'active'`,
 }

@@ -232,6 +232,7 @@ services:
       STORAGE_PUBLIC_BASE_URL: "${STORAGE_PUBLIC_BASE_URL:-http://localhost/files}"
       STORAGE_REGION:        "${STORAGE_REGION:-us-east-1}"
       STORAGE_PATH_STYLE:    "${STORAGE_PATH_STYLE:-true}"
+      STORAGE_PRESIGN_TTL_MINS: "${STORAGE_PRESIGN_TTL_MINS:-15}"
     expose:
       - "8086"
     depends_on:

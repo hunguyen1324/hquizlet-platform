@@ -199,17 +199,8 @@ lại mỗi lần push (ít đổi, rủi ro cao hơn) — muốn cập nhật t
 
 ---
 
-## 8. Backup & giám sát (nên làm sớm)
+## 8. Backup MinIO + PostgreSQL sang R2
 
-Cron backup Postgres trên server Data (`crontab -e`):
+Dùng worker riêng trên server Data, không chạy backup trong API App. Xem [hướng dẫn R2 backup](r2-storage.md) để nạp credentials qua file tạm, khởi động overlay Docker, kiểm tra và phục hồi.
 
-```bash
-0 2 * * * docker exec $(docker ps -qf name=postgres) pg_dump -U hquizlet hquizlet | gzip > /opt/hquizlet/infra/docker/backups/db-$(date +\%F).sql.gz
-```
-
-Xoá backup cũ hơn 14 ngày, và định kỳ rsync thư mục backup này về máy dev
-hoặc một nơi lưu trữ khác (đừng chỉ backup trên cùng 1 ổ đĩa của server Data).
-
-Theo dõi container: `docker compose ps`, hoặc cài thêm
-[Uptime Kuma](https://github.com/louislam/uptime-kuma) nhẹ, chạy Docker, để
-ping `/api/healthz` định kỳ và báo khi service down.
+Worker mã hóa backup trước khi gửi lên R2; file chính vẫn phục vụ từ MinIO. Giữ khóa mã hóa ngoài server để phục hồi khi server Data mất. Theo dõi healthcheck backup và thời gian lần thành công gần nhất bằng công cụ monitoring hiện có. Không chạy thêm cron dump cũ nếu không có nhu cầu giữ một bản backup local riêng.
