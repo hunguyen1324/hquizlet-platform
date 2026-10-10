@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,10 +20,20 @@ func protectedHeaders(w http.ResponseWriter) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 }
 func (h *Handler) playError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, repository.ErrQuizRateLimit) || errors.Is(err, repository.ErrQuizSessionLimit) {
-		log.Printf("[quiz-security] limit user=%d", userIDFromHeader(r))
+	if errors.Is(err, repository.ErrQuizRateLimit) {
+		log.Printf("[quiz-security] rate-limit user=%d", userIDFromHeader(r))
 		w.Header().Set("Retry-After", "60")
-		WriteError(w, 429, "Quá nhiều yêu cầu hoặc đã có 2 phiên làm bài. Hãy nộp phiên cũ hoặc thử lại sau.")
+		WriteError(w, 429, "Quá nhiều yêu cầu. Hãy thử lại sau.")
+		return
+	}
+	if errors.Is(err, repository.ErrQuizSessionLimit) {
+		log.Printf("[quiz-security] session-limit user=%d", userIDFromHeader(r))
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		var setID int64
+		if len(parts) > 2 {
+			setID, _ = strconv.ParseInt(parts[2], 10, 64)
+		}
+		writeQuizSessionLimitError(w, setID, repository.MaxSessionsPerQuiz, repository.MaxSessionsPerQuiz)
 		return
 	}
 	WriteServiceError(w, err)

@@ -28,10 +28,11 @@ function AnswerInput({ question, selected, disabled, onAnswer }: {
  return <form className="quiz-player-written" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) onAnswer(draft); }}><input aria-label="Câu trả lời" disabled={disabled} value={draft} onChange={(e) => setDraft(e.target.value)} /><button disabled={disabled || !draft.trim()} className="primary-button">Lưu đáp án</button></form>;
 }
 
-export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
+export function ProtectedQuizPlayer({ studySetId, onManageSessions, resumeSessionId }: { studySetId: number; resumeSessionId?: string; onManageSessions?: (studySetId: number) => void }) {
  const { token, user } = useAuth();
  const storageKey = `hquizlet:protected-quiz:${user?.id}:${studySetId}`;
- const [summary, setSummary] = React.useState<{ total: number; parts: Record<number, number>; sessions: string[] } | null>(null);
+ const [summary, setSummary] = React.useState<{ total: number; parts: Record<number, number>; sessions: string[]; activeCount: number; limit: number; studySetId: number } | null>(null);
+ const [sessionLimitError, setSessionLimitError] = React.useState(false);
  const [view, setView] = React.useState<ProtectedQuizView | null>(null);
  const [savedId, setSavedId] = React.useState<string | null>(() => localStorage.getItem(storageKey));
  const [layout, setLayout] = React.useState<QuizStart["layout"]>("default");
@@ -65,20 +66,25 @@ export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
 
  async function run(request: () => Promise<ProtectedQuizView>) {
    if (busyRef.current) return;
-   busyRef.current = true; setBusy(true); setError("");
+   busyRef.current = true; setBusy(true); setError(""); setSessionLimitError(false);
    try {
      const next = await request();
      setClockOffset(Date.parse(next.serverTime) - Date.now());
      setView(next); setLayout(next.layout); setInstant(next.instant);
      localStorage.setItem(storageKey, next.id); setSavedId(next.id);
    } catch (e) {
-     setError(e instanceof Error ? e.message : "Không thực hiện được yêu cầu.");
+     if (e instanceof ApiError && e.status === 409) { setSessionLimitError(true); return; }
+      setError(e instanceof Error ? e.message : "Không thực hiện được yêu cầu.");
      if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
        setView(null); setAudio(null);
        localStorage.removeItem(storageKey); setSavedId(null);
      }
    } finally { busyRef.current = false; setBusy(false); }
  }
+ React.useEffect(() => {
+   if (resumeSessionId) void run(() => protectedQuizApi.page(token, studySetId, resumeSessionId));
+ }, [token, studySetId, resumeSessionId]);
+
  function start(mode: QuizStart["mode"]) {
    setFlags([]); expirySubmitted.current = null;
    void run(() => protectedQuizApi.start(token, studySetId, { mode, layout, part: layout === "toeic" ? part : 0, instant, durationSeconds: mode === "exam" || timedPractice ? minutes * 60 : 0 }));
@@ -156,7 +162,7 @@ export function ProtectedQuizPlayer({ studySetId }: { studySetId: number }) {
        <label><input type="checkbox" checked={timedPractice} onChange={(e) => setTimedPractice(e.target.checked)} /> Đếm ngược khi luyện tập</label>
      </div>
      {(summary?.sessions ?? []).filter((id) => id !== savedId).map((id, i) => <button key={id} disabled={busy} className="secondary-button" onClick={() => void run(() => protectedQuizApi.page(token, studySetId, id))}>Mở phiên trước #{i + 1}</button>)}
-     <small>Tiến độ và kết quả được lưu trong 24 giờ. Tối đa 2 phiên chưa nộp cùng lúc.</small>
+     <small>Tiến độ và kết quả được lưu trong 24 giờ. Tối đa {summary?.limit ?? 5} phiên chưa nộp trên mỗi quiz.</small>
      {savedId && <button className="secondary-button" disabled={busy} onClick={() => void run(() => protectedQuizApi.page(token, studySetId, savedId))}>Mở phiên gần nhất / kết quả</button>}
    </div>
    <button className="quiz-mode-card" disabled={busy || !summary?.total} onClick={() => start("practice")}><strong>Luyện tập</strong><small>Luyện theo Part, chọn thời điểm xem đáp án.</small></button>

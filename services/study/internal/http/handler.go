@@ -69,6 +69,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Async import job polling
 	mux.HandleFunc("GET /v1/import/jobs", h.listImportJobs)
 	mux.HandleFunc("GET /v1/import/jobs/", h.getImportJob)
+
+	// Phase Learn-1: Quiz session management (list + delete).
+	mux.HandleFunc("GET /v1/quiz-sessions", h.quizSessionsRouter)
+	mux.HandleFunc("/v1/quiz-sessions/", h.quizSessionsRouter)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {

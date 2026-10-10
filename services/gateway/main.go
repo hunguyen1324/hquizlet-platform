@@ -54,7 +54,7 @@ func injectIdentityHeaders(r *http.Request, identity verifiedIdentity) {
 	r.Header.Del("X-Member-ID")
 	r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
 	r.Header.Set("X-User-Role", identity.Role)
-	
+
 	if internalSigningKey != "" {
 		ts := time.Now().Unix()
 		sig := signInternalIdentity(identity.UserID, identity.Role, ts)
@@ -81,6 +81,8 @@ func main() {
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/study-sets/", routeStudySets(authURL, studyURL, quizURL))
+	mux.HandleFunc("/v1/quiz-sessions", authenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/quiz-sessions/", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/flashcards/", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/folders", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/folders/", authenticatedProxy(authURL, studyURL))

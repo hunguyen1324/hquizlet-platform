@@ -21,11 +21,13 @@ type Props = {
   onDelete: () => void;
   onBack: () => void;
   onToggleStar?: (card: Flashcard) => void;
+  resumeSessionId?: string;
+  onManageSessions?: (setId: number) => void;
 };
 
 const INFINITE_PAGE_SIZE = 30; // thẻ mỗi lần load
 
-export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Props) {
+export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onManageSessions, resumeSessionId }: Props) {
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const [studyMode, setStudyMode] = React.useState<LearningMode>("flashcards");
@@ -423,7 +425,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar }: Pro
         </div>
       )}
 
-      {set.contentType === "quiz" && <ProtectedQuizPlayer key={set.id} studySetId={set.id} />}
+      {set.contentType === "quiz" && <ProtectedQuizPlayer key={`${set.id}:${resumeSessionId ?? ""}`} studySetId={set.id} resumeSessionId={resumeSessionId} onManageSessions={onManageSessions} />}
 
       {folderDialogOpen && <div className="sd-modal-backdrop" role="presentation" onMouseDown={() => setFolderDialogOpen(false)}><section className="sd-folder-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><p className="eyebrow">Sắp xếp quiz</p><h2>Thêm vào thư mục</h2></div><button className="ghost-button" onClick={() => setFolderDialogOpen(false)}>×</button></header>{folders.length === 0 ? <p>Bạn chưa có thư mục. Hãy tạo thư mục từ thanh bên trước.</p> : <div className="sd-folder-options">{folders.map((folder) => <button key={folder.id} onClick={() => void addToFolder(folder.id)}><span>📁</span><div><strong>{folder.title}</strong><small>{folder.studySetCount} học phần</small></div><b>Thêm</b></button>)}</div>}</section></div>}
     </div>

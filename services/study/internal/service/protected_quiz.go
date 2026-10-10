@@ -100,7 +100,41 @@ func (s *ProtectedQuizService) Summary(ctx context.Context, setID, uid int64) (m
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"total": len(items), "parts": counts, "sessions": ids}, nil
+	activeCount, err := s.sessions.CountActive(ctx, uid, setID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"total":       len(items),
+		"parts":       counts,
+		"sessions":    ids,
+		"activeCount": activeCount,
+		"limit":       repository.MaxSessionsPerQuiz,
+		"studySetId":  setID,
+	}, nil
+}
+
+// ListSessions returns paginated session metadata for the given user.
+// When studySetID > 0, only sessions of that quiz are returned.
+// No access check against the quiz itself — the caller is the session owner.
+func (s *ProtectedQuizService) ListSessions(ctx context.Context, uid, studySetID int64, page, perPage int) ([]repository.QuizSessionMeta, int, error) {
+	if err := requireUserID(uid); err != nil {
+		return nil, 0, err
+	}
+	return s.sessions.List(ctx, uid, studySetID, page, perPage)
+}
+
+// DeleteSession soft-deletes a session owned by uid.
+// Returns ErrForbidden if the session belongs to another user,
+// ErrNotFound if the session does not exist.
+func (s *ProtectedQuizService) DeleteSession(ctx context.Context, id string, uid int64) error {
+	if err := requireUserID(uid); err != nil {
+		return err
+	}
+	if err := s.sessions.Delete(ctx, id, uid); err != nil {
+		return err
+	}
+	return nil
 }
 func (s *ProtectedQuizService) Start(ctx context.Context, setID, uid int64, in model.StartQuizInput) (model.QuizSessionView, error) {
 	var empty model.QuizSessionView

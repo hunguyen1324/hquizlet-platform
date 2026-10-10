@@ -740,6 +740,49 @@ components:
     # ---- End Phase 6 Schemas ----
 
 paths:
+  /v1/quiz-sessions:
+    get:
+      summary: List the authenticated user's quiz sessions
+      tags: [quiz]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: study_set_id, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Paginated session metadata; activeUntil determines quota activity, expiresAt determines state retention
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        studySetId: { type: integer }
+                        activeUntil: { type: string, format: date-time }
+                        expiresAt: { type: string, format: date-time }
+                        updatedAt: { type: string, format: date-time }
+                        answered: { type: integer }
+                        total: { type: integer }
+                  total: { type: integer }
+                  page: { type: integer }
+                  perPage: { type: integer }
+        '401': { description: Authentication required }
+  /v1/quiz-sessions/{id}:
+    delete:
+      summary: Soft-delete an owned quiz session (idempotent)
+      tags: [quiz]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, minLength: 48, maxLength: 48 } }
+      responses:
+        '200': { description: Deleted or already absent; another user's session is never modified }
+        '401': { description: Authentication required }
   /v1/study-sets/{studySetId}/quiz/generate:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }

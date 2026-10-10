@@ -28,6 +28,7 @@ import { ActivityFeed } from "./features/activity/ActivityFeed";
 import { WalletPage } from "./features/wallet/WalletPage";
 import { DepositPage } from "./features/payment/DepositPage";
 import { AdminPayments } from "./features/admin/AdminPayments";
+import { QuizSessionsPage } from "./features/learning/QuizSessionsPage";
 import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
 
@@ -43,7 +44,7 @@ const VIEW_PATHS: Partial<Record<AppView, string>> = {
   home: "/", dashboard: "/library", folders: "/folders", live: "/live-quiz",
   classes: "/classes", activity: "/notifications", wallet: "/wallet",
   deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
-  "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar",
+  "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar", "quiz-sessions": "/my/quiz-sessions",
 };
 
 function viewToPath(view: AppView) { return VIEW_PATHS[view] ?? "/"; }
@@ -55,6 +56,7 @@ function pathToView(path: string): AppView {
 function RootApp() {
   const { user, logout, token } = useAuth();
   const [view, setView] = useState<AppView>("home");
+  const [resumeSessionId, setResumeSessionId] = useState<string | undefined>();
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassDetailType | null>(null);
   const [loadingSet, setLoadingSet] = useState(false);
@@ -105,7 +107,8 @@ function RootApp() {
     );
   }
 
-  async function handleOpenSet(id: number, pushHistory = true) {
+  async function handleOpenSet(id: number, pushHistory = true, sessionId?: string) {
+    setResumeSessionId(sessionId);
     setLoadingSet(true);
     setNavigationError("");
     try {
@@ -217,6 +220,8 @@ function RootApp() {
           onDelete={() => void handleDeleteSet()}
           onBack={() => window.history.back()}
           onToggleStar={(card) => void handleToggleStar(card)}
+          resumeSessionId={resumeSessionId}
+          onManageSessions={() => handleNavigate("quiz-sessions")}
         />
       )}
 
@@ -224,6 +229,16 @@ function RootApp() {
         <Folders
           onBack={() => setView("dashboard")}
           onOpenSet={(id) => void handleOpenSet(id)}
+        />
+      )}
+
+      {view === "quiz-sessions" && (
+        <QuizSessionsPage
+          studySetId={selectedSet?.id}
+          onBack={() => setView(selectedSet ? "study" : "dashboard")}
+          onResume={(setId, sessionId) => {
+             void handleOpenSet(setId, true, sessionId);
+          }}
         />
       )}
 

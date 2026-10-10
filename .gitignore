@@ -12,3 +12,5 @@ tmp/
 .tmp-go-cache/
 .tmp-review-go-cache
 
+
+.tmp/go-build/

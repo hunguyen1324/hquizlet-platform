@@ -56,6 +56,23 @@ func (f *memoryQuizSessions) Allow(context.Context, int64, string, int, time.Dur
 func (f *memoryQuizSessions) Recent(context.Context, int64, int64) ([]string, error) {
 	return []string{}, nil
 }
+func (f *memoryQuizSessions) CountActive(_ context.Context, _ int64, _ int64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.states), nil
+}
+func (f *memoryQuizSessions) List(_ context.Context, _ int64, _ int64, _, _ int) ([]repository.QuizSessionMeta, int, error) {
+	return []repository.QuizSessionMeta{}, 0, nil
+}
+func (f *memoryQuizSessions) Delete(_ context.Context, id string, _ int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.states[id]; !ok {
+		return repository.ErrNotFound
+	}
+	delete(f.states, id)
+	return nil
+}
 func (f *memoryQuizSessions) Update(_ context.Context, id string, uid, setID int64, fn func(*model.QuizSession) error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
