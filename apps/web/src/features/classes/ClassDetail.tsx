@@ -2,6 +2,7 @@
 // Class detail page with Study Sets and Members tabs.
 
 import { useEffect, useState } from "react";
+import { ClassVideos } from "./ClassVideos";
 import { useAuth } from "../auth/AuthContext";
 import { classApi, memberApi, classStudySetApi } from "../../lib/api";
 import type { ClassDetail as ClassDetailType, ClassMember, ClassStudySet } from "../../types";
@@ -15,7 +16,7 @@ type Props = {
   onOpenSet?: (id: number) => void;
 };
 
-type Tab = "study-sets" | "members";
+type Tab = "study-sets" | "members" | "videos";
 
 export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, onOpenSet }: Props) {
   const { token, user } = useAuth();
@@ -94,6 +95,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
       </div>
 
       <div className="class-tabs">
+        <button className={tab === "videos" ? "active" : ""} onClick={() => setTab("videos")}>Video</button>
         <button className={tab === "study-sets" ? "active" : ""} onClick={() => setTab("study-sets")}>
           Tài liệu ({studySets.length})
         </button>
@@ -102,6 +104,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
         </button>
       </div>
 
+      {tab === "videos" && <ClassVideos key={classId} classId={classId} members={members} canManage={isTeacher} />}
       {tab === "study-sets" && (
         <div className="tab-content">
           {isTeacher && (

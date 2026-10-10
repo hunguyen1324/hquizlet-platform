@@ -15,11 +15,11 @@ import (
 
 // Handler holds all service dependencies for HTTP routing.
 type Handler struct {
-	classes     *classservice.ClassService
-	members     *classservice.MemberService
-	studySets   *classservice.ClassStudySetService
-	activity    *classservice.ActivityService
-	db          *sql.DB
+	classes   *classservice.ClassService
+	members   *classservice.MemberService
+	studySets *classservice.ClassStudySetService
+	activity  *classservice.ActivityService
+	db        *sql.DB
 }
 
 // New creates a new Handler.
@@ -127,6 +127,10 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sub-routes
+	if len(parts) >= 2 && parts[1] == "videos" {
+		h.videoRouter(w, r, classID, parts[2:])
+		return
+	}
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:

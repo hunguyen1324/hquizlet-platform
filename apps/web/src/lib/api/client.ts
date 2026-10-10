@@ -221,6 +221,14 @@ export const classStudySetApi = {
   remove: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
 };
 
+export type ClassVideo = { id: number; title: string; youtubeId: string; audience: "all" | "selected"; viewerIds: number[] };
+export type ClassVideoInput = { title: string; url: string; audience: "all" | "selected"; viewerIds: number[] };
+export const classVideoApi = {
+  list: (token: string, classId: number): Promise<ClassVideo[]> => apiFetch(`/v1/classes/${classId}/videos`, token),
+  save: (token: string, classId: number, input: ClassVideoInput, id?: number): Promise<ClassVideo> => apiFetch(`/v1/classes/${classId}/videos${id ? `/${id}` : ""}`, token, { method: id ? "PUT" : "POST", body: JSON.stringify(input) }),
+  remove: (token: string, classId: number, id: number): Promise<void> => apiFetch(`/v1/classes/${classId}/videos/${id}`, token, { method: "DELETE" }),
+};
+
 export const activityApi = {
   getFeed: (token: string, cursor?: string, limit?: number): Promise<ActivityFeedResponse> => apiFetch("/v1/activity", token, {}, { cursor, limit: limit?.toString() }),
 };
