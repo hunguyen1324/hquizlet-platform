@@ -199,8 +199,9 @@ lại mỗi lần push (ít đổi, rủi ro cao hơn) — muốn cập nhật t
 
 ---
 
-## 8. Backup MinIO + PostgreSQL sang R2
+## 8. Hai kênh backup riêng
 
-Dùng worker riêng trên server Data, không chạy backup trong API App. Xem [hướng dẫn R2 backup](r2-storage.md) để nạp credentials qua file tạm, khởi động overlay Docker, kiểm tra và phục hồi.
+- MinIO → R2 mã hóa: [r2-storage.md](r2-storage.md).
+- PostgreSQL local → snapshot database trên Neon: [neon-backup.md](neon-backup.md).
 
-Worker mã hóa backup trước khi gửi lên R2; file chính vẫn phục vụ từ MinIO. Giữ khóa mã hóa ngoài server để phục hồi khi server Data mất. Theo dõi healthcheck backup và thời gian lần thành công gần nhất bằng công cụ monitoring hiện có. Không chạy thêm cron dump cũ nếu không có nhu cầu giữ một bản backup local riêng.
+Worker chạy nền trên server Data; ứng dụng vẫn dùng PostgreSQL và MinIO chính. Hai overlay backup chưa tự deploy trong workflow push App; chuyển code/nạp .env và khởi động theo tài liệu. Giữ khóa mã hóa R2 offline và cấu hình phục hồi nguồn. Theo dõi healthcheck từng worker riêng.

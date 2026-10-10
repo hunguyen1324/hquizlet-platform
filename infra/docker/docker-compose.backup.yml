@@ -11,8 +11,8 @@ services:
       BACKUP_PREFIX: "${BACKUP_PREFIX:-hquizlet-backup}"
       BACKUP_ENCRYPTION_PASSWORD: "${BACKUP_ENCRYPTION_PASSWORD:-}"
       BACKUP_ENCRYPTION_SALT: "${BACKUP_ENCRYPTION_SALT:-}"
+      BACKUP_MAX_STORAGE_BYTES: "${BACKUP_MAX_STORAGE_BYTES:-9500000000}"
       BACKUP_INTERVAL_SECONDS: "${BACKUP_INTERVAL_SECONDS:-900}"
-      BACKUP_DATABASE_INTERVAL_SECONDS: "${BACKUP_DATABASE_INTERVAL_SECONDS:-86400}"
       BACKUP_BWLIMIT: "${BACKUP_BWLIMIT:-5M}"
       BACKUP_TPSLIMIT: "${BACKUP_TPSLIMIT:-10}"
       BACKUP_HEALTH_MAX_AGE_SECONDS: "${BACKUP_HEALTH_MAX_AGE_SECONDS:-7200}"
@@ -22,9 +22,6 @@ services:
       MINIO_IMPORT_BUCKET: "${MINIO_IMPORT_BUCKET:-hquizlet-imports}"
       MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin}"
-      POSTGRES_USER: "${POSTGRES_USER:-hquizlet}"
-      POSTGRES_DB: "${POSTGRES_DB:-hquizlet}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
       R2_ACCOUNT_ID: "${R2_ACCOUNT_ID:-}"
       R2_ENDPOINT: "${R2_ENDPOINT:-}"
       R2_ACCESS_KEY_ID: "${R2_ACCESS_KEY_ID:-}"
@@ -33,7 +30,6 @@ services:
     volumes:
       - backup-state:/var/lib/hquizlet-backup
     depends_on:
-      postgres: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
     restart: unless-stopped
     cpus: 0.50

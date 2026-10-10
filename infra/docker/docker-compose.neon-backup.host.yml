@@ -1,0 +1,11 @@
+# Linux Data server only: bypass a bridge with broken outbound routing.
+# Does not change PostgreSQL ports, firewall, or application networking.
+services:
+  neon-backup:
+    network_mode: host
+    environment:
+      NEON_BACKUP_SOURCE_HOST: "${NEON_BACKUP_SOURCE_HOST:-${DATA_BIND_IP:-127.0.0.1}}"
+      NEON_BACKUP_SOURCE_PORT: "${POSTGRES_PORT:-5432}"
+    volumes:
+      # Use the uploaded diagnostic/current worker without rebuilding the image.
+      - ../scripts/neon-backup.py:/opt/backup/neon-backup.py:ro

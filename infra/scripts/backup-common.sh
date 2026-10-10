@@ -38,10 +38,6 @@ backup_configure() {
   RCLONE_CONFIG_VAULT_PASSWORD="$(printf '%s' "$BACKUP_ENCRYPTION_PASSWORD" | rclone obscure -)"
   RCLONE_CONFIG_VAULT_PASSWORD2="$(printf '%s' "$BACKUP_ENCRYPTION_SALT" | rclone obscure -)"
   export RCLONE_CONFIG_VAULT_PASSWORD RCLONE_CONFIG_VAULT_PASSWORD2
-  export PGHOST="${BACKUP_POSTGRES_HOST:-postgres}" PGPORT="${BACKUP_POSTGRES_PORT:-5432}"
-  export PGUSER="${POSTGRES_USER:-hquizlet}" PGDATABASE="${POSTGRES_DB:-hquizlet}"
-  export PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
-  export PGCONNECT_TIMEOUT=15 PGOPTIONS='-c statement_timeout=0 -c lock_timeout=10000'
 }
 
 backup_rclone() {

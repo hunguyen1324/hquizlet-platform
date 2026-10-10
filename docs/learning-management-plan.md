@@ -1,6 +1,6 @@
 # Kế hoạch quản lý phiên quiz, nhóm học và video lớp học
 
-Ngày: 09/10/2026. Trạng thái: đề xuất triển khai, chưa thay đổi mã ứng dụng.
+Ngày: 09/10/2026. Trạng thái: Đã triển khai Phase 1 (Quiz session management).
 
 ## 1. Mục tiêu và quyết định phạm vi
 

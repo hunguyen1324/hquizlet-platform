@@ -1,0 +1,34 @@
+# Independent overlay for PostgreSQL -> Neon, never uploads database dumps to R2.
+services:
+  neon-backup:
+    build:
+      context: ../..
+      dockerfile: infra/docker/neon-backup.Dockerfile
+    environment:
+      NEON_BACKUP_ENABLED: "${NEON_BACKUP_ENABLED:-false}"
+      NEON_BACKUP_URL: "${NEON_BACKUP_URL:-${POSTGRES_URL:-}}"
+      NEON_BACKUP_INTERVAL_SECONDS: "${NEON_BACKUP_INTERVAL_SECONDS:-86400}"
+      NEON_BACKUP_RETRY_SECONDS: "${NEON_BACKUP_RETRY_SECONDS:-1800}"
+      NEON_BACKUP_KEEP: "${NEON_BACKUP_KEEP:-2}"
+      NEON_BACKUP_TIMEOUT_SECONDS: "${NEON_BACKUP_TIMEOUT_SECONDS:-7200}"
+      NEON_BACKUP_SOURCE_HOST: "postgres"
+      POSTGRES_USER: "${POSTGRES_USER:-hquizlet}"
+      POSTGRES_DB: "${POSTGRES_DB:-hquizlet}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
+    volumes:
+      - neon-backup-state:/var/lib/hquizlet-neon-backup
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: unless-stopped
+    cpus: 0.50
+    mem_limit: 256m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "python3", "/opt/backup/neon-backup.py", "health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30m
+
+volumes:
+  neon-backup-state:
