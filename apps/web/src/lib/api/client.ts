@@ -221,9 +221,17 @@ export const classStudySetApi = {
   remove: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
 };
 
-export type ClassVideo = { id: number; title: string; youtubeId: string; audience: "all" | "selected"; viewerIds: number[] };
+export type ClassVideo = { id: number; title: string; youtubeId: string; source?: "youtube" | "sftp"; sizeBytes?: number; audience: "all" | "selected"; viewerIds: number[] };
 export type ClassVideoInput = { title: string; url: string; audience: "all" | "selected"; viewerIds: number[] };
 export const classVideoApi = {
+  upload: (token: string, classId: number, input: ClassVideoInput, file: File): Promise<ClassVideo> => {
+    const body = new FormData(); body.append("file", file);
+    return apiFetch(`/v1/classes/${classId}/videos/upload`, token, { method: "POST", body }, { title: input.title, audience: input.audience, viewerIds: JSON.stringify(input.viewerIds) });
+  },
+  playback: async (token: string, classId: number, id: number): Promise<string> => {
+    const data = await apiFetch<{ path: string }>(`/v1/classes/${classId}/videos/${id}/playback`, token, { method: "POST" });
+    return `${gatewayUrl}${data.path}`;
+  },
   list: (token: string, classId: number): Promise<ClassVideo[]> => apiFetch(`/v1/classes/${classId}/videos`, token),
   save: (token: string, classId: number, input: ClassVideoInput, id?: number): Promise<ClassVideo> => apiFetch(`/v1/classes/${classId}/videos${id ? `/${id}` : ""}`, token, { method: id ? "PUT" : "POST", body: JSON.stringify(input) }),
   remove: (token: string, classId: number, id: number): Promise<void> => apiFetch(`/v1/classes/${classId}/videos/${id}`, token, { method: "DELETE" }),

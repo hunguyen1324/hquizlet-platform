@@ -11,15 +11,24 @@ import (
 
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/model"
 	classservice "github.com/hunguyen1324/hquizlet-platform/services/class/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/videostorage"
 )
 
 // Handler holds all service dependencies for HTTP routing.
 type Handler struct {
-	classes   *classservice.ClassService
-	members   *classservice.MemberService
-	studySets *classservice.ClassStudySetService
-	activity  *classservice.ActivityService
-	db        *sql.DB
+	classes       *classservice.ClassService
+	members       *classservice.MemberService
+	studySets     *classservice.ClassStudySetService
+	activity      *classservice.ActivityService
+	db            *sql.DB
+	videoStore    videostorage.Store
+	videoSecret   []byte
+	videoMaxBytes int64
+}
+
+// ConfigureVideos enables private SFTP videos without changing public image storage.
+func (h *Handler) ConfigureVideos(store videostorage.Store, secret string, maxBytes int64) {
+	h.videoStore, h.videoSecret, h.videoMaxBytes = store, []byte(secret), maxBytes
 }
 
 // New creates a new Handler.
@@ -48,6 +57,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/classes", h.listClasses)
 	mux.HandleFunc("POST /v1/classes", h.createClass)
 	mux.HandleFunc("/v1/classes/", h.classRouter)
+	mux.HandleFunc("GET /v1/class-video-stream", h.streamPrivateVideo)
 
 	// Activity feed
 	mux.HandleFunc("GET /v1/activity", h.getActivityFeed)

@@ -11,12 +11,17 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
   const [input, setInput] = useState<ClassVideoInput>(emptyInput);
   const [editing, setEditing] = useState<number>();
   const [playing, setPlaying] = useState<ClassVideo>();
+  const [playbackURL, setPlaybackURL] = useState("");
+  const [source, setSource] = useState<"sftp" | "youtube">("sftp");
+  const [file, setFile] = useState<File>();
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
+    setPlaying(undefined); setPlaybackURL(""); setVideos([]); setLoading(true); setError("");
     if (!token) return;
     classVideoApi.list(token, classId).then(data => { if (active) setVideos(data); })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : "Không tải được video"); })
@@ -32,19 +37,28 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
   }
 
   return <div className="tab-content">
-    <p>Video chỉ hiển thị trong nhóm cho người được cấp quyền. Link YouTube không công khai vẫn có thể được chia sẻ ra ngoài; không thể ngăn hoàn toàn việc tải hoặc quay màn hình.</p>
+    <p>Video tải lên chỉ phát cho thành viên được cấp quyền trong nhóm. Với video YouTube, quyền riêng tư vẫn do YouTube quản lý.</p>
     {error && <p role="alert" className="error-message">{error}</p>}
     {canManage && <form onSubmit={async event => {
       event.preventDefault(); if (!token || busy) return;
       setBusy(true); setError("");
       try {
-        await classVideoApi.save(token, classId, input, editing);
-        setInput(emptyInput); setEditing(undefined); await refresh();
+        if (!editing && source === "sftp") {
+          if (!file) throw new Error("Hãy chọn file video MP4 hoặc WebM.");
+          await classVideoApi.upload(token, classId, input, file);
+        } else {
+          await classVideoApi.save(token, classId, input, editing);
+        }
+        setInput(emptyInput); setEditing(undefined); setFile(undefined); setFileInputKey(k => k + 1); await refresh();
       } catch (err) { setError(err instanceof Error ? err.message : "Không lưu được video"); }
       finally { setBusy(false); }
     }} style={{ display: "grid", gap: 12, marginBlock: 20 }}>
       <label>Tiêu đề video<input required maxLength={200} value={input.title} onChange={e => setInput({ ...input, title: e.target.value })} /></label>
-      <label>Liên kết YouTube<input required type="url" placeholder="https://www.youtube.com/watch?v=..." value={input.url} onChange={e => setInput({ ...input, url: e.target.value })} /></label>
+      {!editing && <label>Nguồn video<select value={source} onChange={e => setSource(e.target.value as "sftp" | "youtube")} disabled={busy}>
+        <option value="sftp">Tải video riêng tư lên</option><option value="youtube">Liên kết YouTube</option>
+      </select></label>}
+      {source === "youtube" ? <label>Liên kết YouTube<input required type="url" placeholder="https://www.youtube.com/watch?v=..." value={input.url} onChange={e => setInput({ ...input, url: e.target.value })} /></label>
+        : !editing && <label>File video (MP4 hoặc WebM)<input key={fileInputKey} required type="file" accept="video/mp4,video/webm,.mp4,.webm" disabled={busy} onChange={e => setFile(e.target.files?.[0])} /></label>}
       <label>Ai được xem?<select value={input.audience} onChange={e => setInput({ ...input, audience: e.target.value as ClassVideoInput["audience"] })}>
         <option value="all">Tất cả thành viên nhóm</option><option value="selected">Chọn thành viên</option>
       </select></label>
@@ -54,7 +68,7 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
         </label>)}
       </fieldset>}
       <div><button className="primary-button" disabled={busy}>{busy ? "Đang lưu..." : editing ? "Lưu thay đổi" : "Thêm video"}</button>
-        {editing && <button type="button" className="ghost-button" onClick={() => { setEditing(undefined); setInput(emptyInput); }}>Hủy</button>}
+        {editing && <button type="button" className="ghost-button" disabled={busy} onClick={() => { setEditing(undefined); setInput(emptyInput); setSource("sftp"); }}>Hủy</button>}
       </div>
     </form>}
     {loading ? <p>Đang tải video...</p> : videos.length === 0 && !error ? <div className="empty-state">Chưa có video được chia sẻ với bạn.</div> : null}
@@ -68,12 +82,13 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
             setVideos(current);
             const allowed = current.find(v => v.id === video.id);
             if (!allowed) throw new Error("Bạn không còn quyền xem video này.");
-            setPlaying(allowed);
+            const url = allowed.source === "sftp" ? await classVideoApi.playback(token, classId, allowed.id) : "";
+            setPlaybackURL(url); setPlaying(allowed);
           } catch (err) { setError(err instanceof Error ? err.message : "Không mở được video"); }
         }}>▶ {video.title}</button>
         {canManage && <>
           <span>{video.audience === "all" ? "Cả nhóm" : `${video.viewerIds.length} người được chọn`}</span>
-          <button className="ghost-button" disabled={busy} onClick={() => { setEditing(video.id); setInput({ title: video.title, url: `https://www.youtube.com/watch?v=${video.youtubeId}`, audience: video.audience, viewerIds: video.viewerIds }); }}>Sửa / Quyền xem</button>
+          <button className="ghost-button" disabled={busy} onClick={() => { setEditing(video.id); setSource(video.source === "sftp" ? "sftp" : "youtube"); setInput({ title: video.title, url: video.youtubeId ? `https://www.youtube.com/watch?v=${video.youtubeId}` : "", audience: video.audience, viewerIds: video.viewerIds }); }}>Sửa / Quyền xem</button>
           <button className="danger-button" disabled={busy} onClick={async () => {
             if (!token || !confirm("Xóa video khỏi nhóm?")) return;
             setBusy(true); setError("");
@@ -86,7 +101,8 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
     </ul>
     {playing && <section aria-label={playing.title}>
       <h3>{playing.title}</h3><button className="ghost-button" onClick={() => setPlaying(undefined)}>Đóng video</button>
-      <iframe key={playing.id} title={playing.title} src={`https://www.youtube-nocookie.com/embed/${playing.youtubeId}?rel=0`} style={{ width: "100%", aspectRatio: "16 / 9", border: 0 }} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
+      {playing.source === "sftp" ? <video key={playing.id} aria-label={playing.title} src={playbackURL} controls playsInline preload="metadata" style={{ width: "100%", aspectRatio: "16 / 9", background: "#000" }} onError={() => setError("Không phát được video. Hãy đóng và mở lại để kiểm tra quyền và làm mới vé phát.")} />
+        : <iframe key={playing.id} title={playing.title} src={`https://www.youtube-nocookie.com/embed/${playing.youtubeId}?rel=0`} style={{ width: "100%", aspectRatio: "16 / 9", border: 0 }} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />}
     </section>}
   </div>;
 }

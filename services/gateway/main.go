@@ -78,6 +78,8 @@ func main() {
 	mux.HandleFunc("/v1/auth/", authProxy(authURL))
 	// Study verifies a scoped, expiring audio ticket for native media Range requests.
 	mux.HandleFunc("GET /v1/quiz-audio", reverseProxy(studyURL))
+	// Class validates a scoped video ticket and current permissions for every Range request.
+	mux.HandleFunc("GET /v1/class-video-stream", reverseProxy(classURL))
 	// /v1/study-sets/{id} goes to study; /v1/study-sets/{id}/quiz/* goes to quiz.
 	mux.HandleFunc("/v1/study-sets", authenticatedProxy(authURL, studyURL))
 	mux.HandleFunc("/v1/study-sets/", routeStudySets(authURL, studyURL, quizURL))

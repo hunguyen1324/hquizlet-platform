@@ -129,6 +129,18 @@ services:
       STUDY_SERVICE_URL:    "http://study:8082"
       NATS_URL:             "nats://${DATA_HOST}:${NATS_CLIENT_PORT:-4222}"
       CLASS_INTERNAL_TOKEN: "${CLASS_INTERNAL_TOKEN:?CLASS_INTERNAL_TOKEN is required}"
+      VIDEO_SFTP_HOST: "${VIDEO_SFTP_HOST:-}"
+      VIDEO_SFTP_PORT: "${VIDEO_SFTP_PORT:-2022}"
+      VIDEO_SFTP_USER: "${VIDEO_SFTP_USER:-}"
+      VIDEO_SFTP_ROOT: "${VIDEO_SFTP_ROOT:-/private-videos}"
+      VIDEO_SFTP_HOST_FINGERPRINT: "${VIDEO_SFTP_HOST_FINGERPRINT:-}"
+      VIDEO_SFTP_PASSWORD_FILE: "${VIDEO_SFTP_PASSWORD_FILE-/run/video-secrets/sftp-password}"
+      VIDEO_SFTP_PRIVATE_KEY_FILE: "${VIDEO_SFTP_PRIVATE_KEY_FILE:-}"
+      VIDEO_SFTP_MAX_CONNECTIONS: "${VIDEO_SFTP_MAX_CONNECTIONS:-4}"
+      VIDEO_TICKET_SECRET: "${VIDEO_TICKET_SECRET:-}"
+      VIDEO_MAX_UPLOAD_MB: "${VIDEO_MAX_UPLOAD_MB:-80}"
+    volumes:
+      - ./video-secrets:/run/video-secrets:ro
     expose: ["8084"]
     depends_on:
       auth: { condition: service_healthy }

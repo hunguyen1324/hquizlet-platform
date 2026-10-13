@@ -33,7 +33,9 @@ func Logging(next http.Handler) http.Handler {
 // RequireUserID protects class resources from unauthenticated requests.
 func RequireUserID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(r.URL.Path) < 4 || r.URL.Path[:4] != "/v1/" {
+		// This one media endpoint verifies its own scoped HMAC ticket and rechecks
+		// membership; a native video element cannot attach the bearer header.
+		if r.URL.Path == "/v1/class-video-stream" || len(r.URL.Path) < 4 || r.URL.Path[:4] != "/v1/" {
 			next.ServeHTTP(w, r)
 			return
 		}

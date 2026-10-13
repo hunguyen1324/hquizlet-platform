@@ -1,6 +1,7 @@
 package http
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -17,6 +18,8 @@ type classVideo struct {
 	YouTubeID string  `json:"youtubeId"`
 	Audience  string  `json:"audience"`
 	ViewerIDs []int64 `json:"viewerIds"`
+	Source    string  `json:"source,omitempty"`
+	SizeBytes int64   `json:"sizeBytes,omitempty"`
 }
 
 func youtubeID(raw string) string {
@@ -62,6 +65,23 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		writeServiceError(w, r, classservice.ErrForbidden)
 		return
 	}
+	if len(parts) == 1 && parts[0] == "upload" && r.Method == http.MethodPost {
+		if !staff {
+			writeServiceError(w, r, classservice.ErrForbidden)
+			return
+		}
+		h.uploadPrivateVideo(w, r, classID, cls.OwnerUserID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "playback" && r.Method == http.MethodPost {
+		id, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || id <= 0 {
+			WriteError(w, 400, "invalid video id")
+			return
+		}
+		h.privateVideoPlayback(w, r, classID, id, uid, staff)
+		return
+	}
 	if len(parts) > 1 {
 		WriteError(w, 404, "not found")
 		return
@@ -76,7 +96,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 	}
 	if r.Method == http.MethodGet && id == 0 {
 		viewer, _ := json.Marshal([]int64{uid})
-		rows, err := h.db.QueryContext(r.Context(), `SELECT id,title,youtube_id,audience,viewer_ids FROM class_videos WHERE class_id=$1 AND ($2 OR audience='all' OR viewer_ids @> $3::jsonb) ORDER BY created_at DESC,id DESC`, classID, staff, string(viewer))
+		rows, err := h.db.QueryContext(r.Context(), `SELECT id,title,COALESCE(youtube_id,''),audience,viewer_ids,CASE WHEN storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(size_bytes,0) FROM class_videos WHERE class_id=$1 AND ($2 OR audience='all' OR viewer_ids @> $3::jsonb) ORDER BY created_at DESC,id DESC`, classID, staff, string(viewer))
 		if err != nil {
 			writeServiceError(w, r, err)
 			return
@@ -86,7 +106,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		for rows.Next() {
 			v := classVideo{}
 			var raw []byte
-			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw); err != nil {
+			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes); err != nil {
 				writeServiceError(w, r, err)
 				return
 			}
@@ -111,6 +131,26 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		return
 	}
 	if r.Method == http.MethodDelete && id > 0 {
+		// Remove stored videos through the private storage path, not the public file service.
+		var key sql.NullString
+		err := h.db.QueryRowContext(r.Context(), `SELECT storage_key FROM class_videos WHERE class_id=$1 AND id=$2`, classID, id).Scan(&key)
+		if err == sql.ErrNoRows {
+			WriteError(w, 404, "video not found")
+			return
+		}
+		if err != nil {
+			writeServiceError(w, r, err)
+			return
+		}
+		if key.Valid {
+			if !h.privateVideosEnabled(w) {
+				return
+			}
+			if err := h.videoStore.Delete(r.Context(), key.String); err != nil {
+				WriteError(w, 502, "Không xóa được video trên kho lưu trữ")
+				return
+			}
+		}
 		result, err := h.db.ExecContext(r.Context(), `DELETE FROM class_videos WHERE class_id=$1 AND id=$2`, classID, id)
 		if err != nil {
 			writeServiceError(w, r, err)
@@ -140,6 +180,21 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 			return
 		}
 		in.Title = strings.TrimSpace(in.Title)
+		if r.Method == http.MethodPut {
+			var stored bool
+			if err := h.db.QueryRowContext(r.Context(), `SELECT storage_key IS NOT NULL FROM class_videos WHERE class_id=$1 AND id=$2`, classID, id).Scan(&stored); err != nil {
+				if err == sql.ErrNoRows {
+					WriteError(w, 404, "video not found")
+				} else {
+					writeServiceError(w, r, err)
+				}
+				return
+			}
+			if stored {
+				h.updatePrivateVideo(w, r, classID, id, cls.OwnerUserID, in.Title, in.Audience, in.ViewerIDs)
+				return
+			}
+		}
 		yt := youtubeID(in.URL)
 		if in.Title == "" || len([]rune(in.Title)) > 200 || yt == "" || (in.Audience != "all" && in.Audience != "selected") || len(in.ViewerIDs) > 1000 {
 			WriteError(w, 422, "Tiêu đề, liên kết YouTube hoặc quyền xem không hợp lệ")
@@ -183,7 +238,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 			writeServiceError(w, r, err)
 			return
 		}
-		WriteJSON(w, 200, classVideo{id, in.Title, yt, in.Audience, ids})
+		WriteJSON(w, 200, classVideo{ID: id, Title: in.Title, YouTubeID: yt, Audience: in.Audience, ViewerIDs: ids, Source: "youtube"})
 		return
 	}
 	WriteError(w, 405, "method not allowed")

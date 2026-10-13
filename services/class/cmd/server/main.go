@@ -15,9 +15,10 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/config"
 	classhttp "github.com/hunguyen1324/hquizlet-platform/services/class/internal/http"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/middleware"
-	"github.com/hunguyen1324/hquizlet-platform/services/class/migrations"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/repository"
 	classservice "github.com/hunguyen1324/hquizlet-platform/services/class/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/videostorage"
+	"github.com/hunguyen1324/hquizlet-platform/services/class/migrations"
 )
 
 func main() {
@@ -47,7 +48,19 @@ func main() {
 
 	// HTTP
 	mux := http.NewServeMux()
-	classhttp.New(classSvc, memberSvc, studySetSvc, activitySvc, db).Register(mux)
+	h := classhttp.New(classSvc, memberSvc, studySetSvc, activitySvc, db)
+	if cfg.VideoStorage.Host != "" {
+		if len(cfg.VideoTicketSecret) < 32 || cfg.VideoMaxBytes < 1024*1024 || cfg.VideoMaxBytes > 2*1024*1024*1024 {
+			log.Fatal("private videos require VIDEO_TICKET_SECRET >= 32 characters and VIDEO_MAX_UPLOAD_MB between 1 and 2048")
+		}
+		store, err := videostorage.New(cfg.VideoStorage)
+		if err != nil {
+			log.Fatalf("video storage configuration: %v", err)
+		}
+		h.ConfigureVideos(store, cfg.VideoTicketSecret, cfg.VideoMaxBytes)
+		go h.RunVideoCleanup(context.Background())
+	}
+	h.Register(mux)
 
 	// All /v1 class resources require a user identity. Health remains public.
 	handler := middleware.Chain(mux,

@@ -16,7 +16,17 @@ if [[ -n "${1:-}" ]]; then
 fi
 "${compose[@]}" config --quiet
 "${compose[@]}" pull nginx gateway auth study quiz class payment file
-"${compose[@]}" up -d --wait --wait-timeout 180 nginx gateway auth study quiz class payment file
+if ! "${compose[@]}" up -d --wait --wait-timeout 180 nginx gateway auth study quiz class payment file; then
+  echo "Deployment failed; Nginx startup and healthcheck diagnostics:" >&2
+  "${compose[@]}" ps || true
+  "${compose[@]}" logs --tail=60 nginx || true
+  nginx_id=$("${compose[@]}" ps -a -q nginx) || nginx_id=""
+  if [[ -n "$nginx_id" ]]; then
+    docker inspect "$nginx_id" --format '{{json .State.Health}}' || true
+  fi
+  "${compose[@]}" exec -T nginx nginx -t || true
+  exit 1
+fi
 "${compose[@]}" exec -T nginx nginx -t
 "${compose[@]}" exec -T nginx nginx -s reload
 # Keep the existing Quick Tunnel and its URL.
