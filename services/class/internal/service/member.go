@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/repository"
 )
@@ -20,39 +21,23 @@ func NewMemberService(classes repository.ClassStore, members repository.MemberSt
 	return &MemberService{classes: classes, members: members}
 }
 
-// ListMembers returns all members of a class (member only).
-func (s *MemberService) ListMembers(ctx context.Context, classID, userID int64) ([]*model.ClassMember, error) {
-	if err := s.requireMember(ctx, classID, userID); err != nil {
+// ListMembers returns all members of a class (any class member).
+func (s *MemberService) ListMembers(ctx context.Context, p authz.Principal, classID int64) ([]*model.ClassMember, error) {
+	if _, err := s.authorize(ctx, p, classID, authz.ActionClassMemberList); err != nil {
 		return nil, err
 	}
 	return s.members.ListByClass(ctx, classID)
 }
 
 // AddMember adds a member manually (owner/teacher only).
-func (s *MemberService) AddMember(ctx context.Context, classID, operatorID, targetUserID int64, role string) (*model.ClassMember, error) {
-	if operatorID <= 0 {
-		return nil, ErrUnauthorized
+func (s *MemberService) AddMember(ctx context.Context, p authz.Principal, classID, targetUserID int64, role string) (*model.ClassMember, error) {
+	if _, err := s.authorize(ctx, p, classID, authz.ActionClassMemberAdd); err != nil {
+		return nil, err
 	}
 
 	role = strings.TrimSpace(strings.ToLower(role))
 	if !model.ValidRoles[role] || role == "owner" {
 		return nil, errors.New("invalid role: must be 'teacher' or 'student'")
-	}
-
-	operatorRole, err := s.members.GetRole(ctx, classID, operatorID)
-	if err != nil {
-		return nil, err
-	}
-	if operatorRole == "" {
-		class, err := s.classes.GetByID(ctx, classID)
-		if err != nil {
-			return nil, err
-		}
-		if class.OwnerUserID != operatorID {
-			return nil, ErrForbidden
-		}
-	} else if operatorRole != "owner" && operatorRole != "teacher" {
-		return nil, ErrForbidden
 	}
 
 	class, err := s.classes.GetByID(ctx, classID)
@@ -119,10 +104,11 @@ func (s *MemberService) JoinByCode(ctx context.Context, code string, userID int6
 	}, nil
 }
 
-// UpdateRole changes a member's role (owner only).
-func (s *MemberService) UpdateRole(ctx context.Context, classID, operatorID, targetUserID int64, newRole string) error {
-	if operatorID <= 0 {
-		return ErrUnauthorized
+// UpdateRole changes a member's role (owner/teacher; never the owner's own record).
+func (s *MemberService) UpdateRole(ctx context.Context, p authz.Principal, classID, targetUserID int64, newRole string) error {
+	class, err := s.authorize(ctx, p, classID, authz.ActionClassMemberUpdateRole)
+	if err != nil {
+		return err
 	}
 
 	newRole = strings.TrimSpace(strings.ToLower(newRole))
@@ -130,37 +116,28 @@ func (s *MemberService) UpdateRole(ctx context.Context, classID, operatorID, tar
 		return errors.New("invalid role: must be 'teacher' or 'student'")
 	}
 
-	class, err := s.classes.GetByID(ctx, classID)
-	if err != nil {
-		return err
-	}
-	if class.OwnerUserID != operatorID {
+	if targetUserID == class.OwnerUserID {
 		return ErrForbidden
 	}
-
-	if targetUserID == operatorID {
-		return errors.New("owner cannot change their own role")
+	if targetUserID == p.UserID {
+		return errors.New("cannot change your own role")
 	}
 
 	return s.members.UpdateRole(ctx, classID, targetUserID, newRole)
 }
 
-// RemoveMember removes a member from a class (owner only).
-func (s *MemberService) RemoveMember(ctx context.Context, classID, operatorID, targetUserID int64) error {
-	if operatorID <= 0 {
-		return ErrUnauthorized
-	}
-
-	class, err := s.classes.GetByID(ctx, classID)
+// RemoveMember removes a member from a class (owner/teacher; never the owner).
+func (s *MemberService) RemoveMember(ctx context.Context, p authz.Principal, classID, targetUserID int64) error {
+	class, err := s.authorize(ctx, p, classID, authz.ActionClassMemberRemove)
 	if err != nil {
 		return err
 	}
-	if class.OwnerUserID != operatorID {
+
+	if targetUserID == class.OwnerUserID {
 		return ErrForbidden
 	}
-
-	if targetUserID == operatorID {
-		return errors.New("owner cannot remove themselves")
+	if targetUserID == p.UserID {
+		return errors.New("use leave to remove yourself")
 	}
 
 	return s.members.Remove(ctx, classID, targetUserID)
@@ -193,25 +170,28 @@ func (s *MemberService) GetRole(ctx context.Context, classID, userID int64) (str
 	return s.members.GetRole(ctx, classID, userID)
 }
 
-func (s *MemberService) requireMember(ctx context.Context, classID, userID int64) error {
-	if userID <= 0 {
-		return ErrUnauthorized
+// authorize resolves the caller's class role and checks the requested action with authz.Can.
+func (s *MemberService) authorize(ctx context.Context, p authz.Principal, classID int64, action authz.Action) (*model.Class, error) {
+	if p.UserID <= 0 {
+		return nil, ErrUnauthorized
 	}
-
 	class, err := s.classes.GetByID(ctx, classID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if class.OwnerUserID == userID {
-		return nil
+	role, err := s.members.GetRole(ctx, classID, p.UserID)
+	if err != nil || role == "" {
+		if class.OwnerUserID == p.UserID {
+			role = "owner"
+		} else {
+			return nil, ErrForbidden
+		}
 	}
-
-	role, err := s.members.GetRole(ctx, classID, userID)
-	if err != nil {
-		return err
+	p.ClassID = classID
+	p.ClassRole = role
+	res := authz.Resource{Type: "class", ID: classID, ClassID: classID, OwnerUserID: class.OwnerUserID}
+	if !authz.Can(p, action, res) {
+		return nil, ErrForbidden
 	}
-	if role == "" {
-		return ErrForbidden
-	}
-	return nil
+	return class, nil
 }

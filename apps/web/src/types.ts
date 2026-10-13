@@ -3,7 +3,93 @@
 
 export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
-export type AppView = "home" | "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments" | "create-type" | "quiz-editor" | "grammar-editor" | "quiz-sessions";
+export type AppView = "home" | "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments" | "create-type" | "quiz-editor" | "grammar-editor" | "quiz-sessions"
+  // Phase 2-4: dashboard + admin console views
+  | "overview" | "class-dashboard" | "admin";
+
+// ── Phase 2: dashboard statistics (GET /v1/me/study-stats) ─────────────
+
+export type StudyDayPoint = { date: string; sessions: number; cards: number; correct: number };
+
+export type RecentSession = {
+  studySetId: number;
+  studySetTitle: string;
+  mode: string;
+  score: number;
+  total: number;
+  completedAt?: string | null;
+  createdAt: string;
+};
+
+export type ContinueItem = {
+  studySetId: number;
+  title: string;
+  lastMode: string;
+  sessions: number;
+  bestScore: number;
+  lastPlayedAt: string;
+};
+
+export type OwnedSetStat = {
+  studySetId: number;
+  title: string;
+  sessions: number;
+  learners: number;
+  avgScorePct: number;
+};
+
+// ── Phase 3: class dashboard (GET /v1/classes/{id}/dashboard) ──────────
+
+export type ClassDashboardSetStat = {
+ dueAt?: string;
+  studySetId: number;
+  title: string;
+  sessions: number;
+  learners: number;
+  completionPct: number;
+  avgScorePct: number;
+};
+
+export type ClassDashboardStudentRow = {
+  userId: number;
+  name: string;
+  email?: string;
+  role?: string;
+  sessions: number;
+  completedSets: number;
+  avgScorePct: number;
+  lastActivityAt?: string | null;
+};
+
+export type ClassDashboardResponse = {
+  classId: number;
+  className: string;
+  viewerRole: string;
+  canViewAll: boolean;
+  showLeaderboard: boolean;
+  memberCount: number;
+  activeMembers7d: number;
+  assignedSets: ClassDashboardSetStat[];
+  students: ClassDashboardStudentRow[];
+  myProgress?: ClassDashboardStudentRow;
+  recentActivity?: Array<{ id: number; eventType: string; entityType: string; occurredAt: string; metadata?: Record<string, unknown> }>;
+};
+
+export type StudyStats = {
+  rangeDays: number;
+  streakDays: number;
+  studiedToday: boolean;
+  sessionsTotal: number;
+  sessionsInRange: number;
+  cardsInRange: number;
+  correctInRange: number;
+  accuracyPct: number;
+  dueCards: number;
+  series: StudyDayPoint[];
+  recentSessions: RecentSession[];
+  continueLearning: ContinueItem[];
+  ownedSets: OwnedSetStat[];
+};
 
 export type User = {
   id: number;
@@ -121,6 +207,7 @@ export type ClassMember = {
 };
 
 export type ClassStudySet = {
+ dueAt?: string;
   classId: number;
   studySetId: number;
   title?: string;

@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/model"
+	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/service"
 )
 
@@ -24,12 +28,63 @@ func NewRouter(svc *service.AuthService, db *sql.DB) http.Handler {
 	mux.HandleFunc("GET /v1/auth/me", meHandler(svc))
 	mux.HandleFunc("POST /v1/auth/register", registerHandler(svc))
 	mux.HandleFunc("POST /v1/auth/login", loginHandler(svc))
+	mux.HandleFunc("POST /v1/auth/reauth", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Password string `json:"password"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in) != nil {
+			writeError(w, 400, "invalid_json", "invalid body")
+			return
+		}
+		u, err := svc.ConfirmPassword(r.Context(), bearerToken(r), in.Password)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		identity, err := svc.VerifyToken(r.Context(), bearerToken(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"userId": u.ID, "role": identity.Role, "platformRoles": identity.PlatformRoles})
+	})
 	mux.HandleFunc("POST /v1/auth/logout", logoutHandler(svc))
 	mux.HandleFunc("POST /v1/auth/logout-all", logoutAllHandler(svc))
 	mux.HandleFunc("POST /v1/auth/refresh", refreshHandler(svc))
 
 	// internal token verify for gateway/study – P2-AUTH-02
 	mux.HandleFunc("GET /internal/auth/verify", verifyHandler(svc))
+	// internal user directory for trusted services (class dashboard) – Phase 3
+	mux.HandleFunc("GET /internal/users", internalUsersHandler(svc))
+
+	// IAM permissions for web UI
+	mux.HandleFunc("GET /v1/me/permissions", permissionsHandler(svc))
+
+	// Admin IAM console (Phase 1 / IAM-09). Gateway performs a coarse admin check; the
+	// service re-checks every action with authz.Can and writes an audit entry.
+	mux.HandleFunc("GET /v1/admin/overview", adminOverviewHandler(svc))
+	mux.HandleFunc("GET /v1/admin/users/stats", authz.DailyMetricsHandler(db, "auth"))
+	mux.HandleFunc("GET /v1/admin/roles", adminListRolesHandler(svc))
+	mux.HandleFunc("GET /v1/admin/assignments", adminListAssignmentsHandler(svc))
+	mux.HandleFunc("POST /v1/admin/assignments", adminAssignRoleHandler(svc))
+	mux.HandleFunc("DELETE /v1/admin/assignments/{id}", adminRevokeRoleHandler(svc))
+	mux.HandleFunc("GET /v1/admin/users", adminListUsersHandler(svc))
+	mux.HandleFunc("GET /v1/admin/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id < 1 {
+			writeError(w, 422, "invalid_id", "invalid user ID")
+			return
+		}
+		u, err := svc.GetAdminUser(r.Context(), principalFromRequest(r), id)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, 200, u)
+	})
+	mux.HandleFunc("POST /v1/admin/users/{id}/disable", adminSetUserDisabledHandler(svc, true))
+	mux.HandleFunc("POST /v1/admin/users/{id}/enable", adminSetUserDisabledHandler(svc, false))
+	mux.HandleFunc("GET /v1/admin/audit", adminAuditHandler(svc))
 
 	// user profile – P2-AUTH-03
 	mux.HandleFunc("GET /v1/auth/profile", profileGetHandler(svc))
@@ -45,6 +100,212 @@ func NewRouter(svc *service.AuthService, db *sql.DB) http.Handler {
 }
 
 // --- handlers ---
+
+func permissionsHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		classID, _ := strconv.ParseInt(r.URL.Query().Get("classId"), 10, 64)
+		resp, err := svc.Permissions(r.Context(), bearerToken(r), classID)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// principalFromRequest builds the IAM principal from gateway-injected identity headers.
+// The gateway strips these headers from client requests before injecting verified values.
+func principalFromRequest(r *http.Request) authz.Principal {
+	id, _ := strconv.ParseInt(r.Header.Get("X-User-ID"), 10, 64)
+	return authz.Principal{
+		UserID:        id,
+		LegacyRole:    r.Header.Get("X-User-Role"),
+		PlatformRoles: authz.ParsePlatformRoles(r.Header.Get("X-User-Roles")),
+	}
+}
+
+func clientIP(r *http.Request) string {
+	address := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		address = strings.SplitN(fwd, ",", 2)[0]
+	}
+	address = strings.TrimSpace(address)
+	if host, _, err := net.SplitHostPort(address); err == nil {
+		address = host
+	}
+	if ip := net.ParseIP(address); ip != nil {
+		return ip.String()
+	}
+	// An invalid forwarding value must not prevent PostgreSQL from recording the audit.
+	return ""
+}
+
+func listParams(r *http.Request) (limit, offset int) {
+	limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ = strconv.Atoi(r.URL.Query().Get("offset"))
+	return limit, offset
+}
+
+// parseRangeDays accepts "7d" / "28" and returns 0 for anything unparseable (service default).
+func parseRangeDays(raw string) int {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return 0
+	}
+	raw = strings.TrimSuffix(raw, "d")
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func adminOverviewHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		view, err := svc.AdminOverview(r.Context(), principalFromRequest(r), parseRangeDays(r.URL.Query().Get("range")), requestID(w), clientIP(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, view)
+	}
+}
+
+func adminListRolesHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		roles, err := svc.ListRoles(r.Context(), principalFromRequest(r), requestID(w), clientIP(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"roles": roles})
+	}
+}
+
+func adminListAssignmentsHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		principalID, _ := strconv.ParseInt(r.URL.Query().Get("userId"), 10, 64)
+		limit, offset := listParams(r)
+		items, err := svc.ListAssignments(r.Context(), principalFromRequest(r), principalID, r.URL.Query().Get("roleKey"), limit, offset, requestID(w), clientIP(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"assignments": items})
+	}
+}
+
+func adminAssignRoleHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor := principalFromRequest(r)
+		// Authorize before reading the body so an unauthorized caller never gets 400/422 feedback.
+		if err := svc.AuthorizeAssignRole(r.Context(), actor, requestID(w), clientIP(r)); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		var in struct {
+			UserID    int64  `json:"userId"`
+			RoleKey   string `json:"roleKey"`
+			ScopeType string `json:"scopeType"`
+			ScopeID   *int64 `json:"scopeId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+			return
+		}
+		if in.RoleKey == authz.RolePlatformAdmin {
+			u, err := svc.ConfirmPassword(r.Context(), bearerToken(r), r.Header.Get("X-Admin-Password"))
+			if err != nil {
+				writeServiceError(w, err)
+				return
+			}
+			if u.ID != actor.UserID {
+				writeError(w, 403, "forbidden", "identity mismatch")
+				return
+			}
+		}
+		created, err := svc.AssignRole(r.Context(), actor, in.UserID, in.RoleKey, in.ScopeType, in.ScopeID, requestID(w), clientIP(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, created)
+	}
+}
+
+func adminRevokeRoleHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid_id", "invalid assignment id")
+			return
+		}
+		if err := svc.RevokeRole(r.Context(), principalFromRequest(r), id, requestID(w), clientIP(r)); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	}
+}
+
+func adminListUsersHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit, offset := listParams(r)
+		users, total, err := svc.ListAdminUsers(r.Context(), principalFromRequest(r), r.URL.Query().Get("search"), r.URL.Query().Get("role"), limit, offset, requestID(w), clientIP(r), r.URL.Query().Get("status"))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"users": users, "total": total})
+	}
+}
+
+func adminSetUserDisabledHandler(svc *service.AuthService, disabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid_id", "invalid user id")
+			return
+		}
+		u, err := svc.SetUserDisabled(r.Context(), principalFromRequest(r), id, disabled, requestID(w), clientIP(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, u)
+	}
+}
+
+func adminAuditHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actorID, _ := strconv.ParseInt(r.URL.Query().Get("actorId"), 10, 64)
+		limit, offset := listParams(r)
+		entries, err := svc.ListAudit(r.Context(), principalFromRequest(r), actorID, r.URL.Query().Get("action"), limit, offset, requestID(w), clientIP(r))
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+	}
+}
+
+// internalUsersHandler resolves user ids to display records for trusted services.
+// Requires the shared internal token; never reachable through the public gateway.
+func internalUsersHandler(svc *service.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !internalTokenOK(r) {
+			writeError(w, http.StatusUnauthorized, "invalid_internal_token", "invalid internal token")
+			return
+		}
+		ids := parseIDList(r.URL.Query().Get("ids"))
+		users, err := svc.UserDirectory(r.Context(), ids)
+		if err != nil {
+			writeServiceError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"users": users})
+	}
+}
 
 func meHandler(svc *service.AuthService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +488,10 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		errors.Is(err, service.ErrRevokedSession),
 		errors.Is(err, service.ErrDisabledUser):
 		writeError(w, http.StatusUnauthorized, "invalid_session", "invalid or expired session")
+	case errors.Is(err, repository.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "resource not found")
+	case errors.Is(err, service.ErrUnauthorized):
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authentication required")
 	case errors.Is(err, service.ErrForbidden):
 		writeError(w, http.StatusForbidden, "forbidden", "access denied")
 	default:

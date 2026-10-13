@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"net/http"
 	"strconv"
 
@@ -34,6 +35,11 @@ func (h *PriceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // PUT /v1/study-sets/{id}/price
 func (h *PriceHandler) setPrice(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
+	p := authz.Principal{UserID: userID, LegacyRole: middleware.GetUserRole(r.Context()), PlatformRoles: authz.ParsePlatformRoles(r.Header.Get("X-User-Roles"))}
+	if !authz.Can(p, authz.ActionStudySetSetPrice, authz.Resource{Type: "study-set", OwnerUserID: userID}) {
+		WriteError(w, http.StatusForbidden, "teacher permission required to set a price")
+		return
+	}
 
 	parts := PathParts(r.URL.Path, "/v1/study-sets/")
 	if len(parts) == 0 {

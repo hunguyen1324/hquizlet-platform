@@ -66,7 +66,7 @@ func (s *QuizQuestionService) checkOwner(ctx context.Context, id, userID int64) 
 	if err != nil {
 		return err
 	}
-	if !ok {
+	if !ok && !hasStudyWritePermission(ctx, userID, id) {
 		return ErrForbidden
 	}
 	return nil

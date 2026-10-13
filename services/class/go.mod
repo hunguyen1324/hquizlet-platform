@@ -3,12 +3,15 @@ module github.com/hunguyen1324/hquizlet-platform/services/class
 go 1.23.0
 
 require (
+	github.com/hunguyen1324/hquizlet-platform/packages/authz v0.0.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/nats-io/nats.go v1.37.0
 	github.com/pkg/sftp v1.13.10
 	golang.org/x/crypto v0.41.0
 )
+
+replace github.com/hunguyen1324/hquizlet-platform/packages/authz => ../../packages/authz
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

@@ -14,11 +14,13 @@ type Props = {
   onDelete: () => void;
   onStartLive?: () => void;
   onOpenSet?: (id: number) => void;
+  /** Phase 3: navigates to the class dashboard route. */
+  onOpenDashboard?: () => void;
 };
 
 type Tab = "study-sets" | "members" | "videos";
 
-export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, onOpenSet }: Props) {
+export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, onOpenSet, onOpenDashboard }: Props) {
   const { token, user } = useAuth();
   const [cls, setCls] = useState<ClassDetailType | null>(null);
   const [members, setMembers] = useState<ClassMember[]>([]);
@@ -76,6 +78,9 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
           </div>
         </div>
         <div className="class-detail-actions">
+          {onOpenDashboard && (
+            <button className="ghost-button" onClick={onOpenDashboard}>📊 Dashboard</button>
+          )}
           {isTeacher && onStartLive && <button className="primary-button" onClick={onStartLive}>▶ Chạy live</button>}
           {isOwner && (
             <>
@@ -189,6 +194,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
 function AddStudySetForm({ classId, onAdded }: { classId: number; onAdded: () => void }) {
   const { token } = useAuth();
   const [studySetId, setStudySetId] = useState("");
+ const [dueAt,setDueAt]=useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function handleAdd() {
@@ -199,7 +205,7 @@ function AddStudySetForm({ classId, onAdded }: { classId: number; onAdded: () =>
       return;
     }
     try {
-      await classStudySetApi.add(token, classId, id);
+      await classStudySetApi.add(token, classId, id, dueAt ? new Date(dueAt).toISOString() : undefined);
       setStudySetId("");
       setError(null);
       onAdded();
@@ -211,7 +217,7 @@ function AddStudySetForm({ classId, onAdded }: { classId: number; onAdded: () =>
   return (
     <div className="inline-form">
       <input type="number" value={studySetId} onChange={(e) => setStudySetId(e.target.value)} placeholder="ID học phần" />
-      <button className="primary-button small" onClick={handleAdd}>Thêm học phần</button>
+      <label>Hạn làm bài (tuỳ chọn)<input type="datetime-local" value={dueAt} onChange={e=>setDueAt(e.target.value)}/></label><button className="primary-button small" onClick={handleAdd}>Thêm học phần</button>
       {error && <span className="error-inline">{error}</span>}
     </div>
   );

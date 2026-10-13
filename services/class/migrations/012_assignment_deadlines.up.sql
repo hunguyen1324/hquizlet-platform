@@ -1,0 +1,1 @@
+ALTER TABLE class_study_sets ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;

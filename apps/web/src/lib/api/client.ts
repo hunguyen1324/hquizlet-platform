@@ -3,6 +3,7 @@
 import type {
   ActivityFeedResponse,
   AdminOrderList,
+  ClassDashboardResponse,
   AdminTxList,
   AuthResponse,
   ClassDetail,
@@ -19,6 +20,7 @@ import type {
   QuizQuestion,
   StudySet,
   StudySetAccessInfo,
+  StudyStats,
   User,
   WalletBalance,
   WalletTransactionList,
@@ -49,7 +51,12 @@ export async function apiFetch<T>(path: string, token: string, init: RequestInit
 
 export const authApi = {
   login: (email: string, password: string): Promise<AuthResponse> => apiFetch("/v1/auth/login", "", { method: "POST", body: JSON.stringify({ email, password }) }),
-  register: (name: string, email: string, password: string): Promise<AuthResponse> => apiFetch("/v1/auth/register", "", { method: "POST", body: JSON.stringify({ name, email, password }) }),
+  register: (name: string, email: string, password: string, accountType: "teacher" | "student" = "student"): Promise<AuthResponse> =>
+    apiFetch("/v1/auth/register", "", { method: "POST", body: JSON.stringify({ name, email, password, accountType }) }),
+  permissions: (token: string, classId?: number) => {
+    const q = classId ? `?classId=${classId}` : "";
+    return apiFetch<{ platformRoles: string[]; legacyRole: string; actions: string[] }>(classId ? `/v1/classes/${classId}/permissions` : `/v1/me/permissions${q}`, token);
+  },
   me: (token: string): Promise<AuthResponse> => apiFetch("/v1/auth/me", token),
   logout: (token: string): Promise<void> => apiFetch("/v1/auth/logout", token, { method: "POST" }),
   refresh: (token: string): Promise<AuthResponse> => apiFetch("/v1/auth/refresh", token, { method: "POST" }),
@@ -217,7 +224,7 @@ export const memberApi = {
 
 export const classStudySetApi = {
   list: (token: string, classId: number): Promise<ClassStudySet[]> => apiFetch(`/v1/classes/${classId}/study-sets`, token),
-  add: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets`, token, { method: "POST", body: JSON.stringify({ studySetId }) }),
+  add: (token: string, classId: number, studySetId: number, dueAt?: string): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets`, token, { method: "POST", body: JSON.stringify({ studySetId, dueAt }) }),
   remove: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
 };
 
@@ -235,6 +242,15 @@ export const classVideoApi = {
   list: (token: string, classId: number): Promise<ClassVideo[]> => apiFetch(`/v1/classes/${classId}/videos`, token),
   save: (token: string, classId: number, input: ClassVideoInput, id?: number): Promise<ClassVideo> => apiFetch(`/v1/classes/${classId}/videos${id ? `/${id}` : ""}`, token, { method: id ? "PUT" : "POST", body: JSON.stringify(input) }),
   remove: (token: string, classId: number, id: number): Promise<void> => apiFetch(`/v1/classes/${classId}/videos/${id}`, token, { method: "DELETE" }),
+};
+
+// ── Phase 3: class dashboard ───────────────────────────────────────────
+
+export const classDashboardApi = {
+  get: (token: string, classId: number): Promise<ClassDashboardResponse> =>
+    apiFetch<ClassDashboardResponse>(`/v1/classes/${classId}/dashboard`, token),
+  setLeaderboard: (token: string, classId: number, enabled: boolean): Promise<{ showLeaderboard: boolean }> =>
+    apiFetch(`/v1/classes/${classId}/leaderboard`, token, { method: "PUT", body: JSON.stringify({ enabled }) }),
 };
 
 export const activityApi = {
@@ -275,8 +291,8 @@ export const adminApi = {
     apiFetch("/v1/admin/payments/orders", token, {}, { limit, offset }),
   listTransactions: (token: string, limit = 50, offset = 0): Promise<AdminTxList> =>
     apiFetch("/v1/admin/wallet/transactions", token, {}, { limit, offset }),
-  credit: (token: string, userId: number, amountVnd: number, note: string): Promise<void> =>
-    apiFetch("/v1/admin/wallet/credit", token, { method: "POST", body: JSON.stringify({ userId, amountVnd, note }) }),
+  credit: (token: string, userId: number, amountVnd: number, note: string, password: string): Promise<void> =>
+    apiFetch("/v1/admin/wallet/credit", token, { method: "POST", headers: { "X-Admin-Password": password }, body: JSON.stringify({ userId, amountVnd, note }) }),
 };
 
 export type QuizQuestionPayload = {
@@ -346,11 +362,80 @@ export const ttsApi = {
     if (!res.ok) throw new ApiError(res.status, `Request failed ${res.status}`);
     return res.blob();
   },
+};// ── Phase 2: personal dashboard statistics ──────────────────────────────
+
+export const statsApi = {
+  studyStats: (token: string, days?: number): Promise<StudyStats> =>
+    apiFetch<StudyStats>("/v1/me/study-stats", token, {}, days ? { days } : undefined),
 };
 
-export type {
-  ActivityFeedResponse,
+// ── Phase 4: admin console (IAM + users + audit) ───────────────────────
+
+export type AdminRole = { policy?: { Version: string; Statements: Array<{Effect: string; Actions: string[]; Resources: string[]; Condition?: Record<string, string>}> }; id: number; key: string; name: string; description: string; kind: string; orgId?: number };
+export type AdminAssignment = {
+  id: number;
+  principalType: string;
+  principalId: number;
+  roleKey: string;
+  scopeType: string;
+  scopeId?: number;
+  createdBy: number;
+  createdAt: string;
+  expiresAt?: string;
+};
+export type AdminUserRow = { platformRoles?: string[]; id: number; name: string; email: string; role: string; disabled: boolean; createdAt: string };
+export type AdminAuditEntry = {
+  id: number;
+  actorId: number;
+  action: string;
+  resource: string;
+  result: "allow" | "deny" | string;
+  requestId?: string;
+  ip?: string;
+  detail?: unknown;
+  at: string;
+};
+
+export type AdminOverview = {
+  rangeDays: number;
+  kpis: {
+    totalUsers: number;
+    newUsers: number;
+    newUsersDeltaPct: number;
+    activeUsers: number;
+    activeUsersDeltaPct: number;
+    assignments: number;
+    auditEvents: number;
+    deniedAttempts: number;
+  };
+  series: Array<{ date: string; newUsers: number; activeUsers: number }>;
+};
+
+export const adminIamApi = {
+  overview: (token: string, rangeDays?: number): Promise<AdminOverview> =>
+    apiFetch("/v1/admin/overview", token, {}, rangeDays ? { range: `${rangeDays}d` } : undefined),
+  listRoles: (token: string): Promise<{ roles: AdminRole[] }> => apiFetch("/v1/admin/roles", token),
+  listAssignments: (token: string, params?: { userId?: number; roleKey?: string; limit?: number; offset?: number }): Promise<{ assignments: AdminAssignment[] }> =>
+    apiFetch("/v1/admin/assignments", token, {}, params),
+  assignRole: (token: string, payload: { userId: number; roleKey: string; scopeType?: string; scopeId?: number | null; password?: string }): Promise<AdminAssignment> =>
+    apiFetch("/v1/admin/assignments", token, { method: "POST", headers: { "X-Admin-Password": payload.password ?? "" }, body: JSON.stringify({ ...payload, password: undefined }) }),
+  revokeRole: (token: string, assignmentId: number): Promise<void> =>
+    apiFetch(`/v1/admin/assignments/${assignmentId}`, token, { method: "DELETE" }),
+  listUsers: (token: string, params?: { search?: string; role?: string; status?: string; limit?: number; offset?: number }): Promise<{ users: AdminUserRow[]; total: number }> =>
+    apiFetch("/v1/admin/users", token, {}, params),
+  disableUser: (token: string, userId: number): Promise<AdminUserRow> =>
+    apiFetch(`/v1/admin/users/${userId}/disable`, token, { method: "POST" }),
+  enableUser: (token: string, userId: number): Promise<AdminUserRow> =>
+    apiFetch(`/v1/admin/users/${userId}/enable`, token, { method: "POST" }),
+  listAudit: (token: string, params?: { actorId?: number; action?: string; limit?: number; offset?: number }): Promise<{ entries: AdminAuditEntry[] }> =>
+    apiFetch("/v1/admin/audit", token, {}, params),
+};
+
+export { adminApi as adminPaymentsApi };
+
+export type { ActivityFeedResponse,
   AuthResponse,
+  ClassDashboardResponse,
   ClassDetail,
   ClassMember,
   ClassStudySet,

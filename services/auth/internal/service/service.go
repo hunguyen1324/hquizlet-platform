@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/repository"
 	"golang.org/x/crypto/bcrypt"
@@ -17,13 +18,13 @@ import (
 
 // P2-AUTH-04: typed sentinel errors mapped to HTTP codes by handler.
 var (
-	ErrEmailTaken        = errors.New("email already registered")  // 409
-	ErrInvalidCredential = errors.New("invalid email or password") // 401
+	ErrEmailTaken        = errors.New("email already registered")   // 409
+	ErrInvalidCredential = errors.New("invalid email or password")  // 401
 	ErrInvalidSession    = errors.New("invalid or expired session") // 401
 	ErrExpiredSession    = errors.New("expired session")            // 401
 	ErrRevokedSession    = errors.New("revoked session")            // 401
-	ErrDisabledUser      = errors.New("disabled user")               // 401
-	ErrForbidden         = errors.New("forbidden")                 // 403
+	ErrDisabledUser      = errors.New("disabled user")              // 401
+	ErrForbidden         = errors.New("forbidden")                  // 403
 )
 
 var emailRE = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
@@ -32,6 +33,13 @@ var emailRE = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 type AuthService struct {
 	repo       Repository
 	sessionTTL time.Duration
+	overview   repository.OverviewStore
+}
+
+// WithOverview wires the admin overview aggregation (GET /v1/admin/overview).
+func (s *AuthService) WithOverview(o repository.OverviewStore) *AuthService {
+	s.overview = o
+	return s
 }
 
 // New wires up the service with the real repository.
@@ -66,6 +74,13 @@ func (s *AuthService) Register(ctx context.Context, input model.RegisterInput) (
 		}
 		return model.SessionResponse{}, err
 	}
+	roleKey := platformRoleForRegistration(input.AccountType)
+	if err := s.repo.CreatePlatformAssignment(ctx, created.ID, roleKey, created.ID); err != nil {
+		return model.SessionResponse{}, err
+	}
+	_ = s.repo.InsertAuditLog(ctx, created.ID, string(authz.ActionIAMAssignRole), auditResourceUser(created.ID), "allow", "", "", map[string]any{
+		"roleKey": roleKey, "scope": "platform", "source": "registration",
+	})
 	return s.newSession(ctx, created)
 }
 
@@ -78,6 +93,9 @@ func (s *AuthService) Login(ctx context.Context, input model.LoginInput) (model.
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(input.Password)); err != nil {
 		return model.SessionResponse{}, ErrInvalidCredential
+	}
+	if u.Disabled {
+		return model.SessionResponse{}, ErrDisabledUser
 	}
 	return s.newSession(ctx, u)
 }
@@ -177,8 +195,24 @@ func (s *AuthService) verifiedIdentity(ctx context.Context, token string) (model
 	if !session.ExpiresAt.After(time.Now().UTC()) {
 		return model.VerifiedIdentity{}, model.User{}, ErrExpiredSession
 	}
+	platformRoles, err := s.loadPlatformRoles(ctx, u)
+	if err != nil {
+		return model.VerifiedIdentity{}, model.User{}, err
+	}
+	// Org memberships travel with the identity so downstream services can inherit org roles
+	// onto the classes of that organization without calling back into auth on every request.
+	orgRoles, err := s.repo.ListOrgRoleEntries(ctx, u.ID)
+	if err != nil {
+		return model.VerifiedIdentity{}, model.User{}, err
+	}
 	return model.VerifiedIdentity{
-		UserID: u.ID, Email: u.Email, Name: u.Name, Role: u.Role, ExpiresAt: session.ExpiresAt,
+		UserID:        u.ID,
+		Email:         u.Email,
+		Name:          u.Name,
+		Role:          legacyRoleFromPlatformRoles(platformRoles, u.Role),
+		PlatformRoles: platformRoles,
+		OrgRoles:      orgRoles,
+		ExpiresAt:     session.ExpiresAt,
 	}, u, nil
 }
 

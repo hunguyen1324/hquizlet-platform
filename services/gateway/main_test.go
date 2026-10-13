@@ -350,3 +350,116 @@ func TestRouteStudySetsStripsSpoofedUserID(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
 	}
 }
+
+// ─── Phase 1: /v1/admin gate ─────────────────────────────────────────────────
+
+func newAdminAuthServer(t *testing.T, identity verifiedIdentity) *httptest.Server {
+	t.Helper()
+	authCache = newTokenCache(60 * time.Second)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(identity)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestAdminProxyRejectsNonAdmins(t *testing.T) {
+	for _, identity := range []verifiedIdentity{
+		{Authenticated: true, UserID: 7, Role: "user", PlatformRoles: []string{"Student"}},
+		{Authenticated: true, UserID: 8, Role: "user", PlatformRoles: []string{"Teacher"}},
+	} {
+		auth := newAdminAuthServer(t, identity)
+		upstreamCalled := false
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upstreamCalled = true
+		}))
+		defer upstream.Close()
+
+		h := requestID(adminAuthenticatedProxy(auth.URL, upstream.URL))
+		req := httptest.NewRequest(http.MethodGet, "/v1/admin/users", nil)
+		req.Header.Set("Authorization", "Bearer valid")
+		req.Header.Set("X-Request-ID", "req-admin-deny")
+		resp := httptest.NewRecorder()
+		h.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("roles %v: expected 403, got %d", identity.PlatformRoles, resp.Code)
+		}
+		if upstreamCalled {
+			t.Fatalf("roles %v: upstream must not be called for non-admins", identity.PlatformRoles)
+		}
+	}
+}
+
+func TestAdminProxyAllowsAdminAndInjectsSignatureHeaders(t *testing.T) {
+	auth := newAdminAuthServer(t, verifiedIdentity{Authenticated: true, UserID: 1, Role: "admin", PlatformRoles: []string{"PlatformAdmin"}})
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-User-Roles"); got != "PlatformAdmin" {
+			t.Fatalf("expected injected X-User-Roles PlatformAdmin, got %q", got)
+		}
+		if got := r.Header.Get("X-User-Role"); got != "admin" {
+			t.Fatalf("expected legacy X-User-Role admin, got %q", got)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	h := requestID(adminAuthenticatedProxy(auth.URL, upstream.URL))
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/roles", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set("X-Request-ID", "req-admin-allow")
+	resp := httptest.NewRecorder()
+	h.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestAdminProxyStripsSpoofedRoleHeaders(t *testing.T) {
+	auth := newAdminAuthServer(t, verifiedIdentity{Authenticated: true, UserID: 7, Role: "user", PlatformRoles: []string{"Student"}})
+
+	upstreamCalled := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalled = true
+	}))
+	defer upstream.Close()
+
+	h := requestID(adminAuthenticatedProxy(auth.URL, upstream.URL))
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/wallet/credit", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set("X-User-ID", "1")                // spoofed admin id
+	req.Header.Set("X-User-Role", "admin")          // spoofed legacy admin
+	req.Header.Set("X-User-Roles", "PlatformAdmin") // spoofed role list
+	req.Header.Set("X-Request-ID", "req-admin-spoof")
+	resp := httptest.NewRecorder()
+	h.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("spoofed admin headers must not pass the gate: got %d", resp.Code)
+	}
+	if upstreamCalled {
+		t.Fatal("upstream must not be called for a spoofed admin request")
+	}
+}
+
+func TestAdminProxyAllowsPlatformSupportReadOnly(t *testing.T) {
+	auth := newAdminAuthServer(t, verifiedIdentity{Authenticated: true, UserID: 4, Role: "user", PlatformRoles: []string{"PlatformSupport"}})
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	h := requestID(adminAuthenticatedProxy(auth.URL, upstream.URL))
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	req.Header.Set("X-Request-ID", "req-support")
+	resp := httptest.NewRecorder()
+	h.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected support read access, got %d: %s", resp.Code, resp.Body.String())
+	}
+}

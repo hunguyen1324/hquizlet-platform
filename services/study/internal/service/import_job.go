@@ -349,7 +349,7 @@ func (s *ImportJobService) checkOwner(ctx context.Context, studySetID, userID in
 	if err != nil {
 		return err
 	}
-	if !ok {
+	if !ok && !hasStudyWritePermission(ctx, userID, studySetID) {
 		return ErrForbidden
 	}
 	return nil

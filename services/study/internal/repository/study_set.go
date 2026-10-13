@@ -179,7 +179,7 @@ func (r *StudySetRepository) Get(ctx context.Context, id int64) (model.StudySet,
 		SELECT id, user_id, title, description, thumbnail_url,
 		       content_type, term_language, definition_language, visibility,
 		       created_at, updated_at
-		FROM study_sets WHERE id = $1
+		FROM study_sets WHERE id = $1 AND NOT moderation_hidden
 	`, id).Scan(&s.ID, &s.UserID, &s.Title, &s.Description, &s.ThumbnailURL,
 		&s.ContentType, &s.TermLanguage, &s.DefinitionLanguage, &s.Visibility,
 		&s.CreatedAt, &s.UpdatedAt)
@@ -265,7 +265,7 @@ func (r *StudySetRepository) Update(ctx context.Context, id int64, in model.Upda
 
 // Delete removes a study set (cascades to flashcards via FK).
 func (r *StudySetRepository) Delete(ctx context.Context, id int64) error {
-	res, err := r.db.ExecContext(ctx, "DELETE FROM study_sets WHERE id = $1", id)
+	res, err := r.db.ExecContext(ctx, "DELETE FROM study_sets WHERE id = $1 AND NOT moderation_hidden", id)
 	if err != nil {
 		return err
 	}
@@ -279,7 +279,7 @@ func (r *StudySetRepository) Delete(ctx context.Context, id int64) error {
 // IsOwner checks whether userID is the owner of the study set.
 func (r *StudySetRepository) IsOwner(ctx context.Context, id, userID int64) (bool, error) {
 	var owner int64
-	err := r.db.QueryRowContext(ctx, "SELECT user_id FROM study_sets WHERE id = $1", id).Scan(&owner)
+	err := r.db.QueryRowContext(ctx, "SELECT user_id FROM study_sets WHERE id = $1 AND NOT moderation_hidden", id).Scan(&owner)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, ErrNotFound
 	}

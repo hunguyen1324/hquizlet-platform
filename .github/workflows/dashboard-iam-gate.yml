@@ -1,0 +1,50 @@
+name: Dashboard IAM gate
+
+on:
+  pull_request:
+    paths:
+      - 'packages/authz/**'
+      - 'services/**'
+      - 'apps/web/**'
+      - 'go.work*'
+      - 'infra/docker/**'
+      - 'infra/scripts/phase10-e2e.sh'
+      - 'infra/scripts/dashboard-*'
+      - 'packages/api-contracts/**'
+      - 'redocly.yaml'
+      - '.github/workflows/dashboard-iam-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            packages/authz/go.sum
+            services/*/go.sum
+            pkg/*/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Go authorization and service tests
+        run: go test ./packages/authz/... ./services/auth/... ./services/class/... ./services/study/... ./services/gateway/... ./services/payment/... ./services/quiz/...
+      - name: Web contracts and build
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Isolated IAM E2E
+        timeout-minutes: 20
+        run: bash infra/scripts/phase10-e2e.sh
+      - name: OpenAPI lint
+        run: npx --yes @redocly/cli@2 lint packages/api-contracts/openapi.yaml

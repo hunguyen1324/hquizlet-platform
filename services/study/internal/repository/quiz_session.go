@@ -155,8 +155,15 @@ func (r *QuizSessionRepository) Update(ctx context.Context, id string, uid, setI
 	if err = json.Unmarshal(data, &s); err != nil {
 		return err
 	}
+	wasSubmitted := s.SubmittedAt != nil
 	if err = fn(&s); err != nil {
 		return err
+	}
+	if !wasSubmitted && s.SubmittedAt != nil && s.CompletedScore != nil {
+		_, err = tx.ExecContext(ctx, `INSERT INTO learning_sessions(user_id,study_set_id,mode,score,total,started_at,completed_at,idempotency_key) VALUES($1,$2,'test',$3,$4,$5,$6,$7) ON CONFLICT(user_id,idempotency_key) DO NOTHING`, uid, setID, *s.CompletedScore, len(s.Items), s.StartedAt, s.SubmittedAt, "quiz-"+s.ID)
+		if err != nil {
+			return err
+		}
 	}
 	data, err = json.Marshal(s)
 	if err != nil {

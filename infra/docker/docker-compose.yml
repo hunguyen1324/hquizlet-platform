@@ -99,6 +99,7 @@ services:
       args:
         SERVICE: study
     environment:
+      NATS_URL: nats://nats:4222
       PORT: "8082"
       PAYMENT_SERVICE_URL: "http://payment:8085"
       QUIZ_AUDIO_ALLOWED_HOSTS: "${QUIZ_AUDIO_ALLOWED_HOSTS:-}"
@@ -131,6 +132,7 @@ services:
       args:
         SERVICE: quiz
     environment:
+      CLASS_SERVICE_URL: http://class:8084
       PORT: "8083"
       DATABASE_URL:      "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL:  "${AUTH_SERVICE_URL:-http://auth:8081}"

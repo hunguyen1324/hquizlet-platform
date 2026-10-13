@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 1.8.0
+  version: 1.9.0
   description: |
     HQuizlet Platform API contract. All public application routes are exposed
     through the gateway at localhost:8080.
@@ -12,6 +12,9 @@ servers:
     description: Local gateway
 
 tags:
+  - name: admin
+  - name: iam
+  - name: dashboard
   - name: health
   - name: auth
   - name: study-sets
@@ -35,6 +38,11 @@ tags:
 
 components:
   securitySchemes:
+    InternalServiceSignature:
+      type: apiKey
+      in: header
+      name: X-Service-Signature
+      description: HMAC-SHA256 of METHOD|requestURI|timestamp with INTERNAL_SIGNING_KEY. Valid for 30 seconds; private network only.
     BearerAuth:
       type: http
       scheme: bearer
@@ -312,6 +320,7 @@ components:
           type: integer
           format: int64
           minimum: 1
+        classId: { type: integer, format: int64, minimum: 1 }
         questionCount:
           type: integer
           minimum: 1
@@ -522,6 +531,7 @@ components:
         flashcardCount: { type: integer, minimum: 0 }
         addedByUserId: { type: integer, format: int64 }
         addedAt: { type: string, format: date-time }
+        dueAt: { type: [string, 'null'], format: date-time }
 
     AddStudySetToClassRequest:
       type: object
@@ -529,6 +539,7 @@ components:
       required: [studySetId]
       properties:
         studySetId: { type: integer, format: int64, minimum: 1 }
+        dueAt: { type: [string, 'null'], format: date-time }
 
     JoinClassResponse:
       type: object
@@ -738,6 +749,595 @@ components:
     # ---- End Phase 7 Schemas ----
 
     # ---- End Phase 6 Schemas ----
+
+    # Dashboard and IAM schemas
+    StudyStats:
+      type: object
+      properties:
+        rangeDays:
+          type: integer
+        streakDays:
+          type: integer
+        studiedToday:
+          type: boolean
+        sessionsTotal:
+          type: integer
+        sessionsInRange:
+          type: integer
+        cardsInRange:
+          type: integer
+        correctInRange:
+          type: integer
+        accuracyPct:
+          type: integer
+        dueCards:
+          type: integer
+        series:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/StudyDayPoint'
+        recentSessions:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/RecentSession'
+        continueLearning:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ContinueItem'
+        ownedSets:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/OwnedSetStat'
+      required:
+      - rangeDays
+      - streakDays
+      - studiedToday
+      - sessionsTotal
+      - sessionsInRange
+      - cardsInRange
+      - correctInRange
+      - accuracyPct
+      - dueCards
+      - series
+      - recentSessions
+      - continueLearning
+      - ownedSets
+    StudyDayPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        sessions:
+          type: integer
+        cards:
+          type: integer
+        correct:
+          type: integer
+      required:
+      - date
+      - sessions
+      - cards
+      - correct
+    RecentSession:
+      type: object
+      properties:
+        studySetId:
+          type: integer
+        studySetTitle:
+          type: string
+        mode:
+          type: string
+        score:
+          type: integer
+        total:
+          type: integer
+        completedAt:
+          type:
+          - string
+          - 'null'
+        createdAt:
+          type: string
+      required:
+      - studySetId
+      - studySetTitle
+      - mode
+      - score
+      - total
+      - completedAt
+      - createdAt
+    ContinueItem:
+      type: object
+      properties:
+        studySetId:
+          type: integer
+        title:
+          type: string
+        lastMode:
+          type: string
+        sessions:
+          type: integer
+        bestScore:
+          type: integer
+        lastPlayedAt:
+          type: string
+      required:
+      - studySetId
+      - title
+      - lastMode
+      - sessions
+      - bestScore
+      - lastPlayedAt
+    OwnedSetStat:
+      type: object
+      properties:
+        studySetId:
+          type: integer
+        title:
+          type: string
+        sessions:
+          type: integer
+        learners:
+          type: integer
+        avgScorePct:
+          type: integer
+      required:
+      - studySetId
+      - title
+      - sessions
+      - learners
+      - avgScorePct
+    ProgressSummaryRow:
+      type: object
+      properties:
+        userId:
+          type: integer
+        studySetId:
+          type: integer
+        sessions:
+          type: integer
+        bestScore:
+          type: integer
+        avgScorePct:
+          type: integer
+        completed:
+          type: boolean
+        lastActivityAt:
+          type:
+          - string
+          - 'null'
+      required:
+      - userId
+      - studySetId
+      - sessions
+      - bestScore
+      - avgScorePct
+      - completed
+      - lastActivityAt
+    ClassDashboard:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        viewerRole:
+          type: string
+        canViewAll:
+          type: boolean
+        showLeaderboard:
+          type: boolean
+        memberCount:
+          type: integer
+        activeMembers7d:
+          type: integer
+        assignedSets:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/DashboardSetStat'
+        students:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/DashboardStudentRow'
+        myProgress:
+          $ref: '#/components/schemas/DashboardStudentRow'
+        recentActivity:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ActivityItem'
+      required:
+      - classId
+      - className
+      - viewerRole
+      - canViewAll
+      - showLeaderboard
+      - memberCount
+      - activeMembers7d
+      - assignedSets
+      - students
+      - recentActivity
+    DashboardSetStat:
+      type: object
+      properties:
+        dueAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        studySetId:
+          type: integer
+        title:
+          type: string
+        sessions:
+          type: integer
+        learners:
+          type: integer
+        completionPct:
+          type: integer
+        avgScorePct:
+          type: integer
+      required:
+      - studySetId
+      - title
+      - sessions
+      - learners
+      - completionPct
+      - avgScorePct
+    DashboardStudentRow:
+      type: object
+      properties:
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        sessions:
+          type: integer
+        completedSets:
+          type: integer
+        avgScorePct:
+          type: integer
+        lastActivityAt:
+          type:
+          - string
+          - 'null'
+      required:
+      - userId
+      - name
+      - sessions
+      - completedSets
+      - avgScorePct
+      - lastActivityAt
+    RoleView:
+      type: object
+      properties:
+        policy:
+          type: object
+          properties:
+            Version: { type: string }
+            Statements:
+              type: array
+              items:
+                type: object
+                properties:
+                  Effect: { type: string, enum: [Allow, Deny] }
+                  Actions: { type: array, items: { type: string } }
+                  Resources: { type: array, items: { type: string } }
+                  Condition: { type: [object, 'null'], additionalProperties: { type: string } }
+
+        id:
+          type: integer
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+        orgId:
+          type:
+          - integer
+          - 'null'
+      required:
+      - id
+      - key
+      - name
+      - description
+      - kind
+    AssignmentView:
+      type: object
+      properties:
+        id:
+          type: integer
+        principalType:
+          type: string
+        principalId:
+          type: integer
+        roleKey:
+          type: string
+        scopeType:
+          type: string
+        scopeId:
+          type:
+          - integer
+          - 'null'
+        createdBy:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - principalType
+      - principalId
+      - roleKey
+      - scopeType
+      - createdBy
+      - createdAt
+    AdminUserView:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        platformRoles:
+          type: array
+          items: { type: string }
+        disabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - email
+      - role
+      - disabled
+      - createdAt
+    AuditEntryView:
+      type: object
+      properties:
+        id:
+          type: integer
+        actorId:
+          type: integer
+        action:
+          type: string
+        resource:
+          type: string
+        result:
+          type: string
+        requestId:
+          type: string
+        ip:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+        at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - actorId
+      - action
+      - resource
+      - result
+      - at
+    UserDirectoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+      required:
+      - id
+      - name
+      - email
+      - role
+    OverviewKpis:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        newUsers:
+          type: integer
+        newUsersDeltaPct:
+          type: integer
+        activeUsers:
+          type: integer
+        activeUsersDeltaPct:
+          type: integer
+        assignments:
+          type: integer
+        auditEvents:
+          type: integer
+        deniedAttempts:
+          type: integer
+      required:
+      - totalUsers
+      - newUsers
+      - newUsersDeltaPct
+      - activeUsers
+      - activeUsersDeltaPct
+      - assignments
+      - auditEvents
+      - deniedAttempts
+    OverviewPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        newUsers:
+          type: integer
+        activeUsers:
+          type: integer
+      required:
+      - date
+      - newUsers
+      - activeUsers
+    AdminOverview:
+      type: object
+      properties:
+        rangeDays:
+          type: integer
+        kpis:
+          $ref: '#/components/schemas/OverviewKpis'
+        series:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/OverviewPoint'
+      required:
+      - rangeDays
+      - kpis
+      - series
+    PermissionsResponse:
+      type: object
+      properties:
+        platformRoles:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        legacyRole:
+          type: string
+        actions:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        classId:
+          type:
+          - integer
+          - 'null'
+      required:
+      - platformRoles
+      - legacyRole
+      - actions
+    AdminStudySetRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        hidden:
+          type: boolean
+        title:
+          type: string
+        ownerUserId:
+          type: integer
+        cardCount:
+          type: integer
+        quizCount:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - hidden
+      - title
+      - ownerUserId
+      - cardCount
+      - quizCount
+      - updatedAt
+      - createdAt
+    AdminClassRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        ownerUserId:
+          type: integer
+        memberCount:
+          type: integer
+        studySetCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - name
+      - ownerUserId
+      - memberCount
+      - studySetCount
+      - createdAt
+    DailyMetrics:
+      type: object
+      properties:
+        rangeDays:
+          type: integer
+        totals:
+          type: object
+          additionalProperties:
+            type: integer
+        previous:
+          type: object
+          additionalProperties:
+            type: integer
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              name:
+                type: string
+              value:
+                type: integer
+            required:
+            - date
+            - name
+            - value
+      required:
+      - rangeDays
+      - totals
+      - previous
+      - series
 
 paths:
   /v1/quiz-sessions:
@@ -1419,6 +2019,7 @@ paths:
                 email: { type: string, format: email }
                 password: { type: string, minLength: 6 }
                 name: { type: string }
+                accountType: { type: string, enum: [teacher, student], default: student }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
         '400': { description: Invalid JSON, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
@@ -1902,3 +2503,1046 @@ paths:
                 type: string
                 format: binary
         '404': { description: Template not found }
+
+  # Dashboard and IAM endpoints
+  /v1/me/permissions:
+    get:
+      summary: Read effective platform permissions
+      operationId: iamReadeffectiveplatformpermissions
+      tags:
+      - iam
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionsResponse'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+  /v1/me/study-stats:
+    get:
+      summary: Read personal study statistics
+      operationId: iamReadpersonalstudystatistics
+      tags:
+      - dashboard
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyStats'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 90
+  /v1/classes/{id}/dashboard:
+    get:
+      summary: Read scoped class dashboard
+      operationId: iamReadscopedclassdashboard
+      tags:
+      - dashboard
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassDashboard'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/classes/{id}/permissions:
+    get:
+      summary: Read scoped class permissions
+      operationId: iamReadscopedclasspermissions
+      tags:
+      - iam
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionsResponse'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/classes/{id}/leaderboard:
+    put:
+      summary: Configure class leaderboard
+      operationId: iamConfigureclassleaderboard
+      tags:
+      - dashboard
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  showLeaderboard:
+                    type: boolean
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+              required:
+              - enabled
+  /v1/auth/reauth:
+    post:
+      summary: Confirm current account password
+      operationId: iamConfirmcurrentaccountpassword
+      tags:
+      - auth
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId:
+                    type: integer
+                  role: { type: string }
+                  platformRoles:
+                    type: array
+                    items: { type: string }
+                required:
+                - userId
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+              required:
+              - password
+  /v1/admin/overview:
+    get:
+      summary: Read admin overview
+      operationId: iamReadadminoverview
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOverview'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters: &id003
+      - name: range
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - 7d
+          - 28d
+          - 90d
+          default: 28d
+  /v1/admin/roles:
+    get:
+      summary: List managed IAM roles
+      operationId: iamListmanagedIAMroles
+      tags:
+      - iam
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoleView'
+                required:
+                - roles
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+  /v1/admin/assignments:
+    get:
+      summary: List IAM assignments
+      operationId: iamListIAMassignments
+      tags:
+      - iam
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AssignmentView'
+                required:
+                - assignments
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - &id001
+        name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      - &id002
+        name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: userId
+        in: query
+        required: false
+        schema:
+          type: integer
+      - name: roleKey
+        in: query
+        required: false
+        schema:
+          type: string
+    post:
+      summary: Assign managed role
+      operationId: iamAssignmanagedrole
+      tags:
+      - iam
+      security:
+      - BearerAuth: []
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentView'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: integer
+                  minimum: 1
+                roleKey:
+                  type: string
+                scopeType:
+                  type: string
+                  enum:
+                  - platform
+                  - org
+                scopeId:
+                  type:
+                  - integer
+                  - 'null'
+              required:
+              - userId
+              - roleKey
+      parameters:
+      - name: X-Admin-Password
+        in: header
+        required: false
+        schema:
+          type: string
+  /v1/admin/assignments/{id}:
+    delete:
+      summary: Revoke role assignment
+      operationId: iamRevokeroleassignment
+      tags:
+      - iam
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/admin/users:
+    get:
+      summary: List and filter admin users
+      operationId: iamListandfilteradminusers
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUserView'
+                  total:
+                    type: integer
+                required:
+                - users
+                - total
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - *id001
+      - *id002
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: role
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - active
+          - disabled
+  /v1/admin/users/{id}:
+    get:
+      summary: Read admin user detail
+      operationId: iamReadadminuserdetail
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserView'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/admin/users/{id}/enable:
+    post:
+      summary: enable user account
+      operationId: iamenableuseraccount
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserView'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/admin/users/{id}/disable:
+    post:
+      summary: disable user account
+      operationId: iamdisableuseraccount
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserView'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/admin/audit:
+    get:
+      summary: Read admin audit entries
+      operationId: iamReadadminauditentries
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntryView'
+                required:
+                - entries
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - *id001
+      - *id002
+      - name: actorId
+        in: query
+        required: false
+        schema:
+          type: integer
+      - name: action
+        in: query
+        required: false
+        schema:
+          type: string
+  /v1/admin/study-sets:
+    get:
+      summary: List content for moderation
+      operationId: iamListcontentformoderation
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  studySets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminStudySetRow'
+                  total:
+                    type: integer
+                required:
+                - studySets
+                - total
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - *id001
+      - *id002
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+  /v1/admin/study-sets/{id}:
+    get:
+      summary: Inspect private content with audit
+      operationId: iamInspectprivatecontentwithaudit
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  studySet:
+                    type: object
+                    additionalProperties: true
+                  flashcards:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /v1/admin/study-sets/{id}/moderation:
+    post:
+      summary: Hide or restore content with audit
+      operationId: iamHideorrestorecontentwithaudit
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  hidden:
+                    type: boolean
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hidden:
+                  type: boolean
+                reason:
+                  type: string
+                  minLength: 1
+              required:
+              - hidden
+              - reason
+  /v1/admin/classes:
+    get:
+      summary: List all classes
+      operationId: iamListallclasses
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminClassRow'
+                  total:
+                    type: integer
+                required:
+                - classes
+                - total
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters:
+      - *id001
+      - *id002
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+  /v1/admin/users/stats:
+    get:
+      summary: Read users stats daily metrics
+      operationId: iamReadusersstatsdailymetrics
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMetrics'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters: *id003
+  /v1/admin/study-stats:
+    get:
+      summary: Read study-stats daily metrics
+      operationId: iamReadstudystatsdailymetrics
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMetrics'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters: *id003
+  /v1/admin/class-stats:
+    get:
+      summary: Read class-stats daily metrics
+      operationId: iamReadclassstatsdailymetrics
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMetrics'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters: *id003
+  /v1/admin/payments/stats:
+    get:
+      summary: Read payments stats daily metrics
+      operationId: iamReadpaymentsstatsdailymetrics
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyMetrics'
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+      parameters: *id003
+  /v1/admin/study-system:
+    get:
+      summary: Read import queue and recent failures
+      operationId: iamReadimportqueueandrecentfailures
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  importQueue:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  recentErrors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        message:
+                          type: string
+                        at:
+                          type: string
+                          format: date-time
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+  /v1/admin/top-content:
+    get:
+      summary: Read popular content in last 28 days
+      operationId: iamReadpopularcontentinlast28days
+      tags:
+      - admin
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        title:
+                          type: string
+                        sessions:
+                          type: integer
+                        avgScorePct:
+                          type: integer
+        '401':
+          description: Authentication or password confirmation required
+        '403':
+          description: Action not permitted
+        '422':
+          description: Validation failed
+        '429':
+          description: Rate limited
+        '503':
+          description: Dependency unavailable
+
+  /v1/admin/wallet/credit:
+    post:
+      summary: Credit a wallet with current administrator password confirmation
+      operationId: adminCreditWallet
+      tags: [admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: header
+          name: X-Admin-Password
+          required: true
+          schema: { type: string, format: password }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, amountVnd, note]
+              properties:
+                userId: { type: integer, format: int64, minimum: 1 }
+                amountVnd: { type: integer, format: int64, minimum: 1 }
+                note: { type: string }
+      responses:
+        '200': { description: Wallet credited and adjustment ledger plus audit committed atomically }
+        '401': { description: Authentication or password confirmation failed }
+        '403': { description: wallet:Credit is not permitted }
+        '422': { description: Invalid credit request }
+        '429': { description: Rate limited }
+
+  /internal/progress/summary:
+    get:
+      summary: Read batched learner progress on the private service network
+      operationId: internalProgressSummary
+      tags: [progress]
+      servers: [{ url: 'http://study:8082' }]
+      security: [{ InternalServiceSignature: [] }]
+      parameters:
+        - { in: header, name: X-Service-Timestamp, required: true, schema: { type: integer, format: int64 } }
+        - { in: query, name: studySetIds, required: true, schema: { type: string }, description: Comma-separated positive IDs (maximum 200) }
+        - { in: query, name: userIds, required: true, schema: { type: string }, description: Comma-separated positive IDs (maximum 200) }
+      responses:
+        '200':
+          description: Progress for the requested user and study set pairs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProgressSummaryRow' }
+        '400': { description: IDs are required }
+        '401': { description: 'Missing, expired or invalid service signature' }
+        '422': { description: Request exceeds batch limits }
+        '503': { description: Statistics unavailable }

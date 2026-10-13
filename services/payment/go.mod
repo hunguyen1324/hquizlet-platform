@@ -2,7 +2,12 @@ module github.com/hunguyen1324/hquizlet-platform/services/payment
 
 go 1.23.0
 
-require github.com/jackc/pgx/v5 v5.7.2
+require (
+	github.com/hunguyen1324/hquizlet-platform/packages/authz v0.0.0
+	github.com/jackc/pgx/v5 v5.7.2
+)
+
+replace github.com/hunguyen1324/hquizlet-platform/packages/authz => ../../packages/authz
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

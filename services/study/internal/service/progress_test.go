@@ -158,6 +158,30 @@ func TestSave_NotOwner_Forbidden(t *testing.T) {
 	}
 }
 
+func TestLearnerProgressUsesVerifiedUserAndAccessCheck(t *testing.T) {
+	prog := &fakeProgress{}
+	svc := newSvc(map[int64]int64{1: 42}, []model.Flashcard{{ID: 1, StudySetID: 1}}, prog)
+	svc.WithLearnerAccess(func(ctx context.Context, setID, uid int64) error {
+		if setID != 1 || uid != 99 {
+			t.Fatalf("unexpected identity %d %d", setID, uid)
+		}
+		return nil
+	})
+	if _, err := svc.Save(context.Background(), 99, 1, goodInput()); err != nil {
+		t.Fatal(err)
+	}
+	if prog.savedSessions[0].UserID != 99 {
+		t.Fatal("progress attributed to another user")
+	}
+	if _, err := svc.GetSummary(context.Background(), 99, 1, model.ProgressFilter{}); err != nil {
+		t.Fatal(err)
+	}
+	svc.WithLearnerAccess(func(context.Context, int64, int64) error { return ErrForbidden })
+	if _, err := svc.Save(context.Background(), 99, 1, goodInput()); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("denied access: %v", err)
+	}
+}
+
 func TestSave_Owner_Succeeds(t *testing.T) {
 	cards := []model.Flashcard{{ID: 1, StudySetID: 1}}
 	prog := &fakeProgress{}

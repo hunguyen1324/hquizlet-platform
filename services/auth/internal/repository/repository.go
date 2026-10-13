@@ -13,6 +13,9 @@ import (
 var ErrNotFound = errors.New("not found")
 var ErrEmailTaken = errors.New("email already registered")
 
+// ErrConflict marks a uniqueness clash the service layer maps to HTTP 409.
+var ErrConflict = errors.New("conflict")
+
 type AuthRepository struct {
 	db *sql.DB
 }
@@ -44,10 +47,10 @@ func (r *AuthRepository) GetUserByEmail(ctx context.Context, email string) (mode
 	var u model.User
 	var hash string
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, name, email, image, role, created_at, password_hash
+		`SELECT id, name, email, image, role, disabled, created_at, password_hash
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Name, &u.Email, &u.Image, &u.Role, &u.CreatedAt, &hash)
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Image, &u.Role, &u.Disabled, &u.CreatedAt, &hash)
 	if err != nil {
 		return model.User{}, "", ErrNotFound
 	}

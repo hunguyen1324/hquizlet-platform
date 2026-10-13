@@ -26,6 +26,7 @@ export function AdminPayments({ onBack }: Props) {
   const [creditUserId, setCreditUserId] = useState("");
   const [creditAmount, setCreditAmount] = useState("");
   const [creditNote, setCreditNote] = useState("");
+  const [password, setPassword] = useState("");
   const [creditLoading, setCreditLoading] = useState(false);
   const [creditResult, setCreditResult] = useState("");
 
@@ -63,14 +64,15 @@ export function AdminPayments({ onBack }: Props) {
   const handleCredit = async () => {
     const userId = parseInt(creditUserId, 10);
     const amount = parseInt(creditAmount, 10);
-    if (!userId || !amount || amount <= 0) {
+    if (!userId || !amount || amount <= 0 || !password) {
       setCreditResult("Vui lòng nhập user ID và số tiền hợp lệ.");
       return;
     }
+    if (!window.confirm(`Cộng ${formatVND(amount)} cho user #${userId}?`)) return;
     setCreditLoading(true);
     setCreditResult("");
     try {
-      await adminApi.credit(token, userId, amount, creditNote || "Admin credit");
+      await adminApi.credit(token, userId, amount, creditNote || "Admin credit", password);
       setCreditResult(`✅ Đã credit ${formatVND(amount)} cho user #${userId}`);
       setCreditUserId("");
       setCreditAmount("");
@@ -78,6 +80,7 @@ export function AdminPayments({ onBack }: Props) {
     } catch (err) {
       setCreditResult("❌ " + (err instanceof Error ? err.message : "Lỗi credit"));
     } finally {
+      setPassword("");
       setCreditLoading(false);
     }
   };
@@ -184,6 +187,7 @@ export function AdminPayments({ onBack }: Props) {
               <label>Ghi chú:</label>
               <input type="text" value={creditNote} onChange={(e) => setCreditNote(e.target.value)} placeholder="Admin credit" />
             </div>
+            <label>Mật khẩu xác nhận<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
             <button className="primary-button" onClick={() => void handleCredit()} disabled={creditLoading}>
               {creditLoading ? "Đang xử lý..." : "Credit"}
             </button>

@@ -36,12 +36,11 @@ func (s *WalletService) GetTransactions(ctx context.Context, userID int64, limit
 }
 
 // AdminCredit manually credits a user's wallet (admin operation).
-func (s *WalletService) AdminCredit(ctx context.Context, userID int64, amountVnd int, note string) error {
+func (s *WalletService) AdminCredit(ctx context.Context, actorID, userID int64, amountVnd int, note, requestID string) error {
 	if amountVnd <= 0 {
 		return nil
 	}
-	_, err := s.walletRepo.InsertTransaction(ctx, nil, userID, "adjustment", "credit", amountVnd, "", note)
-	return err
+	return s.walletRepo.AdminCredit(ctx, actorID, userID, amountVnd, note, requestID)
 }
 
 // AdminListOrders returns all orders (admin only).

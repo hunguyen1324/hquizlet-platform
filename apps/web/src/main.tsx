@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import "./styles.css";
 
 const queryClient = new QueryClient({
@@ -28,12 +29,59 @@ import { ActivityFeed } from "./features/activity/ActivityFeed";
 import { WalletPage } from "./features/wallet/WalletPage";
 import { DepositPage } from "./features/payment/DepositPage";
 import { AdminPayments } from "./features/admin/AdminPayments";
+const AdminCatalog = React.lazy(() => import("./features/admin/AdminCatalog").then(m => ({default: m.AdminCatalog})));
 import { QuizSessionsPage } from "./features/learning/QuizSessionsPage";
 import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
 import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
 
 import { AppShell } from "./components/layout/AppShell";
 import { HomePage } from "./components/home/HomePage";
+
+// Dashboard screens are code-split so recharts/date libs stay out of the initial bundle.
+const PersonalDashboard = React.lazy(() =>
+  import("./features/dashboard/PersonalDashboard").then((m) => ({ default: m.PersonalDashboard }))
+);
+const ClassDashboard = React.lazy(() =>
+  import("./features/classes/ClassDashboard").then((m) => ({ default: m.ClassDashboard }))
+);
+
+// Phase 4: admin console chunk (AdminShell + its pages).
+const AdminShell = React.lazy(() =>
+  import("./features/admin/AdminShell").then((m) => ({ default: m.AdminShell }))
+);
+const AdminOverview = React.lazy(() =>
+  import("./features/admin/AdminOverview").then((m) => ({ default: m.AdminOverview }))
+);
+const AdminUsers = React.lazy(() =>
+  import("./features/admin/AdminUsers").then((m) => ({ default: m.AdminUsers }))
+);
+const AdminRoles = React.lazy(() =>
+  import("./features/admin/AdminRoles").then((m) => ({ default: m.AdminRoles }))
+);
+const AdminAudit = React.lazy(() =>
+  import("./features/admin/AdminAudit").then((m) => ({ default: m.AdminAudit }))
+);
+const AdminSystem = React.lazy(() =>
+  import("./features/admin/AdminSystem").then((m) => ({ default: m.AdminSystem }))
+);
+
+// ADM-07: the legacy payments screen lives inside the console now.
+function AdminPaymentsRoute() {
+  const navigate = useNavigate();
+  return <AdminPayments onBack={() => navigate("/admin")} />;
+}
+
+// Route wrapper: reads :id from the URL so the page itself stays router-agnostic.
+function ClassDashboardRoute({
+  onNavigate,
+  onOpenSet,
+}: {
+  onNavigate: (view: string) => void;
+  onOpenSet: (id: number) => void;
+}) {
+  const { id } = useParams();
+  return <ClassDashboard classId={Number(id)} onBack={() => onNavigate("classes")} onOpenSet={onOpenSet} />;
+}
 
 const savedTheme = window.localStorage.getItem("hquizlet-theme");
 const initialDark = savedTheme === "dark" || (savedTheme === null && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -45,6 +93,8 @@ const VIEW_PATHS: Partial<Record<AppView, string>> = {
   classes: "/classes", activity: "/notifications", wallet: "/wallet",
   deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
   "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar", "quiz-sessions": "/my/quiz-sessions",
+  // Phase 2+: routes handled by react-router (not the legacy view switch)
+  overview: "/dashboard", admin: "/admin",
 };
 
 function viewToPath(view: AppView) { return VIEW_PATHS[view] ?? "/"; }
@@ -53,9 +103,21 @@ function pathToView(path: string): AppView {
   return (found?.[0] as AppView | undefined) ?? "home";
 }
 
+/** Views served by <Routes>; when undefined the legacy view switch renders instead. */
+function routeViewForPath(path: string): AppView | undefined {
+  if (path === "/dashboard") return "overview";
+  if (path.startsWith("/admin")) return "admin";
+  if (/^\/classes\/\d+\/dashboard$/.test(path)) return "class-dashboard";
+  return undefined;
+}
+
 function RootApp() {
   const { user, logout, token } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const routeView = routeViewForPath(location.pathname);
   const [view, setView] = useState<AppView>("home");
+ useEffect(()=>{if(!user){setSelectedSet(null);setSelectedClass(null);setView("home");}},[user?.id]);
   const [resumeSessionId, setResumeSessionId] = useState<string | undefined>();
   const [selectedSet, setSelectedSet] = useState<StudySet | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassDetailType | null>(null);
@@ -82,6 +144,8 @@ function RootApp() {
   useEffect(() => {
     if (!user) return;
     const restoreUrl = () => {
+      // react-router serves /dashboard and /admin/*; the legacy switch handles the rest.
+      if (routeViewForPath(window.location.pathname)) return;
       const editMatch = window.location.pathname.match(/^\/study-sets\/(\d+)\/edit$/);
       if (editMatch) {
         void handleOpenSet(Number(editMatch[1]), false).then(() => setView("quiz-editor"));
@@ -115,7 +179,7 @@ function RootApp() {
       let data = await studySetApi.get(token, id);
       setSelectedSet(data);
       setView("study");
-      if (pushHistory) window.history.pushState({}, "", `/study-sets/${id}`);
+      if (pushHistory) navigate(`/study-sets/${id}`);
     } catch (error) {
       setNavigationError(error instanceof Error ? error.message : "Không mở được học phần.");
     } finally {
@@ -131,7 +195,7 @@ function RootApp() {
   function handleEditSet() {
     if (!selectedSet) return;
     setView(selectedSet.contentType === "quiz" ? "quiz-editor" : "editor");
-    window.history.pushState({}, "", `/study-sets/${selectedSet.id}/edit`);
+    navigate(`/study-sets/${selectedSet.id}/edit`);
   }
 
   async function handleDeleteSet() {
@@ -146,6 +210,17 @@ function RootApp() {
     setView("study");
   }
 
+  async function handleOpenClass(id: number) {
+    if (!token) return;
+    try {
+      const cls = await classApi.get(token, id);
+      setSelectedClass(cls);
+      setView("class-detail");
+    } catch (error) {
+      setNavigationError(error instanceof Error ? error.message : "Không mở được lớp.");
+    }
+  }
+
   // Navigation handler for AppShell sidebar/navbar
   function handleNavigate(viewName: string, pushHistory = true) {
     setSelectedSet(null);
@@ -153,14 +228,57 @@ function RootApp() {
     const nextView = viewName as AppView;
     setView(nextView);
     setNavigationError("");
-    if (pushHistory) window.history.pushState({}, "", viewToPath(nextView));
+    if (pushHistory) navigate(viewToPath(nextView));
   }
 
   return (
     <AppShell
-      currentView={view}
+      currentView={routeView ?? view}
       onNavigate={handleNavigate}
     >
+      {/* Phase 2+: routes owned by react-router. */}
+      <React.Suspense fallback={<div className="loading-overlay" aria-busy="true"><span>Đang tải dashboard...</span></div>}>
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <PersonalDashboard
+              onOpenSet={(id) => void handleOpenSet(id)}
+              onOpenClass={(id) => void handleOpenClass(id)}
+              onNavigate={(v) => handleNavigate(v)}
+            />
+          }
+        />
+        <Route
+          path="/classes/:id/dashboard"
+          element={
+            <ClassDashboardRoute
+              onNavigate={(v) => handleNavigate(v)}
+              onOpenSet={(id) => {
+                handleNavigate("dashboard");
+                void handleOpenSet(id);
+              }}
+            />
+          }
+        />
+        {/* Phase 4: admin console. AdminShell guards rendering; the gateway and the
+            service both re-check dashboard:ViewAdmin on every call. */}
+        <Route path="/admin" element={<AdminShell />}>
+          <Route index element={<AdminOverview />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="content" element={<AdminCatalog kind="content" />} />
+          <Route path="classes" element={<AdminCatalog kind="classes" />} />
+          <Route path="roles" element={<AdminRoles />} />
+          <Route path="payments" element={<AdminPaymentsRoute />} />
+          <Route path="audit" element={<AdminAudit />} />
+          <Route path="system" element={<AdminSystem />} />
+        </Route>
+      </Routes>
+      </React.Suspense>
+
+      {/* Legacy view switch — kept for the screens that are not on routes yet (UI-01). */}
+      {!routeView && (
+      <>
       {loadingSet && (
         <div className="loading-overlay" aria-busy="true">
           <span>Đang tải học phần...</span>
@@ -243,21 +361,14 @@ function RootApp() {
       )}
 
       {!loadingSet && view === "live" && (
-        <LiveGame />
+        <LiveGame classId={Number(new URLSearchParams(location.search).get("classId")) || undefined} />
       )}
 
       {!loadingSet && view === "classes" && (
         <ClassList
           onCreate={() => setView("class-create")}
           onJoin={() => setView("class-join")}
-          onSelect={async (id) => {
-            if (!token) return;
-            try {
-              const cls = await classApi.get(token, id);
-              setSelectedClass(cls);
-              setView("class-detail");
-            } catch {}
-          }}
+          onSelect={(id) => void handleOpenClass(id)}
         />
       )}
 
@@ -292,8 +403,9 @@ function RootApp() {
       {!loadingSet && view === "class-detail" && selectedClass && (
         <ClassDetailView
           classId={selectedClass.id}
-          onStartLive={() => setView("live")}
+          onStartLive={() => {setView("live");navigate(`/live-quiz?classId=${selectedClass.id}`);}}
           onOpenSet={(id) => void handleOpenSet(id)}
+          onOpenDashboard={() => navigate(`/classes/${selectedClass.id}/dashboard`)}
           onBack={() => { setSelectedClass(null); setView("classes"); }}
           onEdit={(cls) => { setSelectedClass(cls); setView("class-edit"); }}
           onDelete={async () => {
@@ -336,6 +448,8 @@ function RootApp() {
       {!loadingSet && view === "admin-payments" && (
         <AdminPayments onBack={() => setView("dashboard")} />
       )}
+      </>
+      )}
     </AppShell>
   );
 }
@@ -343,9 +457,11 @@ function RootApp() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RootApp />
-      </AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <RootApp />
+        </AuthProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }

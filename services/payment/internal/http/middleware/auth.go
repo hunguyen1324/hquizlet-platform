@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 )
 
 type contextKey string
@@ -38,11 +40,23 @@ func Auth(next http.Handler) http.Handler {
 	})
 }
 
-// RequireAdmin checks that the user has admin role.
+// RequireAdmin checks dashboard:ViewAdmin via IAM (legacy admin header still works).
 func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := GetUserID(r.Context())
 		role, _ := r.Context().Value(UserRoleKey).(string)
-		if role != "admin" {
+		p := authz.Principal{
+			UserID:        userID,
+			LegacyRole:    role,
+			PlatformRoles: authz.ParsePlatformRoles(r.Header.Get("X-User-Roles")),
+		}
+		action := authz.ActionOrderListAll
+		resource := authz.Resource{Type: "order"}
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/admin/wallet/credit" {
+			action = authz.ActionWalletCredit
+			resource = authz.Resource{Type: "wallet"}
+		}
+		if !authz.Can(p, action, resource) {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", "admin access required")
 			return
 		}
@@ -119,6 +133,7 @@ func StripSpoofedHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Del("X-User-ID")
 		r.Header.Del("X-User-Role")
+		r.Header.Del("X-User-Roles")
 		r.Header.Del("X-Participant-ID")
 		r.Header.Del("X-Live-Role")
 		r.Header.Del("X-Class-Role")

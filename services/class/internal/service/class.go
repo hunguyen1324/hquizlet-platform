@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/repository"
 )
@@ -31,10 +32,14 @@ func NewClassService(classes repository.ClassStore, members repository.MemberSto
 }
 
 // Create creates a new class with the owner as the initial member.
-func (s *ClassService) Create(ctx context.Context, ownerID int64, input model.CreateClassInput) (*model.Class, error) {
-	if ownerID <= 0 {
+func (s *ClassService) Create(ctx context.Context, p authz.Principal, input model.CreateClassInput) (*model.Class, error) {
+	if p.UserID <= 0 {
 		return nil, ErrUnauthorized
 	}
+	if !authz.Can(p, authz.ActionClassCreate, authz.Resource{Type: "class"}) {
+		return nil, ErrForbidden
+	}
+	ownerID := p.UserID
 
 	input.Name = strings.TrimSpace(input.Name)
 	input.Description = strings.TrimSpace(input.Description)
@@ -78,7 +83,7 @@ func (s *ClassService) GetByID(ctx context.Context, classID, userID int64) (*mod
 
 	role, err := s.members.GetRole(ctx, classID, userID)
 	if err != nil {
-		return class, nil
+		return nil, err
 	}
 	if role == "" && class.OwnerUserID != userID {
 		return nil, ErrForbidden
@@ -96,18 +101,9 @@ func (s *ClassService) ListByUserID(ctx context.Context, userID int64) ([]*model
 }
 
 // Update modifies a class (owner only).
-func (s *ClassService) Update(ctx context.Context, classID, userID int64, input model.UpdateClassInput) (*model.Class, error) {
-	if userID <= 0 {
-		return nil, ErrUnauthorized
-	}
-
-	class, err := s.classes.GetByID(ctx, classID)
-	if err != nil {
+func (s *ClassService) Update(ctx context.Context, p authz.Principal, classID int64, input model.UpdateClassInput) (*model.Class, error) {
+	if _, err := s.authorizeClass(ctx, p, classID, authz.ActionClassUpdate); err != nil {
 		return nil, err
-	}
-
-	if class.OwnerUserID != userID {
-		return nil, ErrForbidden
 	}
 
 	input.Name = strings.TrimSpace(input.Name)
@@ -124,37 +120,20 @@ func (s *ClassService) Update(ctx context.Context, classID, userID int64, input 
 }
 
 // Delete removes a class and all its members/study sets (owner only).
-func (s *ClassService) Delete(ctx context.Context, classID, userID int64) error {
-	if userID <= 0 {
-		return ErrUnauthorized
-	}
-
-	class, err := s.classes.GetByID(ctx, classID)
-	if err != nil {
+func (s *ClassService) Delete(ctx context.Context, p authz.Principal, classID int64) error {
+	if _, err := s.authorizeClass(ctx, p, classID, authz.ActionClassDelete); err != nil {
 		return err
 	}
-
-	if class.OwnerUserID != userID {
-		return ErrForbidden
-	}
-
 	return s.classes.Delete(ctx, classID)
 }
 
 // ResetInviteCode generates a new invite code (owner only).
-func (s *ClassService) ResetInviteCode(ctx context.Context, classID, userID int64) (string, error) {
-	if userID <= 0 {
-		return "", ErrUnauthorized
-	}
-
-	class, err := s.classes.GetByID(ctx, classID)
+func (s *ClassService) ResetInviteCode(ctx context.Context, p authz.Principal, classID int64) (string, error) {
+	class, err := s.authorizeClass(ctx, p, classID, authz.ActionClassResetInvite)
 	if err != nil {
 		return "", err
 	}
-
-	if class.OwnerUserID != userID {
-		return "", ErrForbidden
-	}
+	_ = class
 
 	cr, ok := s.classes.(*repository.ClassRepository)
 	if !ok {

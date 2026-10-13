@@ -17,13 +17,14 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("demo@hquizlet.local");
   const [password, setPassword] = useState("");
+  const [accountType, setAccountType] = useState<"teacher" | "student">("student");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (mode === "login") {
       await login(email, password);
     } else {
-      await register(name, email, password);
+      await register(name, email, password, accountType);
     }
   }
 
@@ -60,15 +61,40 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
 
         <form className="stack" onSubmit={handleSubmit}>
           {mode === "register" && (
-            <label>
-              Tên
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nguyen Van A"
-                required
-              />
-            </label>
+            <>
+              <label>
+                Tên
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Nguyen Van A"
+                  required
+                />
+              </label>
+              <fieldset className="account-type-fieldset">
+                <legend>Loại tài khoản</legend>
+                <label className="inline-choice">
+                  <input
+                    type="radio"
+                    name="accountType"
+                    value="student"
+                    checked={accountType === "student"}
+                    onChange={() => setAccountType("student")}
+                  />
+                  Học sinh
+                </label>
+                <label className="inline-choice">
+                  <input
+                    type="radio"
+                    name="accountType"
+                    value="teacher"
+                    checked={accountType === "teacher"}
+                    onChange={() => setAccountType("teacher")}
+                  />
+                  Giáo viên
+                </label>
+              </fieldset>
+            </>
           )}
           <label>
             Email

@@ -41,6 +41,7 @@ export interface LiveQuestion {
 }
 
 export interface CreateLiveSessionRequest {
+ classId?: number;
   studySetId: number;
   questionCount: number;
   questionDurationMs: number;

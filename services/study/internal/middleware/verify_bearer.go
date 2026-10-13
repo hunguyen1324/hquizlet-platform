@@ -15,7 +15,7 @@ import (
 
 var internalSigningKey = os.Getenv("INTERNAL_SIGNING_KEY")
 
-func verifyInternalSignature(userID, role, tsStr, sig string) bool {
+func verifyInternalSignature(userID, role, platformRoles, tsStr, sig string) bool {
 	if internalSigningKey == "" || sig == "" {
 		return false
 	}
@@ -26,11 +26,18 @@ func verifyInternalSignature(userID, role, tsStr, sig string) bool {
 	if time.Now().Unix()-ts > 30 || time.Now().Unix()-ts < -30 {
 		return false
 	}
-	msg := userID + "|" + role + "|" + tsStr
-	mac := hmac.New(sha256.New, []byte(internalSigningKey))
-	mac.Write([]byte(msg))
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(sig), []byte(expectedSig))
+	for _, msg := range []string{
+		userID + "|" + role + "|" + platformRoles + "|" + tsStr,
+		userID + "|" + role + "|" + tsStr,
+	} {
+		mac := hmac.New(sha256.New, []byte(internalSigningKey))
+		mac.Write([]byte(msg))
+		expectedSig := hex.EncodeToString(mac.Sum(nil))
+		if hmac.Equal([]byte(sig), []byte(expectedSig)) {
+			return true
+		}
+	}
+	return false
 }
 
 // VerifyBearer authenticates even direct /v1 calls; X-User-ID is not proof of identity.
@@ -46,15 +53,20 @@ func VerifyBearer(authURL string) func(http.Handler) http.Handler {
 
 			rawUserID := r.Header.Get("X-User-ID")
 			rawRole := r.Header.Get("X-User-Role")
+			rawRoles := r.Header.Get("X-User-Roles")
 			rawTs := r.Header.Get("X-Internal-Ts")
 			rawSig := r.Header.Get("X-Internal-Sig")
 
 			r.Header.Del("X-User-ID")
 			r.Header.Del("X-User-Role")
+			r.Header.Del("X-User-Roles")
 
-			if verifyInternalSignature(rawUserID, rawRole, rawTs, rawSig) {
+			if verifyInternalSignature(rawUserID, rawRole, rawRoles, rawTs, rawSig) {
 				r.Header.Set("X-User-ID", rawUserID)
 				r.Header.Set("X-User-Role", rawRole)
+				if rawRoles != "" {
+					r.Header.Set("X-User-Roles", rawRoles)
+				}
 				w.Header().Set("Cache-Control", "private, no-store")
 				next.ServeHTTP(w, r)
 				return

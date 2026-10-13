@@ -109,7 +109,7 @@ func (s *FlashcardService) checkSetOwner(ctx context.Context, setID, userID int6
 	if err != nil {
 		return err
 	}
-	if !ok {
+	if !ok && !hasStudyWritePermission(ctx, userID, setID) {
 		return ErrForbidden
 	}
 	return nil

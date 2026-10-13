@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"log"
 	"net/http"
 	"os"
@@ -295,7 +296,23 @@ func main() {
 	}
 
 	log.Printf("quiz service listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	if err := http.ListenAndServe(":"+port, authz.VerifyIdentity(env("AUTH_SERVICE_URL", "http://localhost:8081"), func(r *http.Request) bool {
+		if strings.HasPrefix(r.URL.Path, "/v1/study-sets/") {
+			return true
+		}
+		if !strings.HasPrefix(r.URL.Path, "/v1/live-sessions") {
+			return false
+		}
+		for _, suffix := range []string{"/join", "/answers", "/player-state", "/events", "/leaderboard"} {
+			if strings.HasSuffix(r.URL.Path, suffix) {
+				if suffix == "/events" || suffix == "/leaderboard" {
+					return r.Header.Get("X-User-ID") != ""
+				}
+				return false
+			}
+		}
+		return true
+	})(mux)); err != nil {
 		log.Fatal(err)
 	}
 }

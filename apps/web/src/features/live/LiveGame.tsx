@@ -2,6 +2,7 @@
 // Dev 4/5 - Main Live Quiz orchestrator
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useCan } from "../auth/permissions";
 import { useAuth } from "../auth/AuthContext";
 import { liveApi, type LiveSession } from "./liveApi";
 import { LiveHome } from "./LiveHome";
@@ -17,7 +18,8 @@ import "./live.css";
 
 type Flow = "home" | "creating" | "host-lobby" | "host-game" | "joining" | "player-lobby" | "player-game";
 
-export function LiveGame() {
+export function LiveGame({classId}: {classId?: number}) {
+ const canHost=useCan("live:Host", classId ? {classId} : undefined);
   const { user, token } = useAuth();
   const [flow, setFlow] = useState<Flow>("home");
 
@@ -44,6 +46,7 @@ export function LiveGame() {
     try {
       const session = await liveApi.createSession(token, {
         studySetId,
+        classId,
         questionCount,
         questionDurationMs,
       });
@@ -54,7 +57,7 @@ export function LiveGame() {
       alert((err as Error).message);
       setFlow("home");
     }
-  }, [token]);
+  }, [token, classId]);
 
   // Handle player joining
   const handleJoin = useCallback(async (code: string, displayName: string) => {
@@ -141,6 +144,7 @@ export function LiveGame() {
       {flow === "home" && (
         <>
           <LiveHome
+            canHost={canHost}
             onHost={(scId, qc, qd) => void handleHostCreate(scId, qc, qd)}
             onJoin={(code) => { setJoinError(null); }}
           />

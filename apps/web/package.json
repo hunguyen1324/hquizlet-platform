@@ -17,6 +17,8 @@
     "hls.js": "^1.7.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.6",
+    "recharts": "^2.15.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.7"
   },

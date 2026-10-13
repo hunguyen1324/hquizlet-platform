@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"io"
 	"net/http"
 	"strconv"
@@ -29,6 +30,8 @@ type Handler struct {
 	quizQuestions *service.QuizQuestionService
 	importSvc     *service.ImportService
 	importJobSvc  *service.ImportJobService
+	stats         *service.StatsService
+	admin         *service.AdminService
 	db            *sql.DB
 	cache         *cache.Cache
 	markSecret    []byte
@@ -49,9 +52,23 @@ func (h *Handler) WithProtectedQuiz(s *service.ProtectedQuizService, audio *stor
 	return h
 }
 
+// WithStats wires the dashboard statistics service (GET /v1/me/study-stats).
+func (h *Handler) WithStats(s *service.StatsService) *Handler {
+	h.stats = s
+	return h
+}
+
+// WithAdmin wires the platform-wide admin content listing (ADM-06).
+func (h *Handler) WithAdmin(a *service.AdminService) *Handler {
+	h.admin = a
+	return h
+}
+
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/quiz-audio", h.streamQuizAudio)
 	mux.HandleFunc("GET /healthz", h.health)
+	// Dashboard (Phase 2): personal study statistics.
+	mux.HandleFunc("GET /v1/me/study-stats", h.studyStats)
 	mux.HandleFunc("GET /v1/study-sets", h.listStudySets)
 	mux.HandleFunc("POST /v1/study-sets", h.createStudySet)
 	mux.HandleFunc("GET /v1/study-sets/viewer-mark", h.viewerMark)
@@ -65,6 +82,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Progress routes – handled within studySetRouter via path inspection.
 	// Phase 4 internal API: Quiz service fetches flashcards by ownership.
 	mux.HandleFunc("/internal/study-sets/", h.internalRouter)
+	// Phase 3 internal API: class dashboard reads batch progress summaries.
+	mux.HandleFunc("GET /internal/progress/summary", h.internalProgressSummary)
 
 	// Async import job polling
 	mux.HandleFunc("GET /v1/import/jobs", h.listImportJobs)
@@ -73,6 +92,53 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Phase Learn-1: Quiz session management (list + delete).
 	mux.HandleFunc("GET /v1/quiz-sessions", h.quizSessionsRouter)
 	mux.HandleFunc("/v1/quiz-sessions/", h.quizSessionsRouter)
+
+	// Admin console (ADM-06). The gateway already requires admin-console access; the service
+	// re-checks dashboard:ViewAdmin with authz.Can before returning any row.
+	mux.HandleFunc("GET /v1/admin/study-sets", h.adminListStudySets)
+	mux.HandleFunc("GET /v1/admin/study-stats", authz.DailyMetricsHandler(h.db, "study"))
+	mux.HandleFunc("GET /v1/admin/study-system", h.adminSystem)
+	mux.HandleFunc("GET /v1/admin/top-content", h.adminTopContent)
+	mux.HandleFunc("GET /v1/admin/study-sets/{id}", h.adminModeration)
+	mux.HandleFunc("POST /v1/admin/study-sets/{id}/moderation", h.adminModeration)
+}
+
+// adminListStudySets serves the platform-wide study-set list to admins only.
+func (h *Handler) adminListStudySets(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		WriteError(w, http.StatusServiceUnavailable, "admin listing unavailable")
+		return
+	}
+	limit := intQueryParam(r.URL.Query().Get("limit"), 25)
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	offset := intQueryParam(r.URL.Query().Get("offset"), 0)
+	if offset < 0 {
+		offset = 0
+	}
+	rows, total, err := h.admin.ListStudySets(r.Context(), principalFromRequest(r), r.URL.Query().Get("search"), limit, offset)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"studySets": rows, "total": total})
+}
+
+// studyStats returns the caller's learning statistics for the personal dashboard.
+func (h *Handler) studyStats(w http.ResponseWriter, r *http.Request) {
+	if h.stats == nil {
+		WriteError(w, http.StatusServiceUnavailable, "statistics unavailable")
+		return
+	}
+	userID := userIDFromHeader(r)
+	days := intQueryParam(r.URL.Query().Get("days"), 0)
+	stats, err := h.stats.Get(r.Context(), userID, days)
+	if err != nil {
+		WriteServiceError(w, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, stats)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -760,6 +826,20 @@ func (h *Handler) internalRouter(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "invalid study set id")
 		return
 	}
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		if !internalTokenOK(r) {
+			WriteError(w, 401, "invalid internal token")
+			return
+		}
+		var id, owner int64
+		var title string
+		if err := h.db.QueryRowContext(r.Context(), `SELECT id,user_id,title FROM study_sets WHERE id=$1 AND NOT moderation_hidden`, setID).Scan(&id, &owner, &title); err != nil {
+			WriteError(w, 404, "study set not found")
+			return
+		}
+		WriteJSON(w, 200, map[string]any{"id": id, "userId": owner, "title": title})
+		return
+	}
 	if len(parts) == 2 && parts[1] == "flashcards" && r.Method == http.MethodGet {
 		h.getFlashcardsInternal(w, r, setID)
 		return
@@ -825,7 +905,7 @@ func (h *Handler) templateRouter(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "template not found")
 		return
 	}
-	
+
 	b, err := io.ReadAll(data)
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "error reading template")

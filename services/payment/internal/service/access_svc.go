@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -102,6 +103,11 @@ func (s *AccessService) checkOwnership(ctx context.Context, userID, studySetID i
 		return false, err
 	}
 	req.Header.Set("X-User-ID", fmt.Sprintf("%d", userID))
+	token := os.Getenv("INTERNAL_TOKEN")
+	if token == "" {
+		token = "dev-internal-token"
+	}
+	req.Header.Set("X-Internal-Token", token)
 
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Do(req)

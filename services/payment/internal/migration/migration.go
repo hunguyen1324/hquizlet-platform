@@ -13,6 +13,11 @@ func Run(db *sql.DB) error {
 }
 
 var migrations = []string{
+	`CREATE TABLE IF NOT EXISTS audit_log (
+	 id BIGSERIAL PRIMARY KEY, actor_id BIGINT NOT NULL, action TEXT NOT NULL,
+	 resource TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('allow','deny')),
+	 request_id TEXT, ip INET, detail JSONB, at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+	`CREATE INDEX IF NOT EXISTS audit_log_at_idx ON audit_log(at DESC)`,
 	// 001 – wallet_transaction
 	`CREATE TABLE IF NOT EXISTS wallet_transaction (
 		id           BIGSERIAL    PRIMARY KEY,

@@ -5,9 +5,11 @@ package main
 import (
 	"context"
 	"database/sql"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -46,11 +48,17 @@ func main() {
 		}
 	}()
 
+	if err := authz.StartDailyMetrics(db, "study", `SELECT d::date AS day,'studySessions' AS name,(SELECT count(*) FROM learning_sessions WHERE completed_at>=d AND completed_at<d+interval '1 day') AS value FROM generate_series(current_date-179,current_date,interval '1 day') d`); err != nil {
+		log.Fatal(err)
+	}
+
+	go repository.RunCompletionOutbox(context.Background(), db, os.Getenv("NATS_URL"))
 	// Repositories
 	setRepo := repository.NewStudySetRepository(db)
 	cardRepo := repository.NewFlashcardRepository(db)
 	folderRepo := repository.NewFolderRepository(db)
 	progressRepo := repository.NewLearningProgressRepository(db)
+	statsRepo := repository.NewStatsRepository(db)
 	quizRepo := repository.NewQuizQuestionRepository(db)
 	importJobRepo := repository.NewImportJobRepository(db)
 
@@ -58,7 +66,8 @@ func main() {
 	setSvc := service.NewStudySetService(setRepo, cardRepo).WithLimiter(repository.NewQuizSessionRepository(db), contentPolicyFromEnv())
 	cardSvc := service.NewFlashcardService(setRepo, cardRepo)
 	folderSvc := service.NewFolderService(folderRepo, setRepo)
-	progressSvc := service.NewProgressService(progressRepo, setRepo, cardRepo)
+	progressSvc := service.NewProgressService(progressRepo, setRepo, cardRepo).WithLearnerAccess(service.NewLearnerAccess(setRepo, cfg.PaymentServiceURL))
+	statsSvc := service.NewStatsService(statsRepo)
 	quizSvc := service.NewQuizQuestionService(quizRepo, setRepo)
 	importSvc := service.NewImportService(cardRepo, quizRepo, setRepo)
 	importBlob, err := openImportBlobStorage(cfg)
@@ -79,7 +88,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithCache(redisCache).WithProtectedQuiz(
+	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithCache(redisCache).WithStats(statsSvc).WithAdmin(service.NewAdminService(repository.NewAdminRepository(db))).WithProtectedQuiz(
 		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL),
 		quizAudio,
 	).WithViewerMarkSecret(os.Getenv("WATERMARK_SECRET")).Register(mux)
@@ -88,7 +97,10 @@ func main() {
 	handler := middleware.Chain(mux,
 		middleware.RequestID,
 		middleware.Logging,
-		middleware.VerifyBearer(cfg.AuthServiceURL),
+		authz.VerifyIdentity(cfg.AuthServiceURL, func(r *http.Request) bool {
+			return strings.HasPrefix(r.URL.Path, "/v1/") && !strings.HasPrefix(r.URL.Path, "/v1/templates/") && r.URL.Path != "/v1/quiz-audio"
+		}),
+		middleware.StudyWritePolicy(db),
 	)
 
 	log.Printf("[study] listening on :%s", cfg.Port)

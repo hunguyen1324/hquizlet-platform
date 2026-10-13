@@ -8,16 +8,16 @@ import (
 
 // Class represents a class created by a teacher/owner.
 type Class struct {
-	ID           int64     `json:"id"`
-	OwnerUserID  int64     `json:"ownerUserId"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	InviteCode   string    `json:"inviteCode"`
-	MaxMembers   int       `json:"maxMembers"`
-	MemberCount  int       `json:"memberCount"`
-	StudySetCount int      `json:"studySetCount"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID            int64     `json:"id"`
+	OwnerUserID   int64     `json:"ownerUserId"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	InviteCode    string    `json:"inviteCode"`
+	MaxMembers    int       `json:"maxMembers"`
+	MemberCount   int       `json:"memberCount"`
+	StudySetCount int       `json:"studySetCount"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // ClassSummary is a lightweight view for class list.
@@ -50,12 +50,13 @@ type ClassMember struct {
 
 // ClassStudySet represents a study set assigned to a class.
 type ClassStudySet struct {
-	ClassID      int64     `json:"classId"`
-	StudySetID   int64     `json:"studySetId"`
-	Title        string    `json:"title,omitempty"`
-	FlashcardCount int     `json:"flashcardCount,omitempty"`
-	AddedByUserID int64    `json:"addedByUserId"`
-	AddedAt      time.Time `json:"addedAt"`
+	DueAt          *time.Time `json:"dueAt,omitempty"`
+	ClassID        int64      `json:"classId"`
+	StudySetID     int64      `json:"studySetId"`
+	Title          string     `json:"title,omitempty"`
+	FlashcardCount int        `json:"flashcardCount,omitempty"`
+	AddedByUserID  int64      `json:"addedByUserId"`
+	AddedAt        time.Time  `json:"addedAt"`
 }
 
 // ActivityEvent represents an event in the activity feed.
@@ -72,13 +73,13 @@ type ActivityEvent struct {
 
 // ActivityItem is the API response format for activity feed items.
 type ActivityItem struct {
-	ID         int64            `json:"id"`
-	EventType  string           `json:"eventType"`
-	EntityType string           `json:"entityType"`
-	EntityID   *int64           `json:"entityId,omitempty"`
-	ClassID    *int64           `json:"classId,omitempty"`
-	Metadata   map[string]any   `json:"metadata,omitempty"`
-	OccurredAt time.Time        `json:"occurredAt"`
+	ID         int64          `json:"id"`
+	EventType  string         `json:"eventType"`
+	EntityType string         `json:"entityType"`
+	EntityID   *int64         `json:"entityId,omitempty"`
+	ClassID    *int64         `json:"classId,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+	OccurredAt time.Time      `json:"occurredAt"`
 }
 
 // ActivityFeedResponse is the paginated activity feed response.
@@ -122,7 +123,8 @@ type UpdateMemberRoleRequest struct {
 
 // AddStudySetRequest is the payload for assigning a study set to a class.
 type AddStudySetRequest struct {
-	StudySetID int64 `json:"studySetId"`
+	DueAt      *time.Time `json:"dueAt,omitempty"`
+	StudySetID int64      `json:"studySetId"`
 }
 
 // JoinClassResponse is returned when a user joins a class.

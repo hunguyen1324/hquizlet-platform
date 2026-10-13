@@ -35,7 +35,7 @@ func (r *ClassStudySetRepository) Add(ctx context.Context, classID, studySetID, 
 // List returns all study sets assigned to a class.
 func (r *ClassStudySetRepository) List(ctx context.Context, classID int64) ([]*model.ClassStudySet, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT css.class_id, css.study_set_id, css.added_by_user_id, css.added_at
+		SELECT css.class_id, css.study_set_id, css.added_by_user_id, css.added_at, css.due_at
 		FROM class_study_sets css
 		WHERE css.class_id = $1
 		ORDER BY css.added_at DESC
@@ -48,7 +48,7 @@ func (r *ClassStudySetRepository) List(ctx context.Context, classID int64) ([]*m
 	var sets []*model.ClassStudySet
 	for rows.Next() {
 		s := &model.ClassStudySet{}
-		if err := rows.Scan(&s.ClassID, &s.StudySetID, &s.AddedByUserID, &s.AddedAt); err != nil {
+		if err := rows.Scan(&s.ClassID, &s.StudySetID, &s.AddedByUserID, &s.AddedAt, &s.DueAt); err != nil {
 			return nil, err
 		}
 		sets = append(sets, s)

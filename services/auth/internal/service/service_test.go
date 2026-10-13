@@ -3,19 +3,25 @@ package service_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/model"
+	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/auth/internal/service"
 )
 
 // --- mock repository ---
 
 type mockRepo struct {
-	users    map[string]mockUser    // keyed by email
-	sessions map[string]mockSession // tokenHash -> session
-	nextID   int64
+	users            map[string]mockUser    // keyed by email
+	sessions         map[string]mockSession // tokenHash -> session
+	assignments      []repository.IAMAssignment
+	organizations    []repository.Organization
+	audit            []repository.AuditEntry
+	nextID           int64
+	nextAssignmentID int64
 }
 
 type mockUser struct {
@@ -111,6 +117,143 @@ func (m *mockRepo) DeleteAllSessions(_ context.Context, userID int64) error {
 }
 
 func (m *mockRepo) PruneExpiredSessions(_ context.Context) error { return nil }
+
+func (m *mockRepo) ListPlatformRoleKeys(_ context.Context, userID int64) ([]string, error) {
+	for _, mu := range m.users {
+		if mu.User.ID == userID {
+			if mu.User.Role == "admin" {
+				return []string{"PlatformAdmin"}, nil
+			}
+			return []string{"Student"}, nil
+		}
+	}
+	return []string{"Student"}, nil
+}
+
+func (m *mockRepo) CreatePlatformAssignment(_ context.Context, userID int64, roleKey string, _ int64) error {
+	for email, mu := range m.users {
+		if mu.User.ID == userID {
+			_ = roleKey
+			m.users[email] = mu
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *mockRepo) InsertAuditLog(_ context.Context, actorID int64, action, resource, result, _, _ string, _ map[string]any) error {
+	m.audit = append(m.audit, repository.AuditEntry{ActorID: actorID, Action: action, Resource: resource, Result: result})
+	return nil
+}
+
+func (m *mockRepo) SeedManagedRoles(_ context.Context) error { return nil }
+
+// --- admin IAM methods (IAM-09) ---
+
+func (m *mockRepo) ListRoles(_ context.Context) ([]repository.IAMRole, error) {
+	var out []repository.IAMRole
+	for _, key := range []string{"PlatformAdmin", "Teacher", "Student"} {
+		out = append(out, repository.IAMRole{Key: key, Name: key, Kind: "managed"})
+	}
+	return out, nil
+}
+
+func (m *mockRepo) ListAssignments(_ context.Context, principalID int64, roleKey string, _, _ int) ([]repository.IAMAssignment, error) {
+	m.assignments = append([]repository.IAMAssignment(nil), m.assignments...)
+	var out []repository.IAMAssignment
+	for _, a := range m.assignments {
+		if principalID > 0 && a.PrincipalID != principalID {
+			continue
+		}
+		if roleKey != "" && a.RoleKey != roleKey {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+func (m *mockRepo) GetAssignment(_ context.Context, id int64) (repository.IAMAssignment, error) {
+	for _, a := range m.assignments {
+		if a.ID == id {
+			return a, nil
+		}
+	}
+	return repository.IAMAssignment{}, repository.ErrNotFound
+}
+
+func (m *mockRepo) CreateAssignment(_ context.Context, a repository.IAMAssignment) (repository.IAMAssignment, error) {
+	m.nextAssignmentID++
+	a.ID = m.nextAssignmentID
+	m.assignments = append(m.assignments, a)
+	return a, nil
+}
+
+func (m *mockRepo) DeleteAssignment(_ context.Context, id int64) error {
+	for i, a := range m.assignments {
+		if a.ID == id {
+			m.assignments = append(m.assignments[:i], m.assignments[i+1:]...)
+			return nil
+		}
+	}
+	return repository.ErrNotFound
+}
+
+func (m *mockRepo) ListUsers(_ context.Context, search, role, status string, _, _ int) ([]repository.AdminUser, int, error) {
+	var out []repository.AdminUser
+	for _, mu := range m.users {
+		if (status == "active" && mu.Disabled) || (status == "disabled" && !mu.Disabled) {
+			continue
+		}
+		if role != "" && mu.Role != role {
+			continue
+		}
+		if search != "" && !strings.Contains(mu.Email, search) && !strings.Contains(mu.Name, search) {
+			continue
+		}
+		out = append(out, repository.AdminUser{ID: mu.ID, Name: mu.Name, Email: mu.Email, Role: mu.Role, Disabled: mu.Disabled, CreatedAt: mu.CreatedAt})
+	}
+	return out, len(out), nil
+}
+
+func (m *mockRepo) SetUserDisabled(_ context.Context, id int64, disabled bool) (repository.AdminUser, error) {
+	for email, mu := range m.users {
+		if mu.ID == id {
+			mu.Disabled = disabled
+			m.users[email] = mu
+			return repository.AdminUser{ID: mu.ID, Name: mu.Name, Email: mu.Email, Role: mu.Role, Disabled: disabled, CreatedAt: mu.CreatedAt}, nil
+		}
+	}
+	return repository.AdminUser{}, repository.ErrNotFound
+}
+
+func (m *mockRepo) ListUsersByIDs(_ context.Context, ids []int64) ([]repository.AdminUser, error) {
+	byID := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		byID[id] = struct{}{}
+	}
+	var out []repository.AdminUser
+	for _, mu := range m.users {
+		if _, ok := byID[mu.ID]; ok {
+			out = append(out, repository.AdminUser{ID: mu.ID, Name: mu.Name, Email: mu.Email, Role: mu.Role})
+		}
+	}
+	return out, nil
+}
+
+func (m *mockRepo) ListAuditLog(_ context.Context, actorID int64, action string, _, _ int) ([]repository.AuditEntry, error) {
+	var out []repository.AuditEntry
+	for _, e := range m.audit {
+		if actorID > 0 && e.ActorID != actorID {
+			continue
+		}
+		if action != "" && e.Action != action {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
 
 // --- adapt mock to what service.New expects ---
 // service.New takes *repository.AuthRepository, so we need to test via a thin adapter.

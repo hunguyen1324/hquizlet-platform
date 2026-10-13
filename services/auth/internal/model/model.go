@@ -24,17 +24,21 @@ type Session struct {
 // VerifiedIdentity is the canonical identity returned to trusted services.
 // It deliberately excludes the raw token and token hash.
 type VerifiedIdentity struct {
-	UserID    int64     `json:"userId"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	Role      string    `json:"role"`
+	UserID        int64     `json:"userId"`
+	Email         string    `json:"email"`
+	Name          string    `json:"name"`
+	Role          string    `json:"role"`
+	PlatformRoles []string  `json:"platformRoles"`
+	// OrgRoles holds organization memberships as "<orgID>:<RoleKey>" entries.
+	OrgRoles  []string  `json:"orgRoles,omitempty"`
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 type RegisterInput struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	AccountType string `json:"accountType"` // teacher | student (default student)
 }
 
 type LoginInput struct {

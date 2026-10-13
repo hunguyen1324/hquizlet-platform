@@ -3,6 +3,8 @@ module github.com/hunguyen1324/hquizlet-platform/services/study
 go 1.25.0
 
 require (
+ github.com/hunguyen1324/hquizlet-platform/packages/authz v0.0.0
+ github.com/nats-io/nats.go v1.37.0
 	github.com/aws/aws-sdk-go-v2 v1.30.1
 	github.com/aws/aws-sdk-go-v2/config v1.27.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.0
@@ -39,3 +41,5 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 )
+
+replace github.com/hunguyen1324/hquizlet-platform/packages/authz => ../../packages/authz

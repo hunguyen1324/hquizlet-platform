@@ -3,6 +3,7 @@ package http
 import (
 	"database/sql"
 	"encoding/json"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"net/http"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/payment/internal/http/handler"
@@ -93,6 +94,7 @@ func NewRouter(deps Deps) http.Handler {
 	)
 
 	// ── Admin routes ──────────────────────────────────────────────────────
+	mux.Handle("GET /v1/admin/payments/stats", middleware.Auth(middleware.RequireAdmin(authz.DailyMetricsHandler(deps.DB, "payment"))))
 	mux.Handle("GET /v1/admin/payments/orders",
 		middleware.Auth(middleware.RequireAdmin(adminH)),
 	)
@@ -100,7 +102,7 @@ func NewRouter(deps Deps) http.Handler {
 		middleware.Auth(middleware.RequireAdmin(adminH)),
 	)
 	mux.Handle("POST /v1/admin/wallet/credit",
-		middleware.Auth(middleware.RequireAdmin(adminH)),
+		middleware.Auth(middleware.RequireAdmin(middleware.RequireReauthentication(adminH))),
 	)
 
 	return middleware.RequestID(middleware.Logging(mux))

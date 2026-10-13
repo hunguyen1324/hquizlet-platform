@@ -10,6 +10,7 @@ WORKDIR /src/services/${SERVICE}
 COPY go.work go.work.sum /src/
 COPY services /src/services
 COPY pkg /src/pkg
+COPY packages /src/packages
 
 # Download and verify dependencies without changing module manifests.
 RUN go mod download

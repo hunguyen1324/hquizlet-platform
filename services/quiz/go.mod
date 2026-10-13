@@ -3,6 +3,7 @@ module github.com/hunguyen1324/hquizlet-platform/services/quiz
 go 1.23.0
 
 require (
+	github.com/hunguyen1324/hquizlet-platform/packages/authz v0.0.0
 	github.com/lib/pq v1.10.9
 	github.com/nats-io/nats.go v1.37.0
 	github.com/redis/go-redis/v9 v9.7.0
@@ -17,3 +18,5 @@ require (
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect
 )
+
+replace github.com/hunguyen1324/hquizlet-platform/packages/authz => ../../packages/authz

@@ -2,7 +2,8 @@ package service
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/client"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/model"
@@ -33,34 +34,34 @@ func NewClassStudySetService(
 }
 
 // AddStudySet assigns a study set to a class (owner/teacher only).
-func (s *ClassStudySetService) AddStudySet(ctx context.Context, classID, userID, studySetID int64) error {
-	if userID <= 0 {
+func (s *ClassStudySetService) AddStudySet(ctx context.Context, p authz.Principal, classID, studySetID int64) error {
+	if p.UserID <= 0 {
 		return ErrUnauthorized
 	}
 
-	if err := s.requireTeacherOrOwner(ctx, classID, userID); err != nil {
+	if err := s.authorize(ctx, p, classID, authz.ActionClassContentAssign); err != nil {
 		return err
 	}
 
 	if s.studyClient != nil {
 		info, err := s.studyClient.GetStudySet(ctx, studySetID)
 		if err != nil {
-			// Study service unavailable — allow with warning
+			return fmt.Errorf("verify assigned study set: %w", err)
 		} else if info == nil {
-			return errors.New("study set not found")
+			return ErrNotFound
 		}
 	}
 
-	return s.studySets.Add(ctx, classID, studySetID, userID)
+	return s.studySets.Add(ctx, classID, studySetID, p.UserID)
 }
 
 // ListStudySets returns all study sets assigned to a class.
-func (s *ClassStudySetService) ListStudySets(ctx context.Context, classID, userID int64) ([]*model.ClassStudySet, error) {
-	if userID <= 0 {
+func (s *ClassStudySetService) ListStudySets(ctx context.Context, p authz.Principal, classID int64) ([]*model.ClassStudySet, error) {
+	if p.UserID <= 0 {
 		return nil, ErrUnauthorized
 	}
 
-	if err := s.requireMember(ctx, classID, userID); err != nil {
+	if err := s.authorize(ctx, p, classID, authz.ActionClassContentView); err != nil {
 		return nil, err
 	}
 
@@ -68,12 +69,12 @@ func (s *ClassStudySetService) ListStudySets(ctx context.Context, classID, userI
 }
 
 // RemoveStudySet removes a study set from a class (owner/teacher only).
-func (s *ClassStudySetService) RemoveStudySet(ctx context.Context, classID, userID, studySetID int64) error {
-	if userID <= 0 {
+func (s *ClassStudySetService) RemoveStudySet(ctx context.Context, p authz.Principal, classID, studySetID int64) error {
+	if p.UserID <= 0 {
 		return ErrUnauthorized
 	}
 
-	if err := s.requireTeacherOrOwner(ctx, classID, userID); err != nil {
+	if err := s.authorize(ctx, p, classID, authz.ActionClassContentUnassign); err != nil {
 		return err
 	}
 
@@ -85,40 +86,8 @@ func (s *ClassStudySetService) CountByClass(ctx context.Context, classID int64) 
 	return s.studySets.CountByClass(ctx, classID)
 }
 
-func (s *ClassStudySetService) requireMember(ctx context.Context, classID, userID int64) error {
-	class, err := s.classes.GetByID(ctx, classID)
-	if err != nil {
-		return err
-	}
-	if class.OwnerUserID == userID {
-		return nil
-	}
-
-	role, err := s.members.GetRole(ctx, classID, userID)
-	if err != nil {
-		return err
-	}
-	if role == "" {
-		return ErrForbidden
-	}
-	return nil
-}
-
-func (s *ClassStudySetService) requireTeacherOrOwner(ctx context.Context, classID, userID int64) error {
-	class, err := s.classes.GetByID(ctx, classID)
-	if err != nil {
-		return err
-	}
-	if class.OwnerUserID == userID {
-		return nil
-	}
-
-	role, err := s.members.GetRole(ctx, classID, userID)
-	if err != nil {
-		return err
-	}
-	if role != "teacher" && role != "owner" {
-		return ErrForbidden
-	}
-	return nil
+func (s *ClassStudySetService) authorize(ctx context.Context, p authz.Principal, classID int64, action authz.Action) error {
+	authorizer := &ClassService{classes: s.classes, members: s.members}
+	_, err := authorizer.authorizeClass(ctx, p, classID, action)
+	return err
 }

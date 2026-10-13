@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/hunguyen1324/hquizlet-platform/services/payment/internal/http/middleware"
 	"net/http"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/payment/internal/model"
@@ -78,7 +79,7 @@ func (h *AdminHandler) credit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.walletSvc.AdminCredit(r.Context(), req.UserID, req.AmountVnd, req.Note); err != nil {
+	if err := h.walletSvc.AdminCredit(r.Context(), middleware.GetUserID(r.Context()), req.UserID, req.AmountVnd, req.Note, r.Header.Get("X-Request-ID")); err != nil {
 		WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

@@ -13,9 +13,10 @@ import (
 
 // ProgressService owns all business logic for saving and reading progress.
 type ProgressService struct {
-	progress repository.LearningProgress
-	sets     repository.StudySets
-	cards    repository.Flashcards
+	progress      repository.LearningProgress
+	sets          repository.StudySets
+	cards         repository.Flashcards
+	learnerAccess func(context.Context, int64, int64) error
 }
 
 // NewProgressService returns a new ProgressService.
@@ -49,7 +50,9 @@ func (s *ProgressService) Save(
 		return model.LearningSession{}, err
 	}
 	if !owned {
-		return model.LearningSession{}, ErrForbidden
+		if err := s.allowLearner(ctx, studySetID, userID); err != nil {
+			return model.LearningSession{}, err
+		}
 	}
 
 	// Verify every card belongs to this study set (prevents cross-set injection).
@@ -79,7 +82,9 @@ func (s *ProgressService) GetSummary(
 		return model.ProgressSummary{}, err
 	}
 	if !owned {
-		return model.ProgressSummary{}, ErrForbidden
+		if err := s.allowLearner(ctx, studySetID, userID); err != nil {
+			return model.ProgressSummary{}, err
+		}
 	}
 
 	f = normalizeFilter(f)
@@ -103,7 +108,9 @@ func (s *ProgressService) GetLatestByMode(
 		return model.LearningSession{}, err
 	}
 	if !owned {
-		return model.LearningSession{}, ErrForbidden
+		if err := s.allowLearner(ctx, studySetID, userID); err != nil {
+			return model.LearningSession{}, err
+		}
 	}
 	return s.progress.GetLatestByMode(ctx, userID, studySetID, mode)
 }
@@ -117,7 +124,9 @@ func (s *ProgressService) GetLatest(ctx context.Context, userID, studySetID int6
 		return nil, err
 	}
 	if !owned {
-		return nil, ErrForbidden
+		if err := s.allowLearner(ctx, studySetID, userID); err != nil {
+			return nil, err
+		}
 	}
 	return s.progress.GetLatest(ctx, userID, studySetID)
 }
@@ -220,3 +229,16 @@ func normalizeFilter(f model.ProgressFilter) model.ProgressFilter {
 
 // ErrConflict is returned on idempotency key collision (duplicate submit).
 var ErrConflict = errors.New("conflict: duplicate idempotency key")
+
+// WithLearnerAccess enables progress for authorized non-owner learners.
+// The user ID always comes from the verified identity, never from request JSON.
+func (s *ProgressService) WithLearnerAccess(check func(context.Context, int64, int64) error) *ProgressService {
+	s.learnerAccess = check
+	return s
+}
+func (s *ProgressService) allowLearner(ctx context.Context, setID, uid int64) error {
+	if s.learnerAccess == nil {
+		return ErrForbidden
+	}
+	return s.learnerAccess(ctx, setID, uid)
+}

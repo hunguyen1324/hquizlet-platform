@@ -4,11 +4,12 @@
 import React, { useState } from "react";
 
 interface LiveHomeProps {
+ canHost?: boolean;
   onHost: (studySetId: number, questionCount: number, questionDurationMs: number) => void;
   onJoin: (code: string) => void;
 }
 
-export function LiveHome({ onHost, onJoin }: LiveHomeProps) {
+export function LiveHome({ onHost, onJoin, canHost = false }: LiveHomeProps) {
   const [mode, setMode] = useState<"host" | "join">("join");
   const [joinCode, setJoinCode] = useState("");
   const [studySetId, setStudySetId] = useState(0);
@@ -26,12 +27,12 @@ export function LiveHome({ onHost, onJoin }: LiveHomeProps) {
         >
           Join Game
         </button>
-        <button
+        {canHost && <button
           className={mode === "host" ? "primary-button" : "ghost-button"}
           onClick={() => setMode("host")}
         >
           Host Game
-        </button>
+        </button>}
       </div>
 
       {mode === "join" && (
@@ -67,7 +68,7 @@ export function LiveHome({ onHost, onJoin }: LiveHomeProps) {
         </div>
       )}
 
-      {mode === "host" && (
+      {mode === "host" && canHost && (
         <div>
           <h2>Host a Game</h2>
           <div style={{ marginBottom: "1rem" }}>

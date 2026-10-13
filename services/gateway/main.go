@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -16,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 )
 
 type serviceHealth struct {
@@ -25,39 +28,60 @@ type serviceHealth struct {
 }
 
 type verifiedIdentity struct {
-	Authenticated bool   `json:"authenticated"`
-	UserID        int64  `json:"userId"`
-	Email         string `json:"email"`
-	Name          string `json:"name"`
-	Role          string `json:"role"`
+	Authenticated bool     `json:"authenticated"`
+	UserID        int64    `json:"userId"`
+	Email         string   `json:"email"`
+	Name          string   `json:"name"`
+	Role          string   `json:"role"`
+	PlatformRoles []string `json:"platformRoles"`
+	OrgRoles      []string `json:"orgRoles"`
 }
 
 var authCache = newTokenCache(60 * time.Second)
 var internalSigningKey = env("INTERNAL_SIGNING_KEY", "")
 
-func signInternalIdentity(userID int64, role string, ts int64) string {
+func signInternalIdentity(userID int64, role, platformRoles string, ts int64) string {
 	if internalSigningKey == "" {
 		return ""
 	}
-	msg := strconv.FormatInt(userID, 10) + "|" + role + "|" + strconv.FormatInt(ts, 10)
+	msg := strconv.FormatInt(userID, 10) + "|" + role + "|" + platformRoles + "|" + strconv.FormatInt(ts, 10)
 	mac := hmac.New(sha256.New, []byte(internalSigningKey))
 	mac.Write([]byte(msg))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+func platformRolesHeader(roles []string) string {
+	return strings.Join(roles, ",")
+}
+
 func injectIdentityHeaders(r *http.Request, identity verifiedIdentity) {
 	r.Header.Del("X-User-ID")
 	r.Header.Del("X-User-Role")
+	r.Header.Del("X-User-Roles")
+	r.Header.Del("X-User-Org-Roles")
 	r.Header.Del("X-Participant-ID")
 	r.Header.Del("X-Live-Role")
 	r.Header.Del("X-Class-Role")
 	r.Header.Del("X-Member-ID")
 	r.Header.Set("X-User-ID", strconv.FormatInt(identity.UserID, 10))
 	r.Header.Set("X-User-Role", identity.Role)
+	rolesHdr := platformRolesHeader(identity.PlatformRoles)
+	orgHdr := strings.Join(identity.OrgRoles, ",")
+	if orgHdr != "" {
+		r.Header.Set("X-User-Org-Roles", orgHdr)
+	}
+	if rolesHdr != "" {
+		r.Header.Set("X-User-Roles", rolesHdr)
+	}
 
 	if internalSigningKey != "" {
 		ts := time.Now().Unix()
-		sig := signInternalIdentity(identity.UserID, identity.Role, ts)
+		sig := signInternalIdentity(identity.UserID, identity.Role, rolesHdr, ts)
+		if orgHdr != "" {
+			mac := hmac.New(sha256.New, []byte(internalSigningKey))
+			fmt.Fprintf(mac, "%d|%s|%s|%s|%d", identity.UserID, identity.Role, rolesHdr, orgHdr, ts)
+			sig = hex.EncodeToString(mac.Sum(nil))
+		}
 		r.Header.Set("X-Internal-Ts", strconv.FormatInt(ts, 10))
 		r.Header.Set("X-Internal-Sig", sig)
 	}
@@ -76,6 +100,9 @@ func main() {
 	paymentURL := env("PAYMENT_SERVICE_URL", "http://localhost:8085")
 	fileURL := env("FILE_SERVICE_URL", "http://localhost:8086")
 	mux.HandleFunc("/v1/auth/", authProxy(authURL))
+	mux.HandleFunc("/v1/me/", authenticatedProxy(authURL, authURL))
+	// Phase 2: personal dashboard statistics are owned by the study service.
+	mux.HandleFunc("GET /v1/me/study-stats", authenticatedProxy(authURL, studyURL))
 	// Study verifies a scoped, expiring audio ticket for native media Range requests.
 	mux.HandleFunc("GET /v1/quiz-audio", reverseProxy(studyURL))
 	// Class validates a scoped video ticket and current permissions for every Range request.
@@ -146,10 +173,21 @@ func main() {
 	mux.HandleFunc("GET /v1/entitlements/check", optionalAuthenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("GET /v1/entitlements", authenticatedProxy(authURL, paymentURL))
 	mux.HandleFunc("PUT /v1/study-sets/", routeStudySetPrice(authURL, studyURL, paymentURL))
-	// Admin payment routes
-	mux.HandleFunc("GET /v1/admin/payments/orders", authenticatedProxy(authURL, paymentURL))
-	mux.HandleFunc("GET /v1/admin/wallet/transactions", authenticatedProxy(authURL, paymentURL))
-	mux.HandleFunc("POST /v1/admin/wallet/credit", authenticatedProxy(authURL, paymentURL))
+	// Admin payment routes (coarse admin gate at the edge; services re-check each action)
+	mux.HandleFunc("GET /v1/admin/payments/orders", adminAuthenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("GET /v1/admin/wallet/transactions", adminAuthenticatedProxy(authURL, paymentURL))
+	mux.HandleFunc("POST /v1/admin/wallet/credit", adminAuthenticatedProxy(authURL, paymentURL))
+
+	// Admin console routes -> auth service (users, roles, assignments, audit)
+	mux.HandleFunc("/v1/admin/", adminAuthenticatedProxy(authURL, authURL))
+	mux.HandleFunc("/v1/admin/study-sets", adminAuthenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/admin/study-sets/", adminAuthenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/admin/study-system", adminAuthenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/admin/top-content", adminAuthenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/admin/study-stats", adminAuthenticatedProxy(authURL, studyURL))
+	mux.HandleFunc("/v1/admin/class-stats", adminAuthenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/admin/classes", adminAuthenticatedProxy(authURL, classURL))
+	mux.HandleFunc("GET /v1/admin/payments/stats", adminAuthenticatedProxy(authURL, paymentURL))
 
 	log.Printf("[gateway] listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
@@ -237,6 +275,46 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 	}
 }
 
+// canAccessAdminConsole is the gateway's coarse check for /v1/admin/*. Full admins pass via
+// dashboard:ViewAdmin; the read-only PlatformSupport role passes via user:List. Services still
+// re-check every action with authz.Can, so this only narrows unauthenticated traffic.
+func canAccessAdminConsole(p authz.Principal) bool {
+	res := authz.Resource{Type: "platform"}
+	return authz.Can(p, authz.ActionDashboardViewAdmin, res) || authz.Can(p, authz.ActionUserList, res)
+}
+
+// adminAuthenticatedProxy verifies the bearer token and requires admin-console access
+// before forwarding. Client-supplied identity headers are always replaced.
+func adminAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		identity, status, err := verifyIdentity(r.Context(), authTarget, r.Header.Get("Authorization"))
+		if err != nil {
+			if status == http.StatusUnauthorized {
+				writeGatewayError(w, r, status, "UNAUTHORIZED", "authentication required")
+				return
+			}
+			writeGatewayError(w, r, status, "AUTH_UNAVAILABLE", "authentication service unavailable")
+			return
+		}
+		principal := authz.Principal{
+			UserID:        identity.UserID,
+			LegacyRole:    identity.Role,
+			PlatformRoles: identity.PlatformRoles,
+		}
+		if !canAccessAdminConsole(principal) {
+			writeGatewayError(w, r, http.StatusForbidden, "FORBIDDEN", "admin access required")
+			return
+		}
+		if !allowAdminRequest(identity.UserID, r.Method != http.MethodGet) {
+			w.Header().Set("Retry-After", "60")
+			writeGatewayError(w, r, 429, "RATE_LIMITED", "too many admin requests")
+			return
+		}
+		injectIdentityHeaders(r, identity)
+		reverseProxy(serviceTarget)(w, r)
+	}
+}
+
 // optionalAuthenticatedProxy forwards anonymous requests, but verifies and
 // injects identity when a bearer token is present.
 func optionalAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
@@ -244,6 +322,8 @@ func optionalAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFu
 		auth := r.Header.Get("Authorization")
 		r.Header.Del("X-User-ID")
 		r.Header.Del("X-User-Role")
+		r.Header.Del("X-User-Roles")
+		r.Header.Del("X-User-Org-Roles")
 		r.Header.Del("X-Participant-ID")
 		r.Header.Del("X-Live-Role")
 		r.Header.Del("X-Class-Role")
@@ -432,7 +512,7 @@ func cors(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, Last-Event-ID")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, Last-Event-ID, X-Admin-Password")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

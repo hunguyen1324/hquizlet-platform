@@ -4,20 +4,21 @@ import "time"
 
 // QuizSession is persisted only on the server. Never serialize it to a client.
 type QuizSession struct {
-	ID           string         `json:"id"`
-	UserID       int64          `json:"userId"`
-	StudySetID   int64          `json:"studySetId"`
-	Mode         string         `json:"mode"`
-	Instant      bool           `json:"instant"`
-	Layout       string         `json:"layout"`
-	StartedAt    time.Time      `json:"startedAt"`
-	Deadline     *time.Time     `json:"deadline,omitempty"`
-	ExpiresAt    time.Time      `json:"expiresAt"`
-	SubmittedAt  *time.Time     `json:"submittedAt,omitempty"`
-	Items        []SessionItem  `json:"items"`
-	Answers      map[int]string `json:"answers"`
-	Seen         map[int]bool   `json:"seen"`
-	CurrentIndex int            `json:"currentIndex"`
+	ID             string         `json:"id"`
+	UserID         int64          `json:"userId"`
+	StudySetID     int64          `json:"studySetId"`
+	Mode           string         `json:"mode"`
+	Instant        bool           `json:"instant"`
+	Layout         string         `json:"layout"`
+	StartedAt      time.Time      `json:"startedAt"`
+	Deadline       *time.Time     `json:"deadline,omitempty"`
+	ExpiresAt      time.Time      `json:"expiresAt"`
+	SubmittedAt    *time.Time     `json:"submittedAt,omitempty"`
+	CompletedScore *int           `json:"completedScore,omitempty"`
+	Items          []SessionItem  `json:"items"`
+	Answers        map[int]string `json:"answers"`
+	Seen           map[int]bool   `json:"seen"`
+	CurrentIndex   int            `json:"currentIndex"`
 }
 
 type SessionItem struct {

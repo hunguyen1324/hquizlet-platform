@@ -1,5 +1,6 @@
 // Sidebar — unified design system, hq-* classes
 import React from "react";
+import { useIsAdmin } from "../../features/auth/permissions";
 import "./layout.css";
 
 type SidebarProps = {
@@ -14,7 +15,11 @@ const primaryNav = [
     icon: <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   },
   {
-    id: "dashboard", label: "Thư viện",
+    id: "overview", label: "Tổng quan",
+    icon: <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18"/><path strokeLinecap="round" strokeLinejoin="round" d="M7 15l4-5 3 3 5-7"/></svg>,
+  },
+  {
+    id: "dashboard", label: "Thư viện học phần",
     icon: <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>,
   },
   {
@@ -42,7 +47,13 @@ const toolsNav = [
   },
 ];
 
+const adminNav = {
+  id: "admin", label: "Quản trị",
+  icon: <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l8 4v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6z"/><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4"/></svg>,
+};
+
 export function Sidebar({ currentView, onNavigate, onCreateFolder }: SidebarProps) {
+  const isAdmin = useIsAdmin();
   return (
     <aside className="hq-sidebar">
       <div className="hq-sidebar-section">
@@ -73,6 +84,22 @@ export function Sidebar({ currentView, onNavigate, onCreateFolder }: SidebarProp
           </button>
         ))}
       </div>
+
+      {isAdmin && (
+        <>
+          <div className="hq-sidebar-divider" />
+          <div className="hq-sidebar-section">
+            <span className="hq-sidebar-label">Hệ thống</span>
+            <button
+              className={`hq-sidebar-link${currentView === adminNav.id ? " active" : ""}`}
+              onClick={() => onNavigate(adminNav.id)}
+            >
+              {adminNav.icon}
+              <span>{adminNav.label}</span>
+            </button>
+          </div>
+        </>
+      )}
 
       <div className="hq-sidebar-divider" />
 

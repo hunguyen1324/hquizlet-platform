@@ -303,6 +303,7 @@ func sessionView(s *model.QuizSession, index int, now time.Time) model.QuizSessi
 		}
 	}
 	if s.SubmittedAt != nil {
+		s.CompletedScore = &score
 		view.Score = &score
 		view.TimeUsed = int(s.SubmittedAt.Sub(s.StartedAt).Seconds())
 	}

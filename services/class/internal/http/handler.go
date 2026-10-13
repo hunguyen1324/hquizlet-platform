@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,11 +21,25 @@ type Handler struct {
 	members       *classservice.MemberService
 	studySets     *classservice.ClassStudySetService
 	activity      *classservice.ActivityService
+	dashboard     *classservice.ClassDashboardService
+	admin         *classservice.ClassAdminService
 	db            *sql.DB
 	videoStore    videostorage.Store
 	videoSecret   []byte
 	hlsSecret     []byte
 	videoMaxBytes int64
+}
+
+// WithDashboard wires the class dashboard service (GET /v1/classes/{id}/dashboard).
+func (h *Handler) WithDashboard(d *classservice.ClassDashboardService) *Handler {
+	h.dashboard = d
+	return h
+}
+
+// WithAdmin wires the platform-wide admin listing service (GET /v1/admin/classes).
+func (h *Handler) WithAdmin(a *classservice.ClassAdminService) *Handler {
+	h.admin = a
+	return h
 }
 
 // ConfigureVideos enables private SFTP videos without changing public image storage.
@@ -63,6 +78,39 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	// Activity feed
 	mux.HandleFunc("GET /v1/activity", h.getActivityFeed)
+
+	// Admin console (ADM-06). The gateway already requires admin-console access; the
+	// service re-checks dashboard:ViewAdmin through authz.Can before returning any row.
+	mux.HandleFunc("GET /v1/admin/classes", h.adminListClasses)
+	mux.HandleFunc("GET /v1/admin/class-stats", authz.DailyMetricsHandler(h.db, "class"))
+}
+
+// adminListClasses serves the platform-wide class list to admins only.
+func (h *Handler) adminListClasses(w http.ResponseWriter, r *http.Request) {
+	if h.admin == nil {
+		WriteError(w, http.StatusServiceUnavailable, "admin listing unavailable")
+		return
+	}
+	limit, offset := queryLimitOffset(r, 25)
+	rows, total, err := h.admin.ListClasses(r.Context(), principalFromRequest(r), r.URL.Query().Get("search"), limit, offset)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"classes": rows, "total": total})
+}
+
+// queryLimitOffset parses ?limit/?offset with a bounded default.
+func queryLimitOffset(r *http.Request, fallback int) (int, int) {
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil || limit <= 0 || limit > 100 {
+		limit = fallback
+	}
+	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+	return limit, offset
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +147,7 @@ func (h *Handler) createClass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	class, err := h.classes.Create(r.Context(), userID, in)
+	class, err := h.classes.Create(r.Context(), principalFromRequest(r), in)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -139,6 +187,16 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sub-routes
+	if len(parts) == 2 && parts[1] == "permissions" && r.Method == http.MethodGet {
+		p := principalFromRequest(r)
+		actions, err := h.classes.Permissions(r.Context(), p, classID)
+		if err != nil {
+			writeServiceError(w, r, err)
+			return
+		}
+		WriteJSON(w, 200, map[string]any{"actions": actions, "platformRoles": p.PlatformRoles, "legacyRole": p.LegacyRole, "classId": classID})
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "videos" {
 		h.videoRouter(w, r, classID, parts[2:])
 		return
@@ -161,6 +219,26 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 3 && parts[1] == "invite-code" && parts[2] == "reset" {
 		if r.Method == http.MethodPost {
 			h.resetInviteCode(w, r, classID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+
+	// /v1/classes/{id}/dashboard (Phase 3)
+	if len(parts) == 2 && parts[1] == "dashboard" {
+		if r.Method == http.MethodGet {
+			h.getClassDashboard(w, r, classID)
+		} else {
+			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+		return
+	}
+
+	// /v1/classes/{id}/leaderboard (Phase 3, CLS-05)
+	if len(parts) == 2 && parts[1] == "leaderboard" {
+		if r.Method == http.MethodPut {
+			h.setClassLeaderboard(w, r, classID)
 		} else {
 			WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -285,7 +363,7 @@ func (h *Handler) updateClass(w http.ResponseWriter, r *http.Request, classID in
 		return
 	}
 
-	class, err := h.classes.Update(r.Context(), classID, userID, in)
+	class, err := h.classes.Update(r.Context(), principalFromRequest(r), classID, in)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -314,7 +392,7 @@ func (h *Handler) deleteClass(w http.ResponseWriter, r *http.Request, classID in
 		ClassID:    &classID,
 	})
 
-	if err := h.classes.Delete(r.Context(), classID, userID); err != nil {
+	if err := h.classes.Delete(r.Context(), principalFromRequest(r), classID); err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
@@ -347,8 +425,7 @@ func (h *Handler) joinClass(w http.ResponseWriter, r *http.Request, code string)
 }
 
 func (h *Handler) resetInviteCode(w http.ResponseWriter, r *http.Request, classID int64) {
-	userID := userIDFromHeader(r)
-	newCode, err := h.classes.ResetInviteCode(r.Context(), classID, userID)
+	newCode, err := h.classes.ResetInviteCode(r.Context(), principalFromRequest(r), classID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -356,11 +433,44 @@ func (h *Handler) resetInviteCode(w http.ResponseWriter, r *http.Request, classI
 	WriteJSON(w, http.StatusOK, map[string]string{"inviteCode": newCode})
 }
 
+// --- Dashboard handlers (Phase 3) ---
+
+func (h *Handler) getClassDashboard(w http.ResponseWriter, r *http.Request, classID int64) {
+	if h.dashboard == nil {
+		WriteError(w, http.StatusServiceUnavailable, "dashboard unavailable")
+		return
+	}
+	view, err := h.dashboard.Get(r.Context(), principalFromRequest(r), classID)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, view)
+}
+
+func (h *Handler) setClassLeaderboard(w http.ResponseWriter, r *http.Request, classID int64) {
+	if h.dashboard == nil {
+		WriteError(w, http.StatusServiceUnavailable, "dashboard unavailable")
+		return
+	}
+	var in struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := h.dashboard.SetLeaderboard(r.Context(), principalFromRequest(r), classID, in.Enabled); err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]bool{"showLeaderboard": in.Enabled})
+}
+
 // --- Member handlers ---
 
 func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request, classID int64) {
-	userID := userIDFromHeader(r)
-	members, err := h.members.ListMembers(r.Context(), classID, userID)
+	members, err := h.members.ListMembers(r.Context(), principalFromRequest(r), classID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -379,7 +489,7 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request, classID int6
 		return
 	}
 
-	member, err := h.members.AddMember(r.Context(), classID, userID, in.UserID, in.Role)
+	member, err := h.members.AddMember(r.Context(), principalFromRequest(r), classID, in.UserID, in.Role)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -398,14 +508,13 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request, classID int6
 }
 
 func (h *Handler) updateMemberRole(w http.ResponseWriter, r *http.Request, classID, targetUserID int64) {
-	userID := userIDFromHeader(r)
 	var in model.UpdateMemberRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
-	if err := h.members.UpdateRole(r.Context(), classID, userID, targetUserID, in.Role); err != nil {
+	if err := h.members.UpdateRole(r.Context(), principalFromRequest(r), classID, targetUserID, in.Role); err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
@@ -414,7 +523,7 @@ func (h *Handler) updateMemberRole(w http.ResponseWriter, r *http.Request, class
 
 func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request, classID, targetUserID int64) {
 	userID := userIDFromHeader(r)
-	if err := h.members.RemoveMember(r.Context(), classID, userID, targetUserID); err != nil {
+	if err := h.members.RemoveMember(r.Context(), principalFromRequest(r), classID, targetUserID); err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
@@ -450,8 +559,7 @@ func (h *Handler) leaveClass(w http.ResponseWriter, r *http.Request, classID int
 // --- Study set handlers ---
 
 func (h *Handler) listClassStudySets(w http.ResponseWriter, r *http.Request, classID int64) {
-	userID := userIDFromHeader(r)
-	sets, err := h.studySets.ListStudySets(r.Context(), classID, userID)
+	sets, err := h.studySets.ListStudySets(r.Context(), principalFromRequest(r), classID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
@@ -470,9 +578,15 @@ func (h *Handler) addStudySetToClass(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 
-	if err := h.studySets.AddStudySet(r.Context(), classID, userID, in.StudySetID); err != nil {
+	if err := h.studySets.AddStudySet(r.Context(), principalFromRequest(r), classID, in.StudySetID); err != nil {
 		writeServiceError(w, r, err)
 		return
+	}
+	if in.DueAt != nil {
+		if _, err := h.db.ExecContext(r.Context(), `UPDATE class_study_sets SET due_at=$3 WHERE class_id=$1 AND study_set_id=$2`, classID, in.StudySetID, in.DueAt); err != nil {
+			WriteError(w, 503, "deadline update unavailable")
+			return
+		}
 	}
 
 	_ = h.activity.RecordEvent(r.Context(), model.ActivityEvent{
@@ -488,7 +602,7 @@ func (h *Handler) addStudySetToClass(w http.ResponseWriter, r *http.Request, cla
 
 func (h *Handler) removeStudySetFromClass(w http.ResponseWriter, r *http.Request, classID, studySetID int64) {
 	userID := userIDFromHeader(r)
-	if err := h.studySets.RemoveStudySet(r.Context(), classID, userID, studySetID); err != nil {
+	if err := h.studySets.RemoveStudySet(r.Context(), principalFromRequest(r), classID, studySetID); err != nil {
 		writeServiceError(w, r, err)
 		return
 	}

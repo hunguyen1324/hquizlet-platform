@@ -1,0 +1,16 @@
+import React from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { SectionCard, EmptyState } from "../../components/dashboard";
+import { useAuth } from "../auth/AuthContext";
+import { classApi, classDashboardApi, walletApi } from "../../lib/api";
+import { apiFetch } from "../../lib/api/client";
+
+export function ClassAttention({teacher,onOpenClass,onOpenSet}:{teacher:boolean;onOpenClass:(id:number)=>void;onOpenSet:(id:number)=>void}) {
+ const {token}=useAuth();
+ const classes=useQuery({queryKey:["dashboard-classes"],queryFn:()=>classApi.list(token),enabled:!!token});
+ const rows=(classes.data??[]).filter(c=>!teacher||c.myRole==="owner"||c.myRole==="teacher");
+ const dashboards=useQueries({queries:rows.map(c=>({queryKey:["class-dashboard",c.id],queryFn:()=>classDashboardApi.get(token,c.id),enabled:!!token,staleTime:30000}))});
+ const wallet=useQuery({queryKey:["dashboard-wallet"],queryFn:()=>walletApi.getBalance(token),enabled:!!token&&!teacher});
+ const purchases=useQuery({queryKey:["dashboard-purchases"],queryFn:()=>apiFetch<{items:Array<{studySetId:number}>}>("/v1/entitlements",token),enabled:!!token&&!teacher});
+ return <div className="space-y-4"><SectionCard title={teacher?"Hoạt động lớp & học sinh cần chú ý":"Lớp của tôi & bài được giao"}>{classes.isError?<p role="alert">Không tải được lớp <button onClick={()=>void classes.refetch()}>Thử lại</button></p>:classes.isLoading?<p>Đang tải lớp…</p>:!rows.length?<EmptyState title="Chưa có lớp nào"/>:<ul className="space-y-3">{rows.map((c,i)=>{const q=dashboards[i],data=q.data;const inactive=(data?.students??[]).filter(s=>!s.lastActivityAt||Date.now()-new Date(s.lastActivityAt).getTime()>=7*86400000);const assignments=(data?.assignedSets??[]).filter(s=>s.completionPct<100&&(!s.dueAt||new Date(s.dueAt).getTime()>=Date.now()));return <li key={c.id}><button onClick={()=>onOpenClass(c.id)}><strong>{c.name}</strong></button>{q.isError?<p role="alert">Không tải được tiến độ <button onClick={()=>void q.refetch()}>Thử lại</button></p>:q.isLoading?<p>Đang tải tiến độ…</p>:teacher?<><p>{data?.activeMembers7d??0} hoạt động trong 7 ngày · {inactive.length} học sinh chưa học trong 7 ngày</p><ul>{inactive.slice(0,10).map(s=><li key={s.userId}>{s.name||`Học sinh #${s.userId}`}</li>)}{assignments.filter(s=>s.dueAt&&new Date(s.dueAt).getTime()-Date.now()<3*86400000&&s.learners===0).map(s=><li key={s.studySetId}>Sắp hết hạn, chưa có lượt học: {s.title||`Học phần #${s.studySetId}`}</li>)}</ul></>:<ul>{assignments.map(s=><li key={s.studySetId}><button onClick={()=>onOpenSet(s.studySetId)}>{s.title||`Học phần #${s.studySetId}`}</button>{s.dueAt&&` · hạn ${new Date(s.dueAt).toLocaleString("vi-VN")}`}</li>)}</ul>}</li>})}</ul>}</SectionCard>{!teacher&&<SectionCard title="Ví & học phần đã mua">{wallet.isError?<p role="alert">Không tải được ví <button onClick={()=>void wallet.refetch()}>Thử lại</button></p>:<p>Số dư: {wallet.isLoading?"Đang tải…":`${(wallet.data?.balance??0).toLocaleString("vi-VN")} VND`}</p>}{purchases.isError?<p role="alert">Không tải được học phần đã mua</p>:<ul>{purchases.data?.items.map(s=><li key={s.studySetId}><button onClick={()=>onOpenSet(s.studySetId)}>Học phần #{s.studySetId}</button></li>)}</ul>}</SectionCard>}</div>;
+}

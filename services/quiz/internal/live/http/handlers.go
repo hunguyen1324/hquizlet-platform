@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -90,13 +92,45 @@ func (h *Handlers) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
 		return
 	}
+	p := authz.Principal{UserID: userID, LegacyRole: r.Header.Get("X-User-Role"), PlatformRoles: authz.ParsePlatformRoles(r.Header.Get("X-User-Roles"))}
 	var req struct {
+		ClassID            int64 `json:"classId,omitempty"`
 		StudySetID         int64 `json:"studySetId"`
 		QuestionCount      int   `json:"questionCount"`
 		QuestionDurationMs int   `json:"questionDurationMs"`
 		Seed               int64 `json:"seed"`
 	}
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	allowed := authz.Can(p, authz.ActionLiveHost, authz.Resource{Type: "platform"})
+	if req.ClassID > 0 {
+		allowed = false
+		target := os.Getenv("CLASS_SERVICE_URL")
+		if target == "" {
+			target = "http://localhost:8084"
+		}
+		check, _ := http.NewRequestWithContext(r.Context(), "GET", fmt.Sprintf("%s/v1/classes/%d/permissions", strings.TrimRight(target, "/"), req.ClassID), nil)
+		check.Header.Set("Authorization", r.Header.Get("Authorization"))
+		resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(check)
+		if err != nil {
+			writeError(w, r, 503, "CLASS_UNAVAILABLE", "class permissions unavailable")
+			return
+		}
+		var perms struct {
+			Actions []string `json:"actions"`
+		}
+		if resp.StatusCode == 200 && json.NewDecoder(resp.Body).Decode(&perms) == nil {
+			for _, a := range perms.Actions {
+				if a == string(authz.ActionLiveHost) {
+					allowed = true
+				}
+			}
+		}
+		resp.Body.Close()
+	}
+	if !allowed {
+		writeError(w, r, 403, "FORBIDDEN", "live hosting permission required")
 		return
 	}
 	if req.QuestionCount < 1 || req.QuestionCount > 100 {

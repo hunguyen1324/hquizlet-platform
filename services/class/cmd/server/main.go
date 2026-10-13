@@ -5,15 +5,18 @@ package main
 import (
 	"context"
 	"database/sql"
+	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/client"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/config"
+	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/events"
 	classhttp "github.com/hunguyen1324/hquizlet-platform/services/class/internal/http"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/middleware"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/repository"
@@ -32,24 +35,34 @@ func main() {
 		log.Fatalf("migration failed: %v", err)
 	}
 
+	if err := authz.StartDailyMetrics(db, "class", `SELECT d::date AS day,'newClasses' AS name,(SELECT count(*) FROM classes WHERE created_at>=d AND created_at<d+interval '1 day') AS value FROM generate_series(current_date-179,current_date,interval '1 day') d`); err != nil {
+		log.Fatal(err)
+	}
+
+	go events.RunCompletionConsumer(context.Background(), db, os.Getenv("NATS_URL"))
 	// Repositories
 	classRepo := repository.NewClassRepository(db)
 	memberRepo := repository.NewMemberRepository(db)
 	studySetRepo := repository.NewClassStudySetRepository(db)
 	activityRepo := repository.NewActivityRepository(db)
+	dashboardRepo := repository.NewDashboardRepository(db)
+	adminRepo := repository.NewAdminRepository(db)
 
 	// Internal clients
 	studyClient := client.NewStudyClient(cfg.StudyServiceURL, cfg.ClassInternalToken)
+	userClient := client.NewUserClient(cfg.AuthServiceURL, cfg.ClassInternalToken)
 
 	// Services
 	classSvc := classservice.NewClassService(classRepo, memberRepo)
 	memberSvc := classservice.NewMemberService(classRepo, memberRepo)
 	studySetSvc := classservice.NewClassStudySetService(classRepo, memberRepo, studySetRepo, studyClient)
 	activitySvc := classservice.NewActivityService(activityRepo, studyClient)
+	dashboardSvc := classservice.NewClassDashboardService(classRepo, memberRepo, studySetRepo, dashboardRepo, studyClient, userClient)
+	adminSvc := classservice.NewClassAdminService(adminRepo)
 
 	// HTTP
 	mux := http.NewServeMux()
-	h := classhttp.New(classSvc, memberSvc, studySetSvc, activitySvc, db)
+	h := classhttp.New(classSvc, memberSvc, studySetSvc, activitySvc, db).WithDashboard(dashboardSvc).WithAdmin(adminSvc)
 	if cfg.VideoStorage.Host != "" {
 		if len(cfg.VideoTicketSecret) < 32 || cfg.VideoMaxBytes < 1024*1024 || cfg.VideoMaxBytes > 2*1024*1024*1024 {
 			log.Fatal("private videos require VIDEO_TICKET_SECRET >= 32 characters and VIDEO_MAX_UPLOAD_MB between 1 and 2048")
@@ -73,7 +86,9 @@ func main() {
 	handler := middleware.Chain(mux,
 		middleware.RequestID,
 		middleware.Logging,
-		middleware.RequireUserID,
+		authz.VerifyIdentity(cfg.AuthServiceURL, func(r *http.Request) bool {
+			return strings.HasPrefix(r.URL.Path, "/v1/") && r.URL.Path != "/v1/class-video-stream"
+		}),
 	)
 
 	log.Printf("[class] listening on :%s", cfg.Port)
