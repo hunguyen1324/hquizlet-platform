@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -67,6 +69,7 @@ func privateTestHandler(t *testing.T, role string) (*Handler, sqlmock.Sqlmock, *
 	h := &Handler{db: db, classes: service.NewClassService(classes, members), members: service.NewMemberService(classes, members)}
 	store := &memoryVideoStore{body: []byte("0123456789")}
 	h.ConfigureVideos(store, testVideoSecret, 1024)
+	h.hlsSecret = []byte(testVideoSecret)
 	return h, mock, store
 }
 
@@ -190,11 +193,15 @@ func TestPrivateUploadValidationAndRollback(t *testing.T) {
 		{"database failure cleans upload", mp4Fixture(), 1024, nil, true, 500, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.status == 201 || tc.dbErr {
+				tc.body = realVideoFixture(t)
+				tc.max = 1024 * 1024
+			}
 			h, mock, store := privateTestHandler(t, "owner")
 			h.videoMaxBytes = tc.max
 			store.putErr = tc.putErr
 			if tc.status == 201 || tc.dbErr {
-				q := mock.ExpectQuery("INSERT INTO class_videos").WithArgs(int64(1), "Lesson", "all", "[]", sqlmock.AnyArg(), "video/mp4", int64(512))
+				q := mock.ExpectQuery("INSERT INTO class_videos").WithArgs(int64(1), "Lesson", "all", "[]", sqlmock.AnyArg(), hlsContentType, int64(len(tc.body)))
 				if tc.dbErr {
 					q.WillReturnError(errors.New("write failed"))
 				} else {
@@ -212,7 +219,7 @@ func TestPrivateUploadValidationAndRollback(t *testing.T) {
 			}
 			if tc.status == 201 {
 				var v classVideo
-				if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v.Source != "sftp" || v.SizeBytes != 512 {
+				if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v.Source != "sftp" || v.SizeBytes != int64(len(tc.body)) {
 					t.Fatal("invalid metadata")
 				}
 			}
@@ -221,6 +228,23 @@ func TestPrivateUploadValidationAndRollback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func realVideoFixture(t *testing.T) []byte {
+	t.Helper()
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("FFmpeg integration test requires ffmpeg")
+	}
+	file := filepath.Join(t.TempDir(), "test.mp4")
+	cmd := exec.Command("ffmpeg", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=160x120:r=10", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", file)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v %s", err, out)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 
 func TestStudentCannotUploadBeforeReadingBody(t *testing.T) {

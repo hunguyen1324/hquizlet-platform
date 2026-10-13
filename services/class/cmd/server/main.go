@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -58,6 +59,11 @@ func main() {
 			log.Fatalf("video storage configuration: %v", err)
 		}
 		h.ConfigureVideos(store, cfg.VideoTicketSecret, cfg.VideoMaxBytes)
+		if secret := os.Getenv("VIDEO_HLS_MASTER_KEY"); secret != "" {
+			if err := h.ConfigureHLS(secret); err != nil {
+				log.Fatal(err)
+			}
+		}
 		go h.RunVideoCleanup(context.Background())
 	}
 	h.Register(mux)

@@ -61,6 +61,10 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 	if !h.privateVideosEnabled(w) {
 		return
 	}
+	if len(h.hlsSecret) != 32 {
+		WriteError(w, 503, "Chưa cấu hình khóa mã hóa HLS")
+		return
+	}
 	title, audience := strings.TrimSpace(r.URL.Query().Get("title")), r.URL.Query().Get("audience")
 	var viewers []int64
 	if raw := r.URL.Query().Get("viewerIds"); raw != "" {
@@ -107,7 +111,7 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 	}
 	key := hex.EncodeToString(random[:]) + ext
 	limited := &boundedVideoReader{r: src, remaining: h.videoMaxBytes}
-	if err := h.videoStore.Put(r.Context(), key, limited); err != nil {
+	if err := h.putHLS(r.Context(), key, limited); err != nil {
 		log.Printf("[class] video upload failed: %v", err)
 		var maxErr *http.MaxBytesError
 		if errors.Is(err, errVideoTooLarge) || errors.As(err, &maxErr) {
@@ -117,6 +121,7 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 		}
 		return
 	}
+	contentType = hlsContentType
 	// Any failure after storing must remove the unreferenced object.
 	committed := false
 	defer func() {
@@ -214,7 +219,7 @@ type videoTicket struct {
 	Expires int64 `json:"e"`
 }
 
-const videoTicketTTL = 2 * time.Hour
+const videoTicketTTL = 5 * time.Minute
 
 func signVideoTicket(secret []byte, ticket videoTicket) string {
 	body, _ := json.Marshal(ticket)
@@ -261,7 +266,8 @@ func (h *Handler) privateVideoPlayback(w http.ResponseWriter, r *http.Request, c
 	if !h.privateVideosEnabled(w) {
 		return
 	}
-	if _, _, err := h.authorizedPrivateVideo(r.Context(), classID, id, uid, staff); err != nil {
+	_, contentType, err := h.authorizedPrivateVideo(r.Context(), classID, id, uid, staff)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			WriteError(w, 404, "Video không tồn tại hoặc bạn không có quyền xem")
 		} else {
@@ -271,7 +277,11 @@ func (h *Handler) privateVideoPlayback(w http.ResponseWriter, r *http.Request, c
 	}
 	expires := time.Now().Add(videoTicketTTL)
 	ticket := signVideoTicket(h.videoSecret, videoTicket{uid, classID, id, expires.Unix()})
-	WriteJSON(w, 200, map[string]any{"path": "/v1/class-video-stream?ticket=" + url.QueryEscape(ticket), "expiresAt": expires})
+	path := "/v1/class-video-stream"
+	if contentType == hlsContentType {
+		path = "/v1/class-video-hls"
+	}
+	WriteJSON(w, 200, map[string]any{"path": path + "?ticket=" + url.QueryEscape(ticket), "expiresAt": expires})
 }
 
 func (h *Handler) streamPrivateVideo(w http.ResponseWriter, r *http.Request) {
@@ -307,6 +317,10 @@ func (h *Handler) streamPrivateVideo(w http.ResponseWriter, r *http.Request) {
 		} else {
 			writeServiceError(w, r, err)
 		}
+		return
+	}
+	if contentType == hlsContentType {
+		WriteError(w, 403, "Video HLS yêu cầu phiên đăng nhập")
 		return
 	}
 	f, err := h.videoStore.Open(r.Context(), key)

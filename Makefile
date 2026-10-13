@@ -6,6 +6,7 @@ dev-infra:
 
 # ── Go ──────────────────────────────────────────────────────────────────────────
 test-go:
+	cd services/class && go test ./... -count=1
 	cd services/quiz && go test ./... -count=1
 	cd services/file && go test ./... -count=1
 

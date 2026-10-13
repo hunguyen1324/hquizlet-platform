@@ -24,6 +24,8 @@ RUN if [ -d "./cmd/server" ]; then \
     fi
 
 FROM alpine:3.20
+ARG SERVICE
+RUN if [ "$SERVICE" = "class" ]; then apk add --no-cache ffmpeg; fi
 LABEL org.opencontainers.image.source="https://github.com/hunguyen1324/hquizlet-platform"
 WORKDIR /app
 COPY --from=build /out/service /app/service

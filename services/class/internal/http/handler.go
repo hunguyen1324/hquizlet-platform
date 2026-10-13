@@ -23,6 +23,7 @@ type Handler struct {
 	db            *sql.DB
 	videoStore    videostorage.Store
 	videoSecret   []byte
+	hlsSecret     []byte
 	videoMaxBytes int64
 }
 
@@ -58,6 +59,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/classes", h.createClass)
 	mux.HandleFunc("/v1/classes/", h.classRouter)
 	mux.HandleFunc("GET /v1/class-video-stream", h.streamPrivateVideo)
+	mux.HandleFunc("GET /v1/class-video-hls", h.serveHLS)
 
 	// Activity feed
 	mux.HandleFunc("GET /v1/activity", h.getActivityFeed)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PrivateVideoPlayer } from "./PrivateVideoPlayer";
 import { classVideoApi, type ClassVideo, type ClassVideoInput } from "../../lib/api";
 import type { ClassMember } from "../../types";
 import { useAuth } from "../auth/AuthContext";
@@ -67,7 +68,7 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
           <input type="checkbox" checked={input.viewerIds.includes(m.userId)} onChange={e => setInput({ ...input, viewerIds: e.target.checked ? [...input.viewerIds, m.userId] : input.viewerIds.filter(id => id !== m.userId) })} /> Thành viên #{m.userId}
         </label>)}
       </fieldset>}
-      <div><button className="primary-button" disabled={busy}>{busy ? "Đang lưu..." : editing ? "Lưu thay đổi" : "Thêm video"}</button>
+      <div><button className="primary-button" disabled={busy}>{busy ? source === "sftp" && !editing ? "Đang tải và mã hóa video..." : "Đang lưu..." : editing ? "Lưu thay đổi" : "Thêm video"}</button>
         {editing && <button type="button" className="ghost-button" disabled={busy} onClick={() => { setEditing(undefined); setInput(emptyInput); setSource("sftp"); }}>Hủy</button>}
       </div>
     </form>}
@@ -101,7 +102,7 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
     </ul>
     {playing && <section aria-label={playing.title}>
       <h3>{playing.title}</h3><button className="ghost-button" onClick={() => setPlaying(undefined)}>Đóng video</button>
-      {playing.source === "sftp" ? <video key={playing.id} aria-label={playing.title} src={playbackURL} controls playsInline preload="metadata" style={{ width: "100%", aspectRatio: "16 / 9", background: "#000" }} onError={() => setError("Không phát được video. Hãy đóng và mở lại để kiểm tra quyền và làm mới vé phát.")} />
+      {playing.source === "sftp" ? <PrivateVideoPlayer key={playing.id} title={playing.title} url={playbackURL} token={token ?? ""} classId={classId} videoId={playing.id} onError={setError} />
         : <iframe key={playing.id} title={playing.title} src={`https://www.youtube-nocookie.com/embed/${playing.youtubeId}?rel=0`} style={{ width: "100%", aspectRatio: "16 / 9", border: 0 }} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />}
     </section>}
   </div>;

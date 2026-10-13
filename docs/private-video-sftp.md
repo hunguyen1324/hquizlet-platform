@@ -1,5 +1,7 @@
 # Video riêng tư trên kho SFTP Cloudcode
 
+> Video tải mới dùng HLS AES-128. Xem [private-video-hls.md](private-video-hls.md) và cấu hình VIDEO_HLS_MASTER_KEY trước khi tải mới. Các mô tả MP4/WebM streaming bên dưới áp dụng cho video cũ; vé phát hiện có thời hạn 5 phút.
+
 Server app `nat-mini-zzp40b` kiểm tra quyền lớp và truyền video cho trình duyệt qua HTTPS hiện có của HQuizlet. Server data `nat-go-zzp40b` giữ metadata trong PostgreSQL. Cloudcode chỉ lưu file, không cần sửa `index.js`, cổng HTTP 24968 hoặc tạo subdomain.
 
 ## Cấu hình trên server app
@@ -15,7 +17,7 @@ VIDEO_SFTP_HOST_FINGERPRINT=SHA256:e/KXFq4ifVSFtIAz+OpVKKzB6jpFVrgNn7VZNRe1tFY
 VIDEO_SFTP_PASSWORD_FILE=/run/video-secrets/sftp-password
 VIDEO_SFTP_MAX_CONNECTIONS=4
 VIDEO_MAX_UPLOAD_MB=80
-VIDEO_TICKET_SECRET=964450c559cfe2be9e91a6b61e48d4c180e680e170d5f09df31655226d23a857
+VIDEO_TICKET_SECRET=<secret riêng sinh bằng openssl rand -hex 32>
 ```
 
 Fingerprint trên lấy từ phiên SSH đã kết nối trong quá trình thiết lập; xác nhận với nhà cung cấp nếu có thể. Backend không chấp nhận host key khác và không dùng `InsecureIgnoreHostKey`.
