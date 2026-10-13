@@ -37,6 +37,17 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
     setPlaying(undefined);
   }
 
+  const hasProcessing = videos.some(video => video.processingState === "processing");
+  useEffect(() => {
+    if (!token || !hasProcessing) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      classVideoApi.list(token, classId).then(data => { if (active) setVideos(data); })
+        .catch(err => { if (active) setError(err instanceof Error ? err.message : "Không kiểm tra được trạng thái video"); });
+    }, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [token, classId, hasProcessing]);
+
   return <div className="tab-content">
     <p>Video tải lên chỉ phát cho thành viên được cấp quyền trong nhóm. Với video YouTube, quyền riêng tư vẫn do YouTube quản lý.</p>
     {error && <p role="alert" className="error-message">{error}</p>}
@@ -68,14 +79,14 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
           <input type="checkbox" checked={input.viewerIds.includes(m.userId)} onChange={e => setInput({ ...input, viewerIds: e.target.checked ? [...input.viewerIds, m.userId] : input.viewerIds.filter(id => id !== m.userId) })} /> Thành viên #{m.userId}
         </label>)}
       </fieldset>}
-      <div><button className="primary-button" disabled={busy}>{busy ? source === "sftp" && !editing ? "Đang tải và mã hóa video..." : "Đang lưu..." : editing ? "Lưu thay đổi" : "Thêm video"}</button>
+      <div><button className="primary-button" disabled={busy}>{busy ? source === "sftp" && !editing ? "Đang tải video..." : "Đang lưu..." : editing ? "Lưu thay đổi" : "Thêm video"}</button>
         {editing && <button type="button" className="ghost-button" disabled={busy} onClick={() => { setEditing(undefined); setInput(emptyInput); setSource("sftp"); }}>Hủy</button>}
       </div>
     </form>}
     {loading ? <p>Đang tải video...</p> : videos.length === 0 && !error ? <div className="empty-state">Chưa có video được chia sẻ với bạn.</div> : null}
     <ul className="group-resource-list" style={{ listStyle: "none", padding: 0 }}>
       {videos.map(video => <li key={video.id} className="group-resource-item" style={{ marginBottom: 12 }}>
-        <button className="group-resource-main" onClick={async () => {
+        <button className="group-resource-main" disabled={video.processingState === "processing" || video.processingState === "failed"} onClick={async () => {
           if (!token) return;
           setError(""); setPlaying(undefined);
           try {
@@ -83,10 +94,14 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
             setVideos(current);
             const allowed = current.find(v => v.id === video.id);
             if (!allowed) throw new Error("Bạn không còn quyền xem video này.");
+            if (allowed.processingState === "processing") throw new Error("Video đang được mã hóa. Hãy chờ xử lý hoàn tất.");
+            if (allowed.processingState === "failed") throw new Error("Xử lý video thất bại. Hãy xóa và tải lại video.");
             const url = allowed.source === "sftp" ? await classVideoApi.playback(token, classId, allowed.id) : "";
             setPlaybackURL(url); setPlaying(allowed);
           } catch (err) { setError(err instanceof Error ? err.message : "Không mở được video"); }
         }}>▶ {video.title}</button>
+        {video.processingState === "processing" && <span role="status">Đang xử lý và mã hóa video...</span>}
+        {video.processingState === "failed" && <span role="status">Xử lý thất bại. Hãy xóa và tải lại video.</span>}
         {canManage && <>
           <span>{video.audience === "all" ? "Cả nhóm" : `${video.viewerIds.length} người được chọn`}</span>
           <button className="ghost-button" disabled={busy} onClick={() => { setEditing(video.id); setSource(video.source === "sftp" ? "sftp" : "youtube"); setInput({ title: video.title, url: video.youtubeId ? `https://www.youtube.com/watch?v=${video.youtubeId}` : "", audience: video.audience, viewerIds: video.viewerIds }); }}>Sửa / Quyền xem</button>

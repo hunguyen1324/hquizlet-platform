@@ -2,13 +2,16 @@ package http
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -78,7 +81,7 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 	if err := os.WriteFile(filepath.Join(dir, "keyinfo"), []byte("key\n"+filepath.Join(dir, "key")+"\n"), 0600); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,crypto", "-i", filepath.Join(dir, "input"), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "23", "-vf", "scale=w='min(1280,iw)':h=-2", "-c:a", "aac", "-b:a", "128k", "-force_key_frames", "expr:gte(t,n_forced*6)", "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "vod", "-hls_key_info_file", filepath.Join(dir, "keyinfo"), "-hls_segment_filename", filepath.Join(dir, "segment%06d.ts"), filepath.Join(dir, "index.m3u8"))
+	plan := probeHLSPlan(ctx, filepath.Join(dir, "input"))
 	// Bound disk use while FFmpeg is active, rather than only after it exits.
 	done := make(chan struct{})
 	defer close(done)
@@ -107,9 +110,40 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 			}
 		}
 	}()
-	if err := cmd.Run(); err != nil {
-		return errors.New("video conversion failed or timed out")
+	var stderr boundedFFmpegLog
+	started := time.Now()
+	run := func() error {
+		cmd := exec.CommandContext(ctx, "ffmpeg", hlsFFmpegArgs(dir, plan)...)
+		cmd.Stderr = &stderr
+		return cmd.Run()
 	}
+	err = run()
+	if err != nil && plan.copyVideo && ctx.Err() == nil {
+		// Codec metadata alone cannot guarantee remuxability. Retry using the
+		// established encoder and remove the incomplete encrypted output first.
+		entries, readErr := os.ReadDir(dir)
+		if readErr != nil {
+			return readErr
+		}
+		for _, entry := range entries {
+			if entry.Name() == "index.m3u8" || hlsSegmentName.MatchString(entry.Name()) {
+				if removeErr := os.Remove(filepath.Join(dir, entry.Name())); removeErr != nil {
+					return removeErr
+				}
+			}
+		}
+		log.Printf("[class] HLS remux failed; retrying with video encoding")
+		plan.copyVideo = false
+		stderr.Reset()
+		err = run()
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("video conversion cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("FFmpeg conversion failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	log.Printf("[class] HLS processing mode=%s elapsed=%s", plan.mode(), time.Since(started).Round(time.Millisecond))
 	bundle, err := os.OpenFile(filepath.Join(dir, "bundle"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
@@ -155,6 +189,20 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 		return err
 	}
 	return h.videoStore.Put(ctx, object, bundle)
+}
+
+type boundedFFmpegLog struct{ bytes.Buffer }
+
+func (b *boundedFFmpegLog) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := 4096 - b.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		b.Buffer.Write(p)
+	}
+	return n, nil
 }
 
 type seekReaderAt struct{ io.ReadSeeker }

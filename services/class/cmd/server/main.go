@@ -65,6 +65,7 @@ func main() {
 			}
 		}
 		go h.RunVideoCleanup(context.Background())
+		go h.RunVideoProcessing(context.Background())
 	}
 	h.Register(mux)
 

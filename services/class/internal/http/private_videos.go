@@ -111,7 +111,7 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 	}
 	key := hex.EncodeToString(random[:]) + ext
 	limited := &boundedVideoReader{r: src, remaining: h.videoMaxBytes}
-	if err := h.putHLS(r.Context(), key, limited); err != nil {
+	if err := h.videoStore.Put(r.Context(), key, limited); err != nil {
 		log.Printf("[class] video upload failed: %v", err)
 		var maxErr *http.MaxBytesError
 		if errors.Is(err, errVideoTooLarge) || errors.As(err, &maxErr) {
@@ -121,7 +121,6 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 		}
 		return
 	}
-	contentType = hlsContentType
 	// Any failure after storing must remove the unreferenced object.
 	committed := false
 	defer func() {
@@ -153,14 +152,18 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	viewJSON, _ := json.Marshal(ids)
-	v := classVideo{Title: title, Audience: audience, ViewerIDs: ids, Source: "sftp", SizeBytes: limited.read}
-	err = h.db.QueryRowContext(r.Context(), `INSERT INTO class_videos(class_id,title,audience,viewer_ids,storage_key,content_type,size_bytes) VALUES($1,$2,$3,$4::jsonb,$5,$6,$7) RETURNING id`, classID, title, audience, string(viewJSON), key, contentType, limited.read).Scan(&v.ID)
+	outputKey := hex.EncodeToString(random[:]) + ".webm"
+	if ext == ".webm" {
+		outputKey = hex.EncodeToString(random[:]) + ".mp4"
+	}
+	v := classVideo{Title: title, Audience: audience, ViewerIDs: ids, Source: "sftp", SizeBytes: limited.read, ProcessingState: "processing"}
+	err = h.db.QueryRowContext(r.Context(), `INSERT INTO class_videos(class_id,title,audience,viewer_ids,storage_key,content_type,size_bytes,processing_state,hls_output_key) VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,'processing',$8) RETURNING id`, classID, title, audience, string(viewJSON), key, contentType, limited.read, outputKey).Scan(&v.ID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
 	committed = true
-	WriteJSON(w, 201, v)
+	WriteJSON(w, 202, v)
 }
 
 var errVideoTooLarge = errors.New("video exceeds upload limit")
@@ -258,7 +261,7 @@ func verifyVideoTicket(secret []byte, raw string, now time.Time) (videoTicket, e
 
 func (h *Handler) authorizedPrivateVideo(ctx context.Context, classID, id, uid int64, staff bool) (key, contentType string, err error) {
 	viewer, _ := json.Marshal([]int64{uid})
-	err = h.db.QueryRowContext(ctx, `SELECT storage_key,content_type FROM class_videos WHERE class_id=$1 AND id=$2 AND storage_key IS NOT NULL AND ($3 OR audience='all' OR viewer_ids @> $4::jsonb)`, classID, id, staff, string(viewer)).Scan(&key, &contentType)
+	err = h.db.QueryRowContext(ctx, `SELECT storage_key,content_type FROM class_videos WHERE class_id=$1 AND id=$2 AND storage_key IS NOT NULL AND processing_state='ready' AND ($3 OR audience='all' OR viewer_ids @> $4::jsonb)`, classID, id, staff, string(viewer)).Scan(&key, &contentType)
 	return
 }
 

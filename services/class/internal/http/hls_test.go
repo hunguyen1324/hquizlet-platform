@@ -17,7 +17,11 @@ import (
 )
 
 func TestHLSConversionEncryptsSegmentsAndExcludesKeys(t *testing.T) {
-	input := realVideoFixture(t)
+	checkHLSEncryption(t, realVideoFixture(t))
+}
+
+func checkHLSEncryption(t *testing.T, input []byte) {
+	t.Helper()
 	h, _, store := privateTestHandler(t, "owner")
 	h.videoMaxBytes = 1024 * 1024
 	object := strings.Repeat("a", 32) + ".mp4"

@@ -13,13 +13,14 @@ import (
 )
 
 type classVideo struct {
-	ID        int64   `json:"id"`
-	Title     string  `json:"title"`
-	YouTubeID string  `json:"youtubeId"`
-	Audience  string  `json:"audience"`
-	ViewerIDs []int64 `json:"viewerIds"`
-	Source    string  `json:"source,omitempty"`
-	SizeBytes int64   `json:"sizeBytes,omitempty"`
+	ID              int64   `json:"id"`
+	Title           string  `json:"title"`
+	YouTubeID       string  `json:"youtubeId"`
+	Audience        string  `json:"audience"`
+	ViewerIDs       []int64 `json:"viewerIds"`
+	Source          string  `json:"source,omitempty"`
+	SizeBytes       int64   `json:"sizeBytes,omitempty"`
+	ProcessingState string  `json:"processingState,omitempty"`
 }
 
 func youtubeID(raw string) string {
@@ -96,7 +97,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 	}
 	if r.Method == http.MethodGet && id == 0 {
 		viewer, _ := json.Marshal([]int64{uid})
-		rows, err := h.db.QueryContext(r.Context(), `SELECT id,title,COALESCE(youtube_id,''),audience,viewer_ids,CASE WHEN storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(size_bytes,0) FROM class_videos WHERE class_id=$1 AND ($2 OR audience='all' OR viewer_ids @> $3::jsonb) ORDER BY created_at DESC,id DESC`, classID, staff, string(viewer))
+		rows, err := h.db.QueryContext(r.Context(), `SELECT id,title,COALESCE(youtube_id,''),audience,viewer_ids,CASE WHEN storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(size_bytes,0),processing_state FROM class_videos WHERE class_id=$1 AND ($2 OR audience='all' OR viewer_ids @> $3::jsonb) ORDER BY created_at DESC,id DESC`, classID, staff, string(viewer))
 		if err != nil {
 			writeServiceError(w, r, err)
 			return
@@ -106,7 +107,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		for rows.Next() {
 			v := classVideo{}
 			var raw []byte
-			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes); err != nil {
+			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes, &v.ProcessingState); err != nil {
 				writeServiceError(w, r, err)
 				return
 			}

@@ -186,22 +186,18 @@ func TestPrivateUploadValidationAndRollback(t *testing.T) {
 		status  int
 		deleted bool
 	}{
-		{"success", mp4Fixture(), 1024, nil, false, 201, false},
+		{"success", mp4Fixture(), 1024, nil, false, 202, false},
 		{"fake extension", []byte("not a video"), 1024, nil, false, 415, false},
 		{"oversize", mp4Fixture(), 100, nil, false, 413, false},
 		{"storage failure", mp4Fixture(), 1024, errors.New("disk full"), false, 502, false},
 		{"database failure cleans upload", mp4Fixture(), 1024, nil, true, 500, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.status == 201 || tc.dbErr {
-				tc.body = realVideoFixture(t)
-				tc.max = 1024 * 1024
-			}
 			h, mock, store := privateTestHandler(t, "owner")
 			h.videoMaxBytes = tc.max
 			store.putErr = tc.putErr
-			if tc.status == 201 || tc.dbErr {
-				q := mock.ExpectQuery("INSERT INTO class_videos").WithArgs(int64(1), "Lesson", "all", "[]", sqlmock.AnyArg(), hlsContentType, int64(len(tc.body)))
+			if tc.status == 202 || tc.dbErr {
+				q := mock.ExpectQuery("INSERT INTO class_videos").WithArgs(int64(1), "Lesson", "all", "[]", sqlmock.AnyArg(), "video/mp4", int64(len(tc.body)), sqlmock.AnyArg())
 				if tc.dbErr {
 					q.WillReturnError(errors.New("write failed"))
 				} else {
@@ -217,9 +213,9 @@ func TestPrivateUploadValidationAndRollback(t *testing.T) {
 			if store.deleted != tc.deleted {
 				t.Fatalf("cleanup %v", store.deleted)
 			}
-			if tc.status == 201 {
+			if tc.status == 202 {
 				var v classVideo
-				if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v.Source != "sftp" || v.SizeBytes != int64(len(tc.body)) {
+				if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v.Source != "sftp" || v.SizeBytes != int64(len(tc.body)) || v.ProcessingState != "processing" {
 					t.Fatal("invalid metadata")
 				}
 			}

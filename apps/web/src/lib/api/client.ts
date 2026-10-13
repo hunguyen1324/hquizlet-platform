@@ -221,7 +221,7 @@ export const classStudySetApi = {
   remove: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
 };
 
-export type ClassVideo = { id: number; title: string; youtubeId: string; source?: "youtube" | "sftp"; sizeBytes?: number; audience: "all" | "selected"; viewerIds: number[] };
+export type ClassVideo = { id: number; title: string; youtubeId: string; source?: "youtube" | "sftp"; sizeBytes?: number; processingState?: "ready" | "processing" | "failed"; audience: "all" | "selected"; viewerIds: number[] };
 export type ClassVideoInput = { title: string; url: string; audience: "all" | "selected"; viewerIds: number[] };
 export const classVideoApi = {
   upload: (token: string, classId: number, input: ClassVideoInput, file: File): Promise<ClassVideo> => {
