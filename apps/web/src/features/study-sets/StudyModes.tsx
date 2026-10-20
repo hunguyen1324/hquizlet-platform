@@ -1,11 +1,15 @@
 import React from "react";
-import type { LearningMode } from "../learning/types";
+import type { LearningMode, LearningProgress } from "../../lib/api/client";
 
 export type StudyModeNav = LearningMode;
+
+/** Minimal slice of a saved session used to show "how far you got" per mode. */
+export type ModeProgress = Pick<LearningProgress, "score" | "total" | "completedAt">;
 
 type ModeItem = {
   mode: StudyModeNav;
   label: string;
+  hint: string;
   Icon: React.FC<{ className?: string }>;
 };
 
@@ -48,37 +52,77 @@ function IconMatch({ className }: { className?: string }) {
 }
 
 const MODES: ModeItem[] = [
-  { mode: "flashcards", label: "Thẻ ghi nhớ", Icon: IconFlashcards },
-  { mode: "learn", label: "Học", Icon: IconLearn },
-  { mode: "test", label: "Kiểm tra", Icon: IconTest },
-  { mode: "match", label: "Ghép thẻ", Icon: IconMatch },
+  { mode: "flashcards", label: "Thẻ ghi nhớ", hint: "Lật thẻ và tự đánh giá", Icon: IconFlashcards },
+  { mode: "learn", label: "Học", hint: "Ôn lại thẻ hay sai trước", Icon: IconLearn },
+  { mode: "test", label: "Kiểm tra", hint: "Bài kiểm tra có chấm điểm", Icon: IconTest },
+  { mode: "match", label: "Ghép thẻ", hint: "Ghép thuật ngữ với định nghĩa", Icon: IconMatch },
 ];
+
+/** Percent of correct answers in the last saved session, or null when unknown. */
+export function modePercent(progress?: ModeProgress): number | null {
+  if (!progress || !progress.total || progress.total <= 0) return null;
+  const percent = Math.round((progress.score / progress.total) * 100);
+  return Math.min(100, Math.max(0, percent));
+}
 
 type Props = {
   activeMode: StudyModeNav;
   onSelectMode: (mode: StudyModeNav) => void;
+  /** Last saved session per mode (from GET /progress/latest); missing modes are unseen. */
+  progress?: Partial<Record<StudyModeNav, ModeProgress>>;
+  /** Single primary action: jump back into the most recently used mode. */
+  onContinue?: () => void;
 };
 
-export function StudyModes({ activeMode, onSelectMode }: Props) {
+export function StudyModes({ activeMode, onSelectMode, progress, onContinue }: Props) {
+  const started = MODES.some(({ mode }) => modePercent(progress?.[mode]) !== null);
+
   return (
-    <div className="sd-study-modes">
-      <div className="sd-study-modes-grid" role="navigation" aria-label="Chế độ học">
-        {MODES.map(({ mode, label, Icon }) => {
+    <section className="sd-mode-hub" aria-label="Chế độ học">
+      <div className="sd-mode-hub-head">
+        <h2 className="sd-mode-hub-title">Học bộ này</h2>
+        {onContinue && (
+          <button type="button" className="primary-button sd-mode-hub-cta" onClick={onContinue}>
+            {started ? "Tiếp tục học" : "Bắt đầu học"}
+          </button>
+        )}
+      </div>
+
+      <div className="sd-mode-grid" role="navigation" aria-label="Chọn chế độ học">
+        {MODES.map(({ mode, label, hint, Icon }) => {
           const isActive = activeMode === mode;
+          const percent = modePercent(progress?.[mode]);
+          const detail = progress?.[mode];
           return (
             <button
               key={mode}
               type="button"
-              className={`sd-study-mode-card${isActive ? " sd-study-mode-card--active" : ""}`}
+              className={`sd-mode-card${isActive ? " sd-mode-card--active" : ""}`}
               aria-current={isActive ? "page" : undefined}
+              aria-label={percent !== null ? `${label}, lần trước đúng ${percent}%` : `${label}, chưa học lần nào`}
               onClick={() => onSelectMode(mode)}
             >
-              <Icon className="sd-study-mode-icon" />
-              <span className="sd-study-mode-label">{label}</span>
+              <span className="sd-mode-card-icon"><Icon /></span>
+              <span className="sd-mode-card-body">
+                <span className="sd-mode-card-label">{label}</span>
+                <span className="sd-mode-card-hint">{hint}</span>
+                {percent !== null ? (
+                  <>
+                    <span className="sd-mode-card-meter" aria-hidden>
+                      <span className="sd-mode-card-meter-fill" style={{ width: `${percent}%` }} />
+                    </span>
+                    <span className="sd-mode-card-meta">
+                      Đúng {percent}% · {detail?.score}/{detail?.total} câu
+                    </span>
+                  </>
+                ) : (
+                  <span className="sd-mode-card-meta sd-mode-card-meta--muted">Chưa học</span>
+                )}
+              </span>
             </button>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

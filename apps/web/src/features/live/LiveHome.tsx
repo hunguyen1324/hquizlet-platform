@@ -1,119 +1,71 @@
 // apps/web/src/features/live/LiveHome.tsx
-// Dev 4 - [P6-FE-HOST-01] Live Quiz entry point
+// Host panel: create a live room from a study set.
+// The player join card lives in JoinLiveSession.tsx so this screen has a single job.
 
 import React, { useState } from "react";
 
 interface LiveHomeProps {
- canHost?: boolean;
   onHost: (studySetId: number, questionCount: number, questionDurationMs: number) => void;
-  onJoin: (code: string) => void;
 }
 
-export function LiveHome({ onHost, onJoin, canHost = false }: LiveHomeProps) {
-  const [mode, setMode] = useState<"host" | "join">("join");
-  const [joinCode, setJoinCode] = useState("");
+export function LiveHome({ onHost }: LiveHomeProps) {
   const [studySetId, setStudySetId] = useState(0);
   const [questionCount, setQuestionCount] = useState(10);
   const [questionDuration, setQuestionDuration] = useState(20);
 
   return (
-    <div className="live-home" style={{ maxWidth: 480, margin: "2rem auto", padding: "0 1rem" }}>
-      <h1>Live Quiz</h1>
-
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
-        <button
-          className={mode === "join" ? "primary-button" : "ghost-button"}
-          onClick={() => setMode("join")}
-        >
-          Join Game
-        </button>
-        {canHost && <button
-          className={mode === "host" ? "primary-button" : "ghost-button"}
-          onClick={() => setMode("host")}
-        >
-          Host Game
-        </button>}
+    <form
+      className="live-host-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (studySetId < 1) return;
+        onHost(studySetId, questionCount, questionDuration * 1000);
+      }}
+    >
+      <div className="live-host-field">
+        <label htmlFor="live-host-set" className="live-host-label">ID bộ đề</label>
+        <input
+          id="live-host-set"
+          type="number"
+          min={1}
+          value={studySetId || ""}
+          onChange={(e) => setStudySetId(Number(e.target.value))}
+          placeholder="Ví dụ: 128"
+          className="live-host-input"
+        />
+        <p className="live-host-hint">Mã bộ đề nằm trong đường dẫn trang bộ đề.</p>
       </div>
 
-      {mode === "join" && (
-        <div>
-          <h2>Join a Game</h2>
-          <div style={{ marginBottom: "1rem" }}>
-            <label>Enter Code</label>
-            <input
-              type="text"
-              maxLength={6}
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase().trim())}
-              placeholder="XXXXXX"
-              style={{
-                width: "100%",
-                fontSize: "1.5rem",
-                textAlign: "center",
-                letterSpacing: "0.5em",
-                textTransform: "uppercase",
-                padding: "0.75rem",
-                marginTop: "0.25rem",
-              }}
-            />
-          </div>
-          <button
-            className="primary-button"
-            disabled={joinCode.length !== 6}
-            onClick={() => onJoin(joinCode)}
-            style={{ width: "100%" }}
-          >
-            Join
-          </button>
+      <div className="live-host-row">
+        <div className="live-host-field">
+          <label htmlFor="live-host-count" className="live-host-label">Số câu hỏi</label>
+          <input
+            id="live-host-count"
+            type="number"
+            min={1}
+            max={100}
+            value={questionCount}
+            onChange={(e) => setQuestionCount(Number(e.target.value))}
+            className="live-host-input"
+          />
         </div>
-      )}
+        <div className="live-host-field">
+          <label htmlFor="live-host-time" className="live-host-label">Giây mỗi câu</label>
+          <input
+            id="live-host-time"
+            type="number"
+            min={5}
+            max={120}
+            value={questionDuration}
+            onChange={(e) => setQuestionDuration(Number(e.target.value))}
+            className="live-host-input"
+          />
+        </div>
+      </div>
 
-      {mode === "host" && canHost && (
-        <div>
-          <h2>Host a Game</h2>
-          <div style={{ marginBottom: "1rem" }}>
-            <label>Study Set ID</label>
-            <input
-              type="number"
-              min={1}
-              value={studySetId || ""}
-              onChange={(e) => setStudySetId(Number(e.target.value))}
-              placeholder="Enter study set ID"
-              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-            />
-          </div>
-          <div style={{ marginBottom: "1rem" }}>
-            <label>Number of Questions</label>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={questionCount}
-              onChange={(e) => setQuestionCount(Number(e.target.value))}
-              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-            />
-          </div>
-          <div style={{ marginBottom: "1rem" }}>
-            <label>Time per Question (seconds)</label>
-            <input
-              type="number"
-              min={5}
-              max={120}
-              value={questionDuration}
-              onChange={(e) => setQuestionDuration(Number(e.target.value))}
-              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-            />
-          </div>
-          <button
-            className="primary-button"
-            disabled={studySetId < 1}
-            onClick={() => onHost(studySetId, questionCount, questionDuration * 1000)}
-            style={{ width: "100%" }}
-          >
-            Create Session
-          </button>
-        </div>
-      )}
-    </div>
+      <button type="submit" className="live-host-submit" disabled={studySetId < 1}>
+        Tạo phòng và lấy mã
+      </button>
+    </form>
   );
 }

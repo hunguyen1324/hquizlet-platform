@@ -4,6 +4,32 @@
 > **Giới hạn nguồn (đọc trước):** `wayground.com` chặn công cụ đọc tự động (robots), nên phần Wayground lấy từ thông cáo báo chí, bài hướng dẫn và trang đánh giá; trang chủ `quizlet.com` chỉ có nội dung giới thiệu. **Mình chưa thấy giao diện render của hai trang**, nên phần "UI" dưới đây là *mẫu tương tác/bố cục* rút từ mô tả, không phải sao chép giao diện cụ thể. Bạn nên mở hai trang, chụp màn hình các chỗ bạn thích, mình sẽ bám sát hơn.
 > Không sao chép thiết kế, màu, logo, tên chế độ độc quyền của hai bên. Chỉ học **nguyên tắc trải nghiệm**.
 
+## 0. Trạng thái triển khai (2026-10-20)
+
+**Đã làm — giai đoạn A, một phần:**
+
+- **Mục 1 – trang bộ đề**: `StudyModes.tsx` thành *mode hub*: 4 thẻ lớn (Thẻ ghi nhớ · Học ·
+  Kiểm tra · Ghép thẻ), mỗi thẻ có mô tả ngắn và **tiến độ của chính người học**
+  (“Đúng 62% · 8/13 câu”, thanh tiến độ) lấy từ `GET /progress/latest`; chế độ chưa
+  học ghi “Chưa học”; một hành động chính **“Tiếp tục học”** (hoặc “Bắt đầu học”)
+  nhảy về chế độ vừa học gần nhất và cuộn tới khung làm bài. Bộ `quiz`/`grammar`
+  không hiện hub (đã ẩn từ trước, không xám hoá).
+- **Mục 4 – vào phòng live**: `JoinLiveSession.tsx` dựng lại thành thẻ một cột
+  (mã phòng → tên → vào), ô mã 6 ký tự tự chuẩn hoá, nhớ tên lần trước, deep link
+  `/live-quiz?code=XXXXXX`, nút cao ≥ 44 px, lỗi có `role="alert"` và **gợi ý theo
+  mã lỗi** (sai mã / phòng đã bắt đầu / đã kết thúc / tên trùng / bị chặn vì thử quá
+  nhanh). Form join trùng lặp trong `LiveHome` đã bỏ; `LiveHome` còn đúng việc tạo
+  phòng và nằm trong khối thu gọn “Tôi là giáo viên”.
+
+**Còn lại:** hiện **tên phòng + giáo viên trước khi vào** cần endpoint tra mã công
+khai (quiz chưa lưu tiêu đề bộ đề trong session — cần migration + route gateway +
+rule rate limit; chưa làm để không hứa hẹn phần UI chưa có dữ liệu). Mục 2 (hộp cài
+đặt một bước, nhớ lựa chọn), mục 3 (khung làm bài thống nhất), mục 5–12 và bộ
+component/token dùng chung vẫn chờ.
+
+Kiểm thử hiện có: `apps/web` — `tsc --noEmit`, `vitest` (46 test), `vite build` đều
+qua; ảnh chụp hai màn ở `.tmp/ui-phase-a*.png` (tệp tạm, không commit).
+
 ## 1. hquizlet đã có gì (đỡ làm lại)
 
 Trong `apps/web/src/features`: **Flashcards, Learn, Test, Match** (`learning/`), **Live** (`live/`), **lớp học** (`classes/`), **thư mục** (`folders/`), **tìm kiếm** (`search/`), **dashboard cá nhân/lớp/admin**, **ví/thanh toán**, **quiz bảo vệ + giao diện TOEIC** (`study-sets/exam`, `quiz`). Nên phần lớn việc là **gom lại, đánh bóng và thống nhất trải nghiệm**, không phải thêm chế độ mới.
@@ -53,7 +79,7 @@ Từ nguồn đã đọc: vào bằng **mã/đường dẫn**; ba cách chạy: 
 
 | Giai đoạn | Nội dung | Lý do |
 |---|---|---|
-| **A (1–2 tuần)** | Bản mẫu 4 màn (trang bộ đề, bắt đầu chế độ, làm bài, vào live) → bạn duyệt; bộ component + token dùng chung; mục 1–4 | Giá trị người dùng thấy rõ nhất, ít rủi ro |
+| **A (1–2 tuần)** | Bản mẫu 4 màn (trang bộ đề, bắt đầu chế độ, làm bài, vào live) → bạn duyệt; bộ component + token dùng chung; mục 1–4 — *đã làm mục 1 và 4 (xem mục 0)* | Giá trị người dùng thấy rõ nhất, ít rủi ro |
 | **B (2–3 tuần)** | Khung làm bài thống nhất + kế hoạch hiệu năng quiz (Phase 1–2); chế độ tập trung & trợ năng (mục 7) | Hết "chậm", dễ dùng hơn |
 | **C (2–3 tuần)** | Báo cáo giáo viên (mục 6), cách giao bài (mục 5), rate limit | Thu hút lớp học |
 | **D (sau)** | Nhập/AI tạo bộ, thư viện cộng đồng, ngoại tuyến, trang chủ theo vai trò | Mở rộng |

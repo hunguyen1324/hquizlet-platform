@@ -6,7 +6,7 @@ import { useCan } from "../auth/permissions";
 import { useAuth } from "../auth/AuthContext";
 import { liveApi, type LiveSession } from "./liveApi";
 import { LiveHome } from "./LiveHome";
-import { JoinLiveSession } from "./JoinLiveSession";
+import { JoinLiveSession, describeJoinError } from "./JoinLiveSession";
 import { HostLobby } from "./HostLobby";
 import { HostGame } from "./HostGame";
 import { PlayerLobby } from "./PlayerLobby";
@@ -16,7 +16,7 @@ import { useLiveHostSession, useLivePlayerSession } from "./useLiveSession";
 import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./live.css";
 
-type Flow = "home" | "creating" | "host-lobby" | "host-game" | "joining" | "player-lobby" | "player-game";
+type Flow = "home" | "creating" | "host-lobby" | "host-game" | "player-lobby" | "player-game";
 
 export function LiveGame({classId}: {classId?: number}) {
  const canHost=useCan("live:Host", classId ? {classId} : undefined);
@@ -32,6 +32,11 @@ export function LiveGame({classId}: {classId?: number}) {
   const [participantToken, setParticipantToken] = useState<string | null>(null);
   const [playerDisplayName, setPlayerDisplayName] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  // Deep link support: /live-quiz?code=ABC123 pre-fills the join card.
+  const initialJoinCode = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("code") ?? undefined
+    : undefined;
 
   // Host hooks
   const host = useLiveHostSession(token, hostSessionId);
@@ -61,7 +66,7 @@ export function LiveGame({classId}: {classId?: number}) {
 
   // Handle player joining
   const handleJoin = useCallback(async (code: string, displayName: string) => {
-    setFlow("joining");
+    setJoining(true);
     setJoinError(null);
     try {
       const resp = await liveApi.joinSession(code, displayName);
@@ -74,8 +79,10 @@ export function LiveGame({classId}: {classId?: number}) {
         setFlow("player-game");
       }
     } catch (err) {
-      setJoinError((err as Error).message);
+      setJoinError(describeJoinError(err));
       setFlow("home");
+    } finally {
+      setJoining(false);
     }
   }, []);
 
@@ -140,26 +147,28 @@ export function LiveGame({classId}: {classId?: number}) {
         </div>
       )}
 
-      {/* Home */}
+      {/* Home: one primary job (join), host panel only for people who can host */}
       {flow === "home" && (
-        <>
-          <LiveHome
-            canHost={canHost}
-            onHost={(scId, qc, qd) => void handleHostCreate(scId, qc, qd)}
-            onJoin={(code) => { setJoinError(null); }}
-          />
+        <div className="live-home-page">
           <JoinLiveSession
+            initialCode={initialJoinCode}
             error={joinError}
-            loading={false}
+            loading={joining}
             onJoin={(code, name) => void handleJoin(code, name)}
           />
-        </>
+          {canHost && (
+            <details className="live-host-panel" open={false}>
+              <summary>Tôi là giáo viên — tạo phòng mới</summary>
+              <LiveHome onHost={(scId, qc, qd) => void handleHostCreate(scId, qc, qd)} />
+            </details>
+          )}
+        </div>
       )}
 
-      {/* Creating */}
+      {/* Creating: joining keeps the join card and only disables its button. */}
       {flow === "creating" && (
-        <div style={{ textAlign: "center", padding: "4rem" }}>
-          <p>Creating session...</p>
+        <div className="live-status-page" role="status">
+          <p>Đang tạo phòng…</p>
         </div>
       )}
 

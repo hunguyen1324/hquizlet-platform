@@ -99,67 +99,143 @@
 .sd-action-btn--danger { background: #fee2e2; color: #991b1b; }
 .sd-action-btn--danger:hover { background: #fecaca; }
 
-/* ── Study modes (quizlet-clone study-modes.tsx layout) ── */
-.sd-study-modes {
+/* ── Mode hub: one card per way to study, with the learner's own progress ── */
+.sd-mode-hub {
   margin-bottom: 24px;
 }
 
-.sd-study-modes-grid {
+.sd-mode-hub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.sd-mode-hub-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #2e3856;
+}
+
+.sd-mode-hub-cta {
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.sd-mode-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
-@media (min-width: 1024px) {
-  .sd-study-modes-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+@media (min-width: 640px) {
+  .sd-mode-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-.sd-study-mode-card {
+@media (min-width: 1024px) {
+  .sd-mode-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.sd-mode-card {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
   width: 100%;
+  min-height: 88px;
   text-align: left;
   background: #fff;
   border: 1px solid #d9dde8;
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(46, 56, 86, 0.06);
-  padding: 16px;
+  padding: 14px;
   cursor: pointer;
   color: #2e3856;
   transition: border-color 0.2s, box-shadow 0.2s, color 0.2s;
 }
 
-.sd-study-mode-card:hover {
+.sd-mode-card:hover {
   border-color: #c5cce0;
   box-shadow: 0 4px 12px rgba(46, 56, 86, 0.1);
 }
 
-.sd-study-mode-card:hover .sd-study-mode-icon {
+.sd-mode-card:hover .sd-mode-card-icon,
+.sd-mode-card--active .sd-mode-card-icon {
   color: #4255ff;
 }
 
-.sd-study-mode-card--active {
+.sd-mode-card--active {
   border-color: #4255ff;
   box-shadow: 0 0 0 1px #4255ff, 0 4px 12px rgba(66, 85, 255, 0.15);
 }
 
-.sd-study-mode-card--active .sd-study-mode-icon {
-  color: #4255ff;
+.sd-mode-card:focus-visible {
+  outline: 3px solid rgba(66, 85, 255, 0.45);
+  outline-offset: 2px;
 }
 
-.sd-study-mode-icon {
+.sd-mode-card-icon {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f0f2ff;
   color: #586380;
   transition: color 0.25s;
 }
 
-.sd-study-mode-label {
+.sd-mode-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sd-mode-card-label {
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.25;
+}
+
+.sd-mode-card-hint {
+  font-size: 0.8125rem;
+  color: #586380;
+  line-height: 1.3;
+}
+
+.sd-mode-card-meter {
+  display: block;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: #e9ecf5;
+  overflow: hidden;
+}
+
+.sd-mode-card-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #4255ff;
+}
+
+.sd-mode-card-meta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4255ff;
+}
+
+.sd-mode-card-meta--muted {
+  color: #8896b3;
+  font-weight: 500;
 }
 
 /* ── Learning mode wrapper ── */
@@ -398,29 +474,33 @@
 
 /* ── Dark mode ── */
 .dark .sd-title,
-.dark .sd-study-mode-label,
+.dark .sd-mode-hub-title,
+.dark .sd-mode-card-label,
 .dark .sd-termlist-title { color: #e2e8f0; }
 .dark .sd-eyebrow,
 .dark .sd-description,
+.dark .sd-mode-card-hint,
 .dark .sd-termlist-count,
 .dark .sd-page-range,
 .dark .sd-page-status { color: #8896b3; }
-.dark .sd-study-mode-card {
+.dark .sd-mode-card {
   background: #1e293b;
   border-color: #334155;
   color: #e2e8f0;
 }
-.dark .sd-study-mode-card:hover {
+.dark .sd-mode-card:hover {
   border-color: #475569;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
-.dark .sd-study-mode-card--active {
+.dark .sd-mode-card--active {
   border-color: #6575ff;
   box-shadow: 0 0 0 1px #6575ff, 0 4px 12px rgba(100, 116, 255, 0.2);
 }
-.dark .sd-study-mode-icon { color: #8896b3; }
-.dark .sd-study-mode-card:hover .sd-study-mode-icon,
-.dark .sd-study-mode-card--active .sd-study-mode-icon { color: #7b93ff; }
+.dark .sd-mode-card-icon { background: #1e293b; color: #8896b3; }
+.dark .sd-mode-card:hover .sd-mode-card-icon,
+.dark .sd-mode-card--active .sd-mode-card-icon { color: #7b93ff; }
+.dark .sd-mode-card-meter { background: #334155; }
+.dark .sd-mode-card-meta--muted { color: #64748b; }
 .dark .sd-card {
   background: #1e293b;
   border-color: #334155;

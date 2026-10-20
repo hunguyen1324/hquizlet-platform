@@ -4,7 +4,8 @@ import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { StudySet, Flashcard } from "../../types";
 import type { LearningMode } from "../learning/types";
-import { LearningContainer } from "../learning";
+import type { LearningProgress } from "../../lib/api/client";
+import { LearningContainer, fetchLatestProgress } from "../learning";
 import { useAuth } from "../auth/AuthContext";
 import { flashcardApi, folderApi, studySetApi } from "../../lib/api";
 import type { FolderSummary } from "../../lib/api";
@@ -31,6 +32,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const [studyMode, setStudyMode] = React.useState<LearningMode>("flashcards");
+  const [modeProgress, setModeProgress] = React.useState<Partial<Record<LearningMode, LearningProgress>>>({});
+  const learningRef = React.useRef<HTMLDivElement>(null);
   const [sortOrder, setSortOrder] = React.useState<"original" | "alphabetical">("original");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [visibility, setVisibility] = React.useState(set.visibility);
@@ -162,6 +165,32 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
 
   const isFlashcardSet = set.contentType === "flashcard" || !set.contentType;
 
+  // Last saved session per mode powers the "how far did I get" hints on the mode hub.
+  React.useEffect(() => {
+    if (!token || !isFlashcardSet) return;
+    let active = true;
+    fetchLatestProgress(token, set.id)
+      .then((latest) => { if (active) setModeProgress(latest); })
+      .catch(() => { if (active) setModeProgress({}); });
+    return () => { active = false; };
+  }, [token, set.id, isFlashcardSet]);
+
+  // Most recently finished mode, so "Tiếp tục học" resumes where the learner stopped.
+  const resumeMode = React.useMemo<LearningMode | null>(() => {
+    let best: { mode: LearningMode; at: number } | null = null;
+    for (const [mode, entry] of Object.entries(modeProgress) as [LearningMode, LearningProgress][]) {
+      const stamp = Date.parse(entry?.completedAt ?? entry?.createdAt ?? "");
+      if (Number.isNaN(stamp)) continue;
+      if (!best || stamp > best.at) best = { mode, at: stamp };
+    }
+    return best?.mode ?? null;
+  }, [modeProgress]);
+
+  function handleContinueLearning() {
+    if (resumeMode && resumeMode !== studyMode) setStudyMode(resumeMode);
+    learningRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   /* ── Inline edit handlers ── */
   const updateMutation = useMutation({
     mutationFn: ({ cardId, term, definition }: { cardId: number, term: string, definition: string }) => flashcardApi.update(token, cardId, { term, definition }),
@@ -281,12 +310,17 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
         </div>
 
         {isFlashcardSet && (
-          <StudyModes activeMode={studyMode} onSelectMode={setStudyMode} />
+          <StudyModes
+            activeMode={studyMode}
+            onSelectMode={setStudyMode}
+            progress={modeProgress}
+            onContinue={handleContinueLearning}
+          />
         )}
       </div>
 
       {isFlashcardSet && (
-        <div className="sd-learning-wrapper">
+        <div className="sd-learning-wrapper" ref={learningRef}>
           {/* Truyền allCards (đã infinite-scroll đầy đủ) và cardTotal thật từ server.
               set.flashcards chỉ là initial payload bị giới hạn trang đầu — không dùng trực tiếp. */}
           <LearningContainer set={set} mode={studyMode} cards={allCards} totalCount={cardTotal} />
