@@ -1,8 +1,9 @@
 # Kế hoạch: Thiết kế lại giao diện Quiz + Tối ưu tốc độ tải
 
 > Phạm vi: màn làm bài quiz của `hquizlet-platform` (React/Vite + service `study` viết bằng Go).
-> Trạng thái: **kế hoạch, chưa sửa code**. Mọi nhận định dưới đây đến từ việc đọc code ở commit `18686a7`;
-> **chưa đo trên hệ thống chạy thật và chưa xem giao diện render** – nên Phase 0 (đo) là bước bắt buộc trước khi tối ưu.
+> Trạng thái: **Phase 1 (P1.1–P1.4) + bộ component `quiz-ui` đã triển khai** (mục 9); **Phase 2 (snapshot bất biến + response compact) đã triển khai** (mục 10); **Phase 3 (âm thanh đọc theo Range khỏi BYTEA) đã triển khai** (mục 11).
+> Mọi nhận định dưới đây đến từ việc đọc code ở commit `18686a7`;
+> **chưa đo trên hệ thống chạy thật** – Phase 0 (đo) vẫn là bước cần làm trước khi tuyên bố cải thiện tốc độ.
 
 ---
 
@@ -316,3 +317,108 @@ protected_quiz_sessions   (nhỏ, thay đổi thường xuyên)
 3. Bài dài nhất bạn dùng bao nhiêu câu? Cần hỗ trợ bao nhiêu người làm bài cùng lúc?
 4. Có thể chấp nhận **đổi API** (`/play` v2) không, hay phải giữ tương thích client cũ?
 5. Giao diện mới: ưu tiên mobile hay desktop trước?
+
+---
+
+## 9. Trạng thái triển khai (Phase 1 + khung UI)
+
+Đã làm trong lượt này. Mỗi mục kèm test tương ứng.
+
+| Mục | Nội dung | Vị trí |
+|---|---|---|
+| P1.1 | Bucket nóng `play`/`peek`/`audio`/`summary` không còn ghi `protected_quiz_limits` mỗi request. Mặc định dùng fixed-window trong tiến trình; nếu có Redis thì dùng counter dùng chung (`Incr` + TTL). `start`/`upload` vẫn dùng DB vì cần chính xác trên nhiều replica. Limiter lỗi ⇒ **fail closed**. | `internal/service/quiz_limits.go`, `pkg/cache` |
+| P1.2 | Thêm `GET /v1/study-sets/{id}/play/{session}/peek?index=N`: đường đọc **không khoá dòng, không UPDATE**, không đánh dấu `seen`. Vì vậy peek **không** cấp quyền trả lời hay quyền nghe. Cửa sổ server cho phép: `currentIndex-1 … currentIndex+3` để không thể duyệt cả đề. | `repository.View`, `service.Peek`, `http` router |
+| P1.3 | `safeQuizHTML` chạy **một lần** khi tạo phiên (`Sanitized`), đọc trang chỉ copy. Phiên cũ (`Sanitized=false`) vẫn được sanitize khi đọc để không có khoảng XSS 24 giờ. | `sessionItems`, `quizPageItem` |
+| Đo | `Server-Timing` cho `summary`/`start`/`page`/`answer`/`peek`, xem trực tiếp trong DevTools → Network. | `internal/http/timing.go` |
+| P1.4 | Chọn đáp án hiện **“Đang chấm…”** ngay, khoá lựa chọn khác; pill **Đang lưu / Đã lưu / Chưa lưu được + Thử lại**; prefetch **3 trang tới + 1 trang lui** (không bị huỷ khi bận); skeleton khi chưa có bản prefetch; bottom sheet kết quả; bảng câu dạng bottom sheet có lọc; màn bắt đầu bỏ thuật ngữ “Giao diện: Thường/TOEIC (IIG)”, thay bằng chip “Từng câu / Theo nhóm (TOEIC)”, chip Part và chip thời gian. | `ProtectedQuizPlayer.tsx`, `quiz-ui/*` |
+
+**Khác với kế hoạch ban đầu**
+
+- Kế hoạch nhắc `peek`, `useProtectedQuiz.ts`, class `qz-*`, token `--qz-ok/bad/flag`: ở commit hiện tại **không tồn tại**. `peek` được thêm mới; style dùng CSS hiện có (`.quiz-*`, `--primary/--card/--border/--muted-foreground`) thay vì tạo hệ thứ hai, đúng lựa chọn “một hệ style”.
+- `ProtectedQuizPlayer` được dựng lại trên `quiz-ui`; `exam/*` giữ nguyên vì `ExamGame` (luồng khác) vẫn dùng.
+
+**Chưa làm (theo đúng thứ tự đề xuất)**
+
+1. Phase 0: chạy các truy vấn kích thước `state`/audio và ghi `docs/perf/quiz-baseline.md` — **chưa đo**, nên chưa có số trước/sau.
+2. ~~Phase 2: tách `quiz_snapshots` khỏi state phiên, response compact (bỏ manifest khỏi page/answer).~~ → đã làm, xem mục 10.
+3. ~~Phase 3: bỏ BYTEA khỏi đường stream audio, đọc theo Range từ MinIO/đĩa.~~ → đã làm, xem mục 11.
+4. U5 (lưu cờ đánh dấu lên server), U6 (hai cột TOEIC dùng chung khung), U7 (màn kết quả đầy đủ), U8 (rà trợ năng trên máy thật), code-split player.
+
+**Kiểm chứng đã chạy:** `go test ./services/study/...`, `go vet`, `gofmt` trên file đã sửa; `tsc --noEmit`, `vitest run` (28 test), `vite build`. Giao diện được kiểm bằng DOM measurement trên viewport 390×844 (ô đáp án 60 px, ô bảng câu 46 px, sheet cuộn trong 80dvh) — **chưa có ảnh chụp** vì môi trường không compositing được preview.
+
+---
+
+## 10. Trạng thái triển khai (Phase 2 — tách snapshot khỏi trạng thái phiên)
+
+Đã làm trong lượt này. Mục tiêu của Phase 2: mỗi lần bấm đáp án / sang câu không còn đọc–ghi một
+cục JSONB chứa cả đề, và response `page`/`answer` không còn lặp lại manifest.
+
+| Mục | Nội dung | Vị trí |
+|---|---|---|
+| Bảng `protected_quiz_snapshots` | Nội dung câu hỏi bất biến, khoá theo **hash nội dung** (`setId + part + câu hỏi gốc`). Nhiều phiên cùng một phiên bản đề dùng chung một dòng. Payload gồm `items` đã sanitize, `manifest`, và `pages[]` (mỗi trang là danh sách chỉ số câu, đã gom nhóm TOEIC). | `internal/migration/022_quiz_snapshot.go`, `internal/repository/quiz_snapshot.go` |
+| Trạng thái phiên nhỏ | `QuizSession` bỏ `items` (chỉ phiên cũ còn giữ) và thêm `snapshotId` + `total`. State còn `answers`/`seen`/`currentIndex` → vài KB thay vì cả bài. Cột `snapshot_id` được lưu kèm để dọn snapshot không còn ai tham chiếu. | `internal/model/quiz_session.go`, `repository.Create` |
+| LRU trong RAM | `snapshotcache` giới hạn theo **byte** (mặc định 64 MB/replica), key = snapshot id. Trúng cache thì `page`/`answer`/`audio`/`peek` không đọc DB cho nội dung đề. Snapshot bất biến nên mỗi replica cache riêng vẫn nhất quán. | `internal/snapshotcache/cache.go` |
+| Phục vụ theo trang | `quizContent.page(layout, index)` cắt đúng trang từ `pages[]`: layout thường 1 câu, TOEIC cả nhóm. Không còn duyệt cả bài để tìm trang. | `service/protected_quiz.go` |
+| Response compact | `start` trả manifest **một lần**. `page`/`answer` chỉ trả: trang yêu cầu, `total`, `answered`, `answers`/`results` **trong trang**, `serverTime`, và điểm khi đã nộp. Nộp bài (hoặc mở phiên đã nộp) trả `answers`/`results` đầy đủ cho màn kết quả. Resume trong tab mới dùng `GET …/play/{id}?index=N&manifest=1`. | `service.buildView`, `http.protectedQuizRouter` |
+| Client hợp nhất response | `mergeQuizView` giữ manifest từ `start` và cộng dồn `answers`/`results` theo trang; `answered` do server trả nên không cần tải toàn bộ map điểm danh. | `lib/api/protectedQuiz.ts`, `ProtectedQuizPlayer.tsx` |
+| Audio chỉ đọc | `Audio()` chuyển từ `Update` (khoá dòng + ghi lại state) sang `View`, tra nguồn trong snapshot. | `service.Audio` |
+| Chấm điểm | Khi đang làm chỉ so câu **vừa trả lời**; chấm toàn bài chỉ một lần lúc nộp, dùng snapshot trong RAM. | `service.buildView` |
+| Di trú | Phiên cũ (không có `snapshotId`) vẫn đọc `items` trong state và tự sanitize nếu `Sanitized=false`; tự hết hạn sau 24 giờ. Snapshot không còn tham chiếu bị xoá sau 48 giờ (goroutine dọn dẹp giờ). | `service.content`, `cmd/server/main.go` |
+
+**Kiểm chứng đã chạy**
+
+- `go test ./services/study/... -count=1`, `go vet`, `gofmt` trên file đã sửa: pass.
+  Test mới: phiên dùng chung snapshot + state không chứa câu hỏi/đáp án; `page` không có `manifest`,
+  `answered`/`answers` chỉ trong trang; `manifest=1` trả manifest; phiên legacy vẫn sanitize khi đọc;
+  LRU trúng cache/đuổi theo LRU/không cache `NotFound`.
+- `npx tsc --noEmit`, `vitest run` (32 test, thêm 4 test cho `mergeQuizView`), `vite build`: pass.
+- `TestProtectedQuizPostgresHTTP` được bổ sung assertion (`snapshot_id` có giá trị, `state` không còn
+  `items`, `page` compact, `?manifest=1` trả manifest) nhưng **skip** trong môi trường này vì thiếu
+  `QUIZ_TEST_DATABASE_URL`.
+
+**Chưa làm / giới hạn**
+
+- Chưa đo lại p95: không có stack chạy thật, nên các mục tiêu `<150 ms` và `state ≤ vài KB` **chưa được
+  chứng minh bằng số**. Test chỉ chứng minh cấu trúc (state không còn chứa đề, response trang nhỏ hơn
+  response start).
+- `Summary` vẫn đọc toàn bộ câu hỏi để đếm theo Part (B6). Có thể chuyển sang metadata snapshot khi
+  có bảng đếm theo Part — chưa làm vì lúc mở màn bắt đầu chưa có snapshot.
+- ~~Phase 3 (audio khỏi BYTEA, đọc theo Range từ MinIO/đĩa) vẫn nguyên.~~ → đã làm, xem mục 11.
+
+---
+
+## 11. Trạng thái triển khai (Phase 3 — âm thanh đọc theo Range khỏi BYTEA)
+
+Mục tiêu của P3.1: không còn `io.ReadAll` nguyên file, không còn `SELECT body` trên đường stream,
+và **ticket + kiểm quyền vẫn chạy ở mỗi request Range** (mục 6 không đổi).
+
+| Mục | Nội dung | Vị trí |
+|---|---|---|
+| Thứ tự nguồn | `Open()` đọc **metadata** (`content_type`, `object_key`) không đụng `body`; rồi theo thứ tự: **bản cache trên đĩa → byte range từ MinIO → bản sao BYTEA trong Postgres**. BYTEA chỉ được đọc khi chưa có gì (lần đầu / chưa backup / MinIO chết), và ghi ngay vào cache đĩa nên mỗi file tối đa một lần đọc từ DB. | `internal/storage/quiz_audio.go` |
+| Range reader | `rangeReader` (`io.ReadSeekCloser`) mở `Range` theo yêu cầu: **cửa sổ đầu vừa đúng buffer của caller** nên `Range: bytes=0-0` chỉ chuyển **1 byte**; các lần đọc liên tiếp nhân đôi cửa sổ tới 4 MB — stream trọn một file 30 MB chỉ tốn ~15 request. `SeekEnd` lấy kích thước từ `HeadObject` một lần, không đọc dữ liệu. Server đóng cửa sổ sớm thì tự mở tiếp, không trả EOF giả. | `internal/storage/audio_object.go` |
+| MinIO | Cùng client S3 của import blob đóng vai `ObjectRangeStore` (`Stat` = `HeadObject`, `Get` = `GetObject` có `Range`). Không URL công khai, không credential nào ra ngoài. | `internal/storage/import_blob.go` |
+| Cache đĩa | Một bản sao theo `id` (id là sha256 nội dung → không bao giờ lỗi thời), ghi nguyên tử (`*.part` rồi `rename`), chặn tổng byte (mặc định 512 MB) và xoá bản cũ nhất; file đang phát vẫn giữ được nếu không xoá được (nền tảng cấm xoá file đang mở) — lần sau sẽ thử lại. | `internal/storage/audio_cache.go` |
+| Ticket + kiểm quyền | **Không đổi**: `GET …/audio-ticket` vẫn kiểm quyền rồi mới cấp ticket; mỗi request tới `/v1/quiz-audio` vẫn parse ticket + gọi `Audio()` (kiểm quyền + phiên) + `Open()`. Khác trước: cấp ticket giờ chỉ tốn metadata, không còn đọc cả file. | `internal/http/quiz_audio_stream.go`, `internal/http/protected_quiz.go` |
+| Cấu hình | `QUIZ_AUDIO_CACHE_DIR` (mặc định `<tmp>/hquizlet-quiz-audio`), `QUIZ_AUDIO_CACHE_BYTES` (mặc định 512 MB) đã thêm vào 2 file compose. Không có MinIO (dev) thì vẫn chạy nhờ cache đĩa. | `internal/config/config.go`, `docker-compose.yml`, `docker-compose.app.yml` |
+
+**Kiểm chứng đã chạy**
+
+- `go test ./services/study/... -count=1`, `go vet`, `gofmt` trên file đã sửa: pass. Test mới:
+  - `bytes=0-0` chỉ chuyển **1 byte**; `ServeContent` 200/206/416 qua reader range và qua file cache;
+  - ramp cửa sổ (stream 1 MiB ≤ 16 request, không đọc thừa byte nào); tự phục hồi khi server đóng
+    cửa sổ sớm; `Seek`/EOF/đóng reader;
+  - cache đĩa: round-trip, từ chối `id` không phải hex, chặn byte + xoá bản cũ, quét `*.part`, file rỗng bị bỏ;
+  - MinIO range qua `httptest`: header `bytes=10-14`, `bytes=990-`, object thiếu báo lỗi.
+- `TestProtectedQuizPostgresHTTP` chạy thật trên Postgres tạo riêng: **pass**, gồm assertion mới:
+  `Accept-Ranges: bytes`, `bytes=0-0` → 206 + `Content-Range`; **xoá trắng cột `body` rồi nghe lại vẫn đúng**
+  (chứng minh đường stream không đọc BYTEA); xoá bản cache đĩa + set `object_key` ⇒ audio lấy bằng
+  `Range: bytes=0-` từ object store; quyền vẫn giữ nguyên (user khác 404, ticket sai 401).
+
+**Giới hạn / chưa làm**
+
+- Chưa đo TTFB và `Server-Timing` trên stack thật (Phase 0 chưa làm) nên mục tiêu “TTFB < 1 s” chưa
+  được chứng minh bằng số.
+- P3.2 (cắt file dài theo nhóm câu) và P3.3 (giảm chi phí kiểm quyền mỗi Range) chưa làm — theo yêu cầu,
+  kiểm quyền vẫn chạy nguyên vẹn ở mọi request.
+- Bản cache đĩa là **per-replica** và mặc định nằm trong `/tmp` của container: muốn giữ qua deploy thì
+  đặt `QUIZ_AUDIO_CACHE_DIR` trỏ tới volume.

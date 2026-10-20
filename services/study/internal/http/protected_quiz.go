@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/storage"
 	"log"
 	"net/http"
@@ -39,6 +40,7 @@ func (h *Handler) playError(w http.ResponseWriter, r *http.Request, err error) {
 	WriteServiceError(w, err)
 }
 func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, setID int64, parts []string) {
+	start := time.Now()
 	protectedHeaders(w)
 	uid := userIDFromHeader(r)
 	if h.protectedQuiz == nil {
@@ -52,6 +54,7 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 				h.playError(w, r, err)
 				return
 			}
+			writeTiming(w, "summary", start)
 			WriteJSON(w, 200, view)
 			return
 		}
@@ -66,6 +69,7 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 				h.playError(w, r, err)
 				return
 			}
+			writeTiming(w, "start", start)
 			WriteJSON(w, 201, view)
 			return
 		}
@@ -112,6 +116,17 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 		}
 		index = n
 	}
+	// Prefetch is read-only: it never locks, writes or marks the page as seen.
+	if action == "peek" && r.Method == "GET" {
+		view, err := h.protectedQuiz.Peek(r.Context(), setID, uid, id, index)
+		if err != nil {
+			h.playError(w, r, err)
+			return
+		}
+		writeTiming(w, "peek", start)
+		WriteJSON(w, 200, view)
+		return
+	}
 	if (action == "audio" || action == "audio-ticket") && r.Method == "GET" {
 		source, err := h.protectedQuiz.Audio(r.Context(), setID, uid, id, index)
 		if err != nil {
@@ -127,7 +142,10 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 			WriteError(w, 422, "Không tải được file nghe. Chủ bài cần tải file lên kho riêng hoặc cấu hình nguồn audio được phép.")
 			return
 		}
+		defer reader.Close()
 		if action == "audio-ticket" {
+			// Existence is checked above with metadata only: issuing a ticket
+			// no longer reads the audio.
 			ticket := signAudioTicket(audioTicket{SetID: setID, UserID: uid, Session: id, Index: index, Expires: time.Now().Add(2 * time.Hour).Unix()})
 			WriteJSON(w, 200, map[string]string{"path": "/v1/quiz-audio?ticket=" + ticket})
 			return
@@ -154,10 +172,13 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 		index = in.Index
 		answer = in.Answer
 	}
-	view, err := h.protectedQuiz.Act(r.Context(), setID, uid, id, action, index, answer)
+	// The player keeps the manifest from start; asking for it again is only
+	// needed when resuming a session in a fresh tab.
+	view, err := h.protectedQuiz.ActWith(r.Context(), setID, uid, id, action, index, answer, service.ActOptions{IncludeManifest: r.URL.Query().Get("manifest") == "1"})
 	if err != nil {
 		h.playError(w, r, err)
 		return
 	}
+	writeTiming(w, action, start)
 	WriteJSON(w, 200, view)
 }

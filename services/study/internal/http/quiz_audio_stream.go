@@ -84,6 +84,7 @@ func (h *Handler) streamQuizAudio(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, 422, "Không tải được âm thanh.")
 		return
 	}
+	defer reader.Close()
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", "inline")
 	http.ServeContent(w, r, "audio", time.Time{}, reader)

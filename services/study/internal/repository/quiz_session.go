@@ -37,6 +37,12 @@ type QuizSessions interface {
 	Recent(context.Context, int64, int64) ([]string, error)
 	Create(context.Context, model.QuizSession) error
 	Update(context.Context, string, int64, int64, func(*model.QuizSession) error) error
+
+	// View reads one session snapshot without locking the row and without
+	// writing it back. Prefetch/peek paths must use this. The callback must
+	// not rely on mutations being persisted.
+	View(context.Context, string, int64, int64, func(*model.QuizSession) error) error
+
 	Allow(context.Context, int64, string, int, time.Duration) error
 
 	// List returns session metadata for all non-deleted sessions of this user,
@@ -123,10 +129,12 @@ func (r *QuizSessionRepository) Create(ctx context.Context, s model.QuizSession)
 	if s.Deadline != nil {
 		activeUntil = *s.Deadline
 	}
+	// snapshot_id is duplicated as a column so snapshot cleanup can ask which
+	// rows are still referenced without reading every state document.
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO protected_quiz_sessions(id,user_id,study_set_id,state,expires_at,active_until)
-         VALUES($1,$2,$3,$4,$5,$6)`,
-		s.ID, s.UserID, s.StudySetID, data, s.ExpiresAt, activeUntil)
+		`INSERT INTO protected_quiz_sessions(id,user_id,study_set_id,state,expires_at,active_until,snapshot_id)
+         VALUES($1,$2,$3,$4,$5,$6,$7)`,
+		s.ID, s.UserID, s.StudySetID, data, s.ExpiresAt, activeUntil, s.SnapshotID)
 	if err != nil {
 		return err
 	}
@@ -160,7 +168,8 @@ func (r *QuizSessionRepository) Update(ctx context.Context, id string, uid, setI
 		return err
 	}
 	if !wasSubmitted && s.SubmittedAt != nil && s.CompletedScore != nil {
-		_, err = tx.ExecContext(ctx, `INSERT INTO learning_sessions(user_id,study_set_id,mode,score,total,started_at,completed_at,idempotency_key) VALUES($1,$2,'test',$3,$4,$5,$6,$7) ON CONFLICT(user_id,idempotency_key) DO NOTHING`, uid, setID, *s.CompletedScore, len(s.Items), s.StartedAt, s.SubmittedAt, "quiz-"+s.ID)
+		total := s.QuestionCount()
+		_, err = tx.ExecContext(ctx, `INSERT INTO learning_sessions(user_id,study_set_id,mode,score,total,started_at,completed_at,idempotency_key) VALUES($1,$2,'test',$3,$4,$5,$6,$7) ON CONFLICT(user_id,idempotency_key) DO NOTHING`, uid, setID, *s.CompletedScore, total, s.StartedAt, s.SubmittedAt, "quiz-"+s.ID)
 		if err != nil {
 			return err
 		}
@@ -183,6 +192,28 @@ func (r *QuizSessionRepository) Update(ctx context.Context, id string, uid, setI
 		return err
 	}
 	return tx.Commit()
+}
+
+// View loads a session for a read-only operation: no FOR UPDATE, no UPDATE.
+// A prefetch therefore cannot block a learner's answer on the same session.
+func (r *QuizSessionRepository) View(ctx context.Context, id string, uid, setID int64, fn func(*model.QuizSession) error) error {
+	var data []byte
+	err := r.db.QueryRowContext(ctx,
+		`SELECT state FROM protected_quiz_sessions
+         WHERE id=$1 AND user_id=$2 AND study_set_id=$3
+           AND expires_at>now() AND deleted_at IS NULL`,
+		id, uid, setID).Scan(&data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var s model.QuizSession
+	if err = json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	return fn(&s)
 }
 
 // Recent returns session IDs for an unexpired, non-deleted quiz, most-recent first.
@@ -285,7 +316,7 @@ func (r *QuizSessionRepository) List(ctx context.Context, userID, studySetID int
 			m.StartedAt = s.StartedAt
 			m.Deadline = s.Deadline
 			m.SubmittedAt = s.SubmittedAt
-			m.Total = len(s.Items)
+			m.Total = s.QuestionCount()
 			m.Answered = len(s.Answers)
 		}
 		metas = append(metas, m)

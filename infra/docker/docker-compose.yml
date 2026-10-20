@@ -103,6 +103,8 @@ services:
       PORT: "8082"
       PAYMENT_SERVICE_URL: "http://payment:8085"
       QUIZ_AUDIO_ALLOWED_HOSTS: "${QUIZ_AUDIO_ALLOWED_HOSTS:-}"
+      QUIZ_AUDIO_CACHE_DIR:     "${QUIZ_AUDIO_CACHE_DIR:-/tmp/hquizlet-quiz-audio}"
+      QUIZ_AUDIO_CACHE_BYTES:   "${QUIZ_AUDIO_CACHE_BYTES:-536870912}"
       DATABASE_URL:     "${DATABASE_URL:-postgres://hquizlet:hquizlet@postgres:5432/hquizlet?sslmode=disable}"
       AUTH_SERVICE_URL: "${AUTH_SERVICE_URL:-http://auth:8081}"
       MINIO_ENDPOINT:        "${MINIO_ENDPOINT:-http://minio:9000}"

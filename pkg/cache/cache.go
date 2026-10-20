@@ -37,6 +37,21 @@ func (c *Cache) Del(ctx context.Context, key string) error {
 	return c.client.Del(ctx, key).Err()
 }
 
+// Incr atomically adds one to key and sets its time-to-live when the key is
+// created. It is used for shared fixed-window rate limiting.
+func (c *Cache) Incr(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	n, err := c.client.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	if n == 1 && ttl > 0 {
+		if err := c.client.Expire(ctx, key, ttl).Err(); err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
 func (c *Cache) PrefixDel(ctx context.Context, prefix string) error {
 	iter := c.client.Scan(ctx, 0, prefix+"*", 0).Iterator()
 	for iter.Next(ctx) {

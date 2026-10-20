@@ -3,12 +3,46 @@ import { gatewayUrl as gateway } from "./gateway";
 import type { QuizQuestion } from "../../types";
 
 export type QuizStart = { mode: "practice" | "exam"; instant: boolean; layout: "default" | "toeic"; part: number; durationSeconds: number };
+/**
+ * One response of the protected player.
+ *
+ * `manifest` only arrives with start and with an explicit resume; the client
+ * keeps the copy it already has. `answers`/`results` are page-scoped while the
+ * session is open and complete once it is submitted, so the client merges every
+ * response into its own state instead of replacing it.
+ */
 export type ProtectedQuizView = {
   id: string; mode: "practice" | "exam"; instant: boolean; layout: "default" | "toeic";
   serverTime: string; deadline?: string; submitted: boolean; currentIndex: number;
-  manifest: { number: number; part: number; group: number }[];
+  total: number; answered: number;
+  manifest?: { number: number; part: number; group: number }[];
   page: { index: number; question: QuizQuestion; hasAudio: boolean; revealed: boolean }[];
   answers: Record<number, string>; results: Record<number, boolean>; score?: number; timeUsed: number;
+};
+
+/**
+ * A page/answer response only carries the served page: the manifest stays from
+ * start and answered pages accumulate instead of being replaced by the latest
+ * one. A submitted session answers with complete maps, so those win outright.
+ */
+export function mergeQuizView(prev: ProtectedQuizView | null, next: ProtectedQuizView): ProtectedQuizView {
+  if (!prev || prev.id !== next.id) return next;
+  return {
+    ...prev,
+    ...next,
+    total: next.total || prev.total,
+    manifest: next.manifest?.length ? next.manifest : prev.manifest,
+    answers: { ...prev.answers, ...next.answers },
+    results: { ...prev.results, ...next.results },
+  };
+}
+
+/** Read-only prefetch payload: page content only, no answers and no audio rights. */
+export type ProtectedQuizPeek = {
+  id: string;
+  serverTime: string;
+  currentIndex: number;
+  page: ProtectedQuizView["page"];
 };
 
 export type QuizSessionMeta = {
@@ -41,12 +75,19 @@ export const protectedQuizApi = {
     apiFetch<{ total: number; parts: Record<number, number>; sessions: string[]; activeCount: number; limit: number; studySetId: number }>(path(setId), token),
   start: (token: string, setId: number, input: QuizStart) =>
     apiFetch<ProtectedQuizView>(path(setId), token, { method: "POST", body: JSON.stringify(input) }),
-  page: (token: string, setId: number, id: string, index = -1) =>
-    apiFetch<ProtectedQuizView>(`${path(setId)}/${id}`, token, {}, index < 0 ? undefined : { index }),
+  /** `manifest: true` is only needed when resuming in a tab that has no manifest yet. */
+  page: (token: string, setId: number, id: string, index = -1, options?: { manifest?: boolean }) =>
+    apiFetch<ProtectedQuizView>(`${path(setId)}/${id}`, token, {}, {
+      ...(index < 0 ? {} : { index }),
+      ...(options?.manifest ? { manifest: "1" } : {}),
+    }),
   answer: (token: string, setId: number, id: string, index: number, answer: string) =>
     apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/answer`, token, { method: "POST", body: JSON.stringify({ index, answer }) }),
   submit: (token: string, setId: number, id: string) =>
     apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/submit`, token, { method: "POST" }),
+  /** Warm the client cache for a page without marking it seen or granting audio. */
+  peek: (token: string, setId: number, id: string, index: number) =>
+    apiFetch<ProtectedQuizPeek>(`${path(setId)}/${id}/peek`, token, {}, { index }),
   audio: async (token: string, setId: number, id: string, index: number, signal: AbortSignal) => {
     const response = await fetch(`${gateway}${path(setId)}/${id}/audio-ticket?index=${index}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal });
     if (!response.ok) {

@@ -4,6 +4,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // ImportBlobStorage stores uploaded import files for background workers.
@@ -108,10 +110,50 @@ func (m *minioImportStorage) Open(ctx context.Context, key string) (io.ReadClose
 
 func (m *minioImportStorage) Delete(ctx context.Context, key string) error {
 	_, err := m.client.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(m.bucket),
-		Key:    aws.String(key),
+		Bucket: aws.String(m.bucket), Key: aws.String(key),
 	})
 	return err
+}
+
+// Stat and Get expose the same MinIO client as an ObjectRangeStore so quiz
+// audio can be served a byte range at a time instead of read whole.
+func (m *minioImportStorage) Stat(ctx context.Context, key string) (int64, error) {
+	out, err := m.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(m.bucket), Key: aws.String(key)})
+	if err != nil {
+		var missing *types.NotFound
+		var noKey *types.NoSuchKey
+		if errors.As(err, &missing) || errors.As(err, &noKey) {
+			return 0, ErrObjectNotFound
+		}
+		return 0, fmt.Errorf("stat object: %w", err)
+	}
+	if out.ContentLength == nil {
+		return 0, fmt.Errorf("stat object %q: missing content length", key)
+	}
+	return *out.ContentLength, nil
+}
+
+// Get streams [start, start+length); a negative length means to the end of
+// the object. Nothing is buffered in the process.
+func (m *minioImportStorage) Get(ctx context.Context, key string, start, length int64) (io.ReadCloser, error) {
+	in := &s3.GetObjectInput{Bucket: aws.String(m.bucket), Key: aws.String(key)}
+	if start < 0 {
+		start = 0
+	}
+	if length < 0 {
+		in.Range = aws.String(fmt.Sprintf("bytes=%d-", start))
+	} else {
+		in.Range = aws.String(fmt.Sprintf("bytes=%d-%d", start, start+length-1))
+	}
+	out, err := m.client.GetObject(ctx, in)
+	if err != nil {
+		var missing *types.NoSuchKey
+		if errors.As(err, &missing) {
+			return nil, ErrObjectNotFound
+		}
+		return nil, fmt.Errorf("get object: %w", err)
+	}
+	return out.Body, nil
 }
 
 // LocalSpoolStorage writes imports to a directory (dev fallback without MinIO).

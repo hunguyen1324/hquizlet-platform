@@ -24,10 +24,12 @@ var ErrAudioFormat = errors.New("unsupported audio file or file exceeds 30 MB")
 // The database retains a recovery copy; MinIO holds a private backup with a
 // deterministic key. Never expose either the origin or a public bucket URL.
 type QuizAudio struct {
-	db     *sql.DB
-	hosts  map[string]bool
-	client *http.Client
-	backup AudioBackup
+	db      *sql.DB
+	hosts   map[string]bool
+	client  *http.Client
+	backup  AudioBackup
+	objects ObjectRangeStore
+	cache   *diskCache
 }
 
 type AudioBackup interface {
@@ -35,6 +37,29 @@ type AudioBackup interface {
 }
 
 func (a *QuizAudio) WithBackup(backup AudioBackup) *QuizAudio { a.backup = backup; return a }
+
+// WithObjectStore streams audio by byte range from MinIO (or any
+// S3-compatible store) instead of loading the database copy.
+func (a *QuizAudio) WithObjectStore(store ObjectRangeStore) *QuizAudio {
+	a.objects = store
+	return a
+}
+
+// WithDiskCache points the local copy at dir, capped at maxBytes. Zero values
+// select the defaults; a directory that cannot be created leaves the cache off
+// and the database copy is served directly.
+func (a *QuizAudio) WithDiskCache(dir string, maxBytes int64) *QuizAudio {
+	if dir == "" {
+		dir = DefaultAudioCacheDir
+	}
+	if maxBytes <= 0 {
+		maxBytes = DefaultAudioCacheBytes
+	}
+	if cache, err := newDiskCache(dir, maxBytes); err == nil {
+		a.cache = cache
+	}
+	return a
+}
 
 func (a *QuizAudio) backupAudio(ctx context.Context, id string, data []byte, mime string) error {
 	if a.backup == nil {
@@ -56,7 +81,8 @@ func NewQuizAudio(db *sql.DB, allowedHosts string) *QuizAudio {
 		}
 	}
 	transport := &http.Transport{Proxy: nil, DialContext: publicAudioDial, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 15 * time.Second}
-	return &QuizAudio{db: db, hosts: hosts, client: &http.Client{Transport: transport, Timeout: 90 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrAudioSource }}}
+	return (&QuizAudio{db: db, hosts: hosts, client: &http.Client{Transport: transport, Timeout: 90 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return ErrAudioSource }}}).
+		WithDiskCache("", 0)
 }
 func publicAudioIP(ip net.IP) bool {
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
@@ -132,7 +158,12 @@ func (a *QuizAudio) Put(ctx context.Context, setID int64, r io.Reader) (string, 
 	}
 	return "private-audio:" + id, err
 }
-func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (*bytes.Reader, string, error) {
+
+// Open returns a seekable reader over one delivered audio without loading it
+// into memory: the local disk copy first, then a byte range from the object
+// store. The database copy (BYTEA) is only read when neither exists yet, so
+// the streaming path no longer selects `body`.
+func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (io.ReadSeekCloser, string, error) {
 	id := strings.TrimPrefix(source, "private-audio:")
 	if !strings.HasPrefix(source, "private-audio:") {
 		if !a.allowed(source) {
@@ -142,17 +173,30 @@ func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (*byte
 		sum := sha256.Sum256([]byte(strconv.FormatInt(setID, 10) + ":" + source))
 		id = hex.EncodeToString(sum[:])
 	}
-	var data []byte
 	var mime string
 	var objectKey sql.NullString
-	err := a.db.QueryRowContext(ctx, `SELECT body,content_type,object_key FROM protected_quiz_audio WHERE id=$1 AND study_set_id=$2`, id, setID).Scan(&data, &mime, &objectKey)
+	err := a.db.QueryRowContext(ctx, `SELECT content_type,object_key FROM protected_quiz_audio WHERE id=$1 AND study_set_id=$2`, id, setID).Scan(&mime, &objectKey)
 	if err == nil {
+		// Ids are content hashes, so a local copy never goes stale.
+		if rc, cerr := a.cache.open(id); cerr == nil {
+			return rc, mime, nil
+		}
+		if objectKey.Valid && a.objects != nil {
+			if rc, oerr := newRangeReader(ctx, a.objects, objectKey.String); oerr == nil {
+				return rc, mime, nil
+			}
+			// Object store unreachable: recover from the database copy below.
+		}
+		data, berr := a.body(ctx, id, setID)
+		if berr != nil {
+			return nil, "", berr
+		}
 		if !objectKey.Valid {
-			if err := a.backupAudio(ctx, id, data, mime); err != nil {
-				return nil, "", err
+			if berr := a.backupAudio(ctx, id, data, mime); berr != nil {
+				return nil, "", berr
 			}
 		}
-		return bytes.NewReader(data), mime, nil
+		return a.serveLocal(id, data), mime, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) || strings.HasPrefix(source, "private-audio:") {
 		return nil, "", err
@@ -169,7 +213,7 @@ func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (*byte
 	if resp.StatusCode != 200 || resp.ContentLength > MaxQuizAudioBytes {
 		return nil, "", ErrAudioFormat
 	}
-	data, err = io.ReadAll(io.LimitReader(resp.Body, MaxQuizAudioBytes+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, MaxQuizAudioBytes+1))
 	if err != nil {
 		return nil, "", err
 	}
@@ -187,5 +231,23 @@ func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (*byte
 	if err := a.backupAudio(ctx, id, data, mime); err != nil {
 		return nil, "", err
 	}
-	return bytes.NewReader(data), mime, nil
+	return a.serveLocal(id, data), mime, nil
+}
+
+// body reads the recovery copy of one audio. It runs only on the first read of
+// a file that has neither a local copy nor a usable object yet.
+func (a *QuizAudio) body(ctx context.Context, id string, setID int64) ([]byte, error) {
+	var data []byte
+	err := a.db.QueryRowContext(ctx, `SELECT body FROM protected_quiz_audio WHERE id=$1 AND study_set_id=$2`, id, setID).Scan(&data)
+	return data, err
+}
+
+// serveLocal materialises content in the disk cache so the next request seeks
+// an os.File instead of Postgres; without a cache the bytes are served from
+// memory as before.
+func (a *QuizAudio) serveLocal(id string, data []byte) io.ReadSeekCloser {
+	if rc, err := a.cache.store(id, data); err == nil {
+		return rc
+	}
+	return readSeekCloser{bytes.NewReader(data)}
 }

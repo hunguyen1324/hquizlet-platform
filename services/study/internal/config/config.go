@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"strconv"
+)
 
 // Config holds all study service configuration read from environment.
 type Config struct {
@@ -12,6 +15,10 @@ type Config struct {
 	RedisURL          string
 	AuthSecret        string // shared secret for verifying auth tokens from auth service
 	MinIO             MinIOConfig
+	// AudioCacheDir/Bytes bound the local copy of streamed quiz audio;
+	// empty/zero selects the storage defaults.
+	AudioCacheDir   string
+	AudioCacheBytes int64
 }
 
 // MinIOConfig holds S3-compatible storage for async import file buffering.
@@ -41,12 +48,23 @@ func Load() Config {
 			Bucket:          env("MINIO_IMPORT_BUCKET", "hquizlet-imports"),
 			LocalSpoolDir:   env("IMPORT_SPOOL_DIR", os.TempDir()+"/hquizlet-imports"),
 		},
+		AudioCacheDir:   env("QUIZ_AUDIO_CACHE_DIR", ""),
+		AudioCacheBytes: envInt64("QUIZ_AUDIO_CACHE_BYTES", 0),
 	}
 }
 
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func envInt64(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
 	}
 	return fallback
 }

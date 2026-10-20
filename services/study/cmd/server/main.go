@@ -21,6 +21,7 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/migration"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/snapshotcache"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/storage"
 )
 
@@ -78,6 +79,12 @@ func main() {
 
 	// HTTP
 	quizAudio := storage.NewQuizAudio(db, cfg.AudioAllowedHosts)
+	// Streaming serves byte ranges: a local copy when cheap, otherwise the
+	// object itself; Postgres only answers metadata and acts as recovery.
+	quizAudio.WithDiskCache(cfg.AudioCacheDir, cfg.AudioCacheBytes)
+	if objects, ok := importBlob.(storage.ObjectRangeStore); ok {
+		quizAudio.WithObjectStore(objects)
+	}
 	if backup, ok := importBlob.(storage.AudioBackup); ok {
 		quizAudio.WithBackup(backup)
 	}
@@ -87,9 +94,36 @@ func main() {
 		log.Printf("[study] warning: failed to connect to redis cache: %v", err)
 	}
 
+	// Question content is immutable and content-addressed, so each replica keeps
+	// a byte-bounded LRU of snapshots: a page request reads RAM instead of
+	// decoding the learner's whole state document.
+	snapshots := snapshotcache.New(repository.NewQuizSnapshotRepository(db), snapshotcache.DefaultBytes)
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			n, err := snapshots.DeleteUnreferenced(ctx, time.Now().Add(-48*time.Hour))
+			if err != nil {
+				log.Printf("[study] snapshot cleanup failed: %v", err)
+			} else if n > 0 {
+				log.Printf("[study] removed %d unreferenced quiz snapshots", n)
+			}
+			cancel()
+		}
+	}()
+
+	// Hot quiz buckets are charged in a shared Redis counter when available, so
+	// an answer does not write protected_quiz_limits on every tap. Without Redis
+	// the service keeps a per-replica budget in memory (still fail-closed).
+	quizSvcProtected := service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), snapshots, cfg.PaymentServiceURL)
+	if redisCache != nil {
+		quizSvcProtected = quizSvcProtected.WithLimiter(service.NewRedisLimiter(redisCache))
+	}
+
 	mux := http.NewServeMux()
 	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithCache(redisCache).WithStats(statsSvc).WithAdmin(service.NewAdminService(repository.NewAdminRepository(db))).WithProtectedQuiz(
-		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL),
+		quizSvcProtected,
 		quizAudio,
 	).WithViewerMarkSecret(os.Getenv("WATERMARK_SECRET")).Register(mux)
 

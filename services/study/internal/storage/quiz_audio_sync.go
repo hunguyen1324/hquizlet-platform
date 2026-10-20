@@ -52,9 +52,11 @@ func (a *QuizAudio) SyncPending(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if _, _, err := a.Open(ctx, c.setID, c.source); err != nil {
+		if rc, _, err := a.Open(ctx, c.setID, c.source); err != nil {
 			// URLs can contain upstream credentials: do not log them or transport errors.
 			log.Printf("[study] quiz audio sync failed for set %d; will retry", c.setID)
+		} else {
+			rc.Close()
 		}
 	}
 	return nil

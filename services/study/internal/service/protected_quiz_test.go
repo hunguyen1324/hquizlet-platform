@@ -34,10 +34,10 @@ func (f *protectedQuestions) ListByStudySet(context.Context, int64) ([]model.Qui
 }
 
 type memoryQuizSessions struct {
-	mu     sync.Mutex
-	states map[string][]byte
-	denied bool
-	now    time.Time
+	mu        sync.Mutex
+	states    map[string][]byte
+	allowHits int
+	now       time.Time
 }
 
 func (f *memoryQuizSessions) Create(_ context.Context, s model.QuizSession) error {
@@ -48,9 +48,9 @@ func (f *memoryQuizSessions) Create(_ context.Context, s model.QuizSession) erro
 	return nil
 }
 func (f *memoryQuizSessions) Allow(context.Context, int64, string, int, time.Duration) error {
-	if f.denied {
-		return repository.ErrQuizRateLimit
-	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.allowHits++
 	return nil
 }
 func (f *memoryQuizSessions) Recent(context.Context, int64, int64) ([]string, error) {
@@ -73,6 +73,30 @@ func (f *memoryQuizSessions) Delete(_ context.Context, id string, _ int64) error
 	delete(f.states, id)
 	return nil
 }
+func (f *memoryQuizSessions) View(_ context.Context, id string, uid, setID int64, fn func(*model.QuizSession) error) error {
+	f.mu.Lock()
+	data, ok := f.states[id]
+	f.mu.Unlock()
+	if !ok {
+		return repository.ErrNotFound
+	}
+	var s model.QuizSession
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	if s.UserID != uid || s.StudySetID != setID || !s.ExpiresAt.After(f.now) {
+		return repository.ErrNotFound
+	}
+	// The callback receives a copy: nothing it does may be persisted.
+	return fn(&s)
+}
+func (f *memoryQuizSessions) state(id string) model.QuizSession {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var s model.QuizSession
+	json.Unmarshal(f.states[id], &s)
+	return s
+}
 func (f *memoryQuizSessions) Update(_ context.Context, id string, uid, setID int64, fn func(*model.QuizSession) error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -91,7 +115,47 @@ func (f *memoryQuizSessions) Update(_ context.Context, id string, uid, setID int
 	f.states[id], _ = json.Marshal(s)
 	return nil
 }
-func securityFixture(t *testing.T) (*ProtectedQuizService, *protectedSets, *memoryQuizSessions) {
+
+type memoryQuizSnapshots struct {
+	mu    sync.Mutex
+	snaps map[string]model.QuizSnapshot
+	gets  int
+	puts  int
+}
+
+func newMemoryQuizSnapshots() *memoryQuizSnapshots {
+	return &memoryQuizSnapshots{snaps: map[string]model.QuizSnapshot{}}
+}
+
+func (f *memoryQuizSnapshots) Put(_ context.Context, snap model.QuizSnapshot) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.puts++
+	if _, ok := f.snaps[snap.ID]; ok {
+		return nil
+	}
+	f.snaps[snap.ID] = snap
+	return nil
+}
+
+func (f *memoryQuizSnapshots) Get(_ context.Context, id string) (model.QuizSnapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gets++
+	snap, ok := f.snaps[id]
+	if !ok {
+		return model.QuizSnapshot{}, repository.ErrNotFound
+	}
+	return snap, nil
+}
+
+func (f *memoryQuizSnapshots) DeleteUnreferenced(context.Context, time.Time) (int64, error) {
+	return 0, nil
+}
+
+func securityFixture(t *testing.T) (*ProtectedQuizService, *protectedSets, *memoryQuizSessions, *memoryQuizSnapshots) {
+	t.Helper()
+	snapshots := newMemoryQuizSnapshots()
 	t.Helper()
 	correct := "B"
 	explanation := "SECRET_EXPLANATION"
@@ -105,9 +169,9 @@ func securityFixture(t *testing.T) (*ProtectedQuizService, *protectedSets, *memo
 	store := &memoryQuizSessions{states: map[string][]byte{}, now: now}
 	payment := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"hasAccess":true}`)) }))
 	t.Cleanup(payment.Close)
-	svc := NewProtectedQuizService(sets, questions, store, payment.URL)
+	svc := NewProtectedQuizService(sets, questions, store, snapshots, payment.URL)
 	svc.now = func() time.Time { return store.now }
-	return svc, sets, store
+	return svc, sets, store, snapshots
 }
 func startSecurityQuiz(t *testing.T, s *ProtectedQuizService, instant bool) model.QuizSessionView {
 	t.Helper()
@@ -118,7 +182,7 @@ func startSecurityQuiz(t *testing.T, s *ProtectedQuizService, instant bool) mode
 	return view
 }
 func TestQuizPageDoesNotLeakSolutionsOrOrigin(t *testing.T) {
-	svc, _, _ := securityFixture(t)
+	svc, _, _, _ := securityFixture(t)
 	view := startSecurityQuiz(t, svc, false)
 	data, _ := json.Marshal(view)
 	for _, secret := range []string{"correctAnswer", "answerExplanation", "audioUrl", "subQuestions", `"isCorrect":true`, "SECRET_EXPLANATION", "origin.example", "UNSEEN_QUESTION"} {
@@ -131,7 +195,7 @@ func TestQuizPageDoesNotLeakSolutionsOrOrigin(t *testing.T) {
 	}
 }
 func TestQuizOwnershipAccessAndLegacyExport(t *testing.T) {
-	svc, sets, _ := securityFixture(t)
+	svc, sets, _, _ := securityFixture(t)
 	ctx := context.Background()
 	view := startSecurityQuiz(t, svc, false)
 	if _, err := svc.Act(ctx, 1, 20, view.ID, "page", 0, ""); !errors.Is(err, repository.ErrNotFound) {
@@ -156,7 +220,7 @@ func TestQuizOwnershipAccessAndLegacyExport(t *testing.T) {
 	}
 }
 func TestQuizInstantAnswerLocksAndDeferredDoesNotReveal(t *testing.T) {
-	svc, _, _ := securityFixture(t)
+	svc, _, _, _ := securityFixture(t)
 	ctx := context.Background()
 	view := startSecurityQuiz(t, svc, true)
 	answered, err := svc.Act(ctx, 1, 10, view.ID, "answer", 0, "wrong")
@@ -200,7 +264,7 @@ func TestQuizInstantAnswerLocksAndDeferredDoesNotReveal(t *testing.T) {
 	}
 }
 func TestQuizDeadlineCannotBeExtendedAndSubmissionIsIdempotent(t *testing.T) {
-	svc, _, store := securityFixture(t)
+	svc, _, store, _ := securityFixture(t)
 	view := startSecurityQuiz(t, svc, false)
 	store.now = store.now.Add(61 * time.Second)
 	result, err := svc.Act(context.Background(), 1, 10, view.ID, "answer", 0, "right")
@@ -223,7 +287,7 @@ func TestQuizDeadlineCannotBeExtendedAndSubmissionIsIdempotent(t *testing.T) {
 	}
 }
 func TestQuizAudioRequiresOwnDeliveredQuestionAndRateLimit(t *testing.T) {
-	svc, _, store := securityFixture(t)
+	svc, _, _, _ := securityFixture(t)
 	view := startSecurityQuiz(t, svc, false)
 	ctx := context.Background()
 	if _, err := svc.Audio(ctx, 1, 10, view.ID, 1); !errors.Is(err, ErrForbidden) {
@@ -235,13 +299,13 @@ func TestQuizAudioRequiresOwnDeliveredQuestionAndRateLimit(t *testing.T) {
 	if source, err := svc.Audio(ctx, 1, 10, view.ID, 0); err != nil || source == "" {
 		t.Fatalf("legitimate audio denied: %v", err)
 	}
-	store.denied = true
+	svc.WithLimiter(denyLimiter{})
 	if _, err := svc.Audio(ctx, 1, 10, view.ID, 0); !errors.Is(err, repository.ErrQuizRateLimit) {
 		t.Fatal("audio bypassed rate limit")
 	}
 }
 func TestQuizAccessRevocationAndPaymentFailClosed(t *testing.T) {
-	svc, sets, _ := securityFixture(t)
+	svc, sets, _, _ := securityFixture(t)
 	ctx := context.Background()
 	view, err := svc.Start(ctx, 1, 20, model.StartQuizInput{Mode: "practice", Layout: "default"})
 	if err != nil {
@@ -278,11 +342,91 @@ func TestQuizHTMLDoesNotShipEmbeddedURLs(t *testing.T) {
 
 func TestSessionItemsInheritParagraphImage(t *testing.T) {
 	image := "/images/passage.png"
-	items, err := sessionItems([]model.QuizQuestion{{QuestionType: "paragraph", ImageURL: &image, SubQuestions: json.RawMessage("[{\"questionText\":\"Q\",\"questionType\":\"written\"}]")}})
+	items, err := sessionItems([]model.QuizQuestion{{QuestionType: "paragraph", ImageURL: &image, SubQuestions: json.RawMessage("[{\"questionText\":\"Q\",\"questionType\":\"written\"}]")}}, true)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("items: %v, %v", items, err)
 	}
 	if items[0].Question.ImageURL == nil || *items[0].Question.ImageURL != image {
 		t.Fatal("parent image was lost")
+	}
+}
+
+func TestQuizSessionsShareOneSnapshotAndKeepStateSmall(t *testing.T) {
+	svc, _, store, snapshots := securityFixture(t)
+	ctx := context.Background()
+	first := startSecurityQuiz(t, svc, false)
+	second := startSecurityQuiz(t, svc, false)
+	a, b := store.state(first.ID), store.state(second.ID)
+	if a.SnapshotID == "" || a.SnapshotID != b.SnapshotID {
+		t.Fatalf("sessions did not share a snapshot: %q %q", a.SnapshotID, b.SnapshotID)
+	}
+	if len(a.Items) != 0 || len(b.Items) != 0 {
+		t.Fatal("session state still holds a private copy of the questions")
+	}
+	if a.Total != 2 {
+		t.Fatalf("session total = %d, want 2", a.Total)
+	}
+	if _, err := svc.Act(ctx, 1, 10, first.ID, "page", 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if snapshots.gets == 0 {
+		t.Fatal("page serving never resolved the snapshot")
+	}
+	if len(snapshots.snaps) != 1 {
+		t.Fatalf("identical content stored %d snapshots", len(snapshots.snaps))
+	}
+	// The mutable state must not carry question content or solutions.
+	state, _ := json.Marshal(a)
+	for _, secret := range []string{"UNSEEN_QUESTION", "correctAnswer", "SECRET_EXPLANATION", "origin.example"} {
+		if strings.Contains(string(state), secret) {
+			t.Fatalf("state leaked %s: %s", secret, state)
+		}
+	}
+}
+
+func TestQuizPageResponseIsCompactAndManifestIsOptIn(t *testing.T) {
+	svc, _, _, _ := securityFixture(t)
+	ctx := context.Background()
+	started := startSecurityQuiz(t, svc, false)
+	if len(started.Manifest) != 2 || started.Total != 2 {
+		t.Fatalf("start payload: %+v", started)
+	}
+	startJSON, _ := json.Marshal(started)
+	if _, err := svc.Act(ctx, 1, 10, started.ID, "answer", 0, "right"); err != nil {
+		t.Fatal(err)
+	}
+	paged, err := svc.Act(ctx, 1, 10, started.ID, "page", 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paged.Manifest) != 0 {
+		t.Fatalf("page carried the manifest: %d entries", len(paged.Manifest))
+	}
+	if paged.Total != 2 || paged.Answered != 1 || len(paged.Answers) != 0 || len(paged.Results) != 0 {
+		t.Fatalf("page payload is not page-scoped: %+v", paged)
+	}
+	if len(paged.Page) != 1 || paged.Page[0].Index != 1 {
+		t.Fatalf("wrong page: %+v", paged.Page)
+	}
+	pageJSON, _ := json.Marshal(paged)
+	if len(pageJSON) >= len(startJSON) {
+		t.Fatalf("page response is not smaller than start: %d >= %d", len(pageJSON), len(startJSON))
+	}
+	// Resuming in a fresh tab asks for the manifest once.
+	resumed, err := svc.ActWith(ctx, 1, 10, started.ID, "page", 1, "", ActOptions{IncludeManifest: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resumed.Manifest) != 2 {
+		t.Fatalf("resume did not include the manifest: %+v", resumed)
+	}
+	// Instant answers return only that page's result, not the whole grading map.
+	instant := startSecurityQuiz(t, svc, true)
+	answered, err := svc.Act(ctx, 1, 10, instant.ID, "answer", 0, "wrong")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answered.Results[0] || answered.Answers[0] != "wrong" || len(answered.Manifest) != 0 {
+		t.Fatalf("instant answer payload: %+v", answered)
 	}
 }

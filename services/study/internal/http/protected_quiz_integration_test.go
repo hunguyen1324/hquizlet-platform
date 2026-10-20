@@ -11,16 +11,56 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/service"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/snapshotcache"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/storage"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+// fakeObjectStore answers HEAD/GET with Range support, standing in for MinIO.
+type fakeObjectStore struct {
+	data   []byte
+	mu     sync.Mutex
+	ranges []string
+}
+
+func (f *fakeObjectStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start, end := int64(0), int64(len(f.data))-1
+	ranged := false
+	if spec := r.Header.Get("Range"); spec != "" {
+		f.mu.Lock()
+		f.ranges = append(f.ranges, spec)
+		f.mu.Unlock()
+		ranged = true
+		parts := strings.Split(strings.TrimPrefix(spec, "bytes="), "-")
+		if n, err := strconv.ParseInt(parts[0], 10, 64); err == nil && n <= end {
+			start = n
+		}
+		if len(parts) == 2 && parts[1] != "" {
+			if n, err := strconv.ParseInt(parts[1], 10, 64); err == nil && n < end {
+				end = n
+			}
+		}
+	}
+	body := f.data[start : end+1]
+	w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+	if ranged {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(f.data)))
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	w.Write(body)
+}
 
 // Run only against a disposable database explicitly provided by the caller.
 func TestProtectedQuizPostgresHTTP(t *testing.T) {
@@ -49,7 +89,8 @@ func TestProtectedQuizPostgresHTTP(t *testing.T) {
 	cards := repository.NewFlashcardRepository(db)
 	questions := repository.NewQuizQuestionRepository(db)
 	sessions := repository.NewQuizSessionRepository(db)
-	audio := storage.NewQuizAudio(db, "")
+	cacheDir := t.TempDir()
+	audio := storage.NewQuizAudio(db, "").WithDiskCache(cacheDir, 0)
 	audioData := []byte("ID3\x04\x00\x00\x00\x00\x00\x00TEST_AUDIO")
 	ref, err := audio.Put(ctx, setID, bytes.NewReader(audioData))
 	if err != nil {
@@ -80,7 +121,8 @@ func TestProtectedQuizPostgresHTTP(t *testing.T) {
 	payment := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"hasAccess":true}`)) }))
 	defer payment.Close()
 	mux := http.NewServeMux()
-	New(service.NewStudySetService(sets, cards), nil, nil, nil, service.NewQuizQuestionService(questions, sets), nil, nil, db).WithProtectedQuiz(service.NewProtectedQuizService(sets, questions, sessions, payment.URL), audio).Register(mux)
+	snapshots := snapshotcache.New(repository.NewQuizSnapshotRepository(db), snapshotcache.DefaultBytes)
+	New(service.NewStudySetService(sets, cards), nil, nil, nil, service.NewQuizQuestionService(questions, sets), nil, nil, db).WithProtectedQuiz(service.NewProtectedQuizService(sets, questions, sessions, snapshots, payment.URL), audio).Register(mux)
 	server := httptest.NewServer(middleware.VerifyBearer(auth.URL)(mux))
 	defer server.Close()
 	request := func(method, path, token, body string) (int, []byte, http.Header) {
@@ -122,7 +164,32 @@ func TestProtectedQuizPostgresHTTP(t *testing.T) {
 	if err = json.Unmarshal(data, &view); err != nil {
 		t.Fatal(err)
 	}
+	if view.Total != 2 || len(view.Manifest) != 2 {
+		t.Fatalf("start payload lacks totals/manifest: %s", data)
+	}
+	// Questions live in one immutable snapshot; the mutable state stays small.
+	var snapshotID string
+	var hasItems bool
+	if err = db.QueryRow(`SELECT snapshot_id, state ? 'items' FROM protected_quiz_sessions WHERE id=$1`, view.ID).Scan(&snapshotID, &hasItems); err != nil {
+		t.Fatal(err)
+	}
+	if snapshotID == "" || hasItems {
+		t.Fatalf("session was not split from its snapshot: snapshot=%q items=%v", snapshotID, hasItems)
+	}
 	session := base + "/play/" + view.ID
+	// A page response no longer repeats the manifest; resuming asks for it once.
+	status, pageData, _ := request("GET", session+"?index=0", "Bearer owner", "")
+	if status != 200 || strings.Contains(string(pageData), `"manifest"`) || !strings.Contains(string(pageData), `"total":2`) {
+		t.Fatalf("page response is not compact: %d %s", status, pageData)
+	}
+	status, resumeData, _ := request("GET", session+"?index=0&manifest=1", "Bearer owner", "")
+	if status != 200 || !strings.Contains(string(resumeData), `"manifest"`) {
+		t.Fatalf("resume did not include the manifest: %d %s", status, resumeData)
+	}
+	var resumed model.QuizSessionView
+	if err = json.Unmarshal(resumeData, &resumed); err != nil || len(resumed.Manifest) != 2 {
+		t.Fatalf("resume manifest: %v %s", err, resumeData)
+	}
 	if status, _, _ := request("GET", session, "Bearer other", ""); status != 404 {
 		t.Fatalf("cross-user session access %d", status)
 	}
@@ -132,6 +199,9 @@ func TestProtectedQuizPostgresHTTP(t *testing.T) {
 	status, data, headers = request("GET", session+"/audio?index=0", "Bearer owner", "")
 	if status != 200 || !bytes.Equal(data, audioData) || headers.Get("Content-Type") != "audio/mpeg" {
 		t.Fatalf("audio failed %d %s", status, data)
+	}
+	if headers.Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("audio is not seekable: %q", headers.Get("Accept-Ranges"))
 	}
 	status, data, _ = request("GET", session+"/audio-ticket?index=0", "Bearer owner", "")
 	var media struct {
@@ -145,7 +215,7 @@ func TestProtectedQuizPostgresHTTP(t *testing.T) {
 		status int
 		body   []byte
 	}{
-		{"bytes=0-3", 206, audioData[:4]}, {"bytes=4-7", 206, audioData[4:8]}, {"bytes=99999-", 416, nil},
+		{"bytes=0-0", 206, audioData[:1]}, {"bytes=0-3", 206, audioData[:4]}, {"bytes=4-7", 206, audioData[4:8]}, {"bytes=99999-", 416, nil},
 	} {
 		req, _ := http.NewRequest("GET", server.URL+media.Path, nil)
 		req.Header.Set("Range", span.value)
@@ -161,6 +231,61 @@ func TestProtectedQuizPostgresHTTP(t *testing.T) {
 		if span.status == 206 && resp.Header.Get("Content-Range") == "" {
 			t.Fatal("missing Content-Range")
 		}
+	}
+	// The stream path no longer selects `body`: blank the column and play the
+	// same audio again. It must come from the local copy made on the first read.
+	var audioID string
+	if err = db.QueryRow(`SELECT id FROM protected_quiz_audio WHERE study_set_id=$1`, setID).Scan(&audioID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`UPDATE protected_quiz_audio SET body='' WHERE id=$1`, audioID); err != nil {
+		t.Fatal(err)
+	}
+	status, data, _ = request("GET", session+"/audio?index=0", "Bearer owner", "")
+	if status != 200 || !bytes.Equal(data, audioData) {
+		t.Fatalf("audio needed the BYTEA column: %d %d bytes", status, len(data))
+	}
+	// With the local copy evicted, the same audio is streamed by byte range
+	// from the object store while Postgres still holds only metadata.
+	object := &fakeObjectStore{data: audioData}
+	objectServer := httptest.NewServer(object)
+	defer objectServer.Close()
+	objects, err := storage.NewMinIOImportStorage(storage.MinIOConfig{Endpoint: objectServer.URL, AccessKeyID: "minioadmin", SecretAccessKey: "minioadmin", Bucket: "hquizlet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audio.WithObjectStore(objects.(storage.ObjectRangeStore))
+	if err = os.Remove(filepath.Join(cacheDir, audioID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`UPDATE protected_quiz_audio SET object_key=$2 WHERE id=$1`, audioID, "quiz-audio/"+audioID); err != nil {
+		t.Fatal(err)
+	}
+	status, data, _ = request("GET", session+"/audio?index=0", "Bearer owner", "")
+	if status != 200 || !bytes.Equal(data, audioData) {
+		t.Fatalf("object store audio failed %d %d bytes", status, len(data))
+	}
+	object.mu.Lock()
+	ranges := append([]string(nil), object.ranges...)
+	object.mu.Unlock()
+	if len(ranges) == 0 || !strings.HasPrefix(ranges[0], "bytes=0-") {
+		t.Fatalf("audio was not fetched by range: %v", ranges)
+	}
+	// Prefetch a page that was never opened: the content arrives, the rights do not.
+	status, data, headers = request("GET", session+"/peek?index=1", "Bearer owner", "")
+	if status != 200 || !strings.Contains(string(data), "Second") {
+		t.Fatalf("peek failed %d %s", status, data)
+	}
+	for _, secret := range []string{"correctAnswer", "answerExplanation", "private explanation", "audioUrl"} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("peek leaked %s: %s", secret, data)
+		}
+	}
+	if headers.Get("Server-Timing") == "" {
+		t.Fatal("peek is missing Server-Timing")
+	}
+	if status, data, _ = request("POST", session+"/answer", "Bearer owner", `{"index":1,"answer":"B"}`); status != 422 {
+		t.Fatalf("peek granted answer rights: %d %s", status, data)
 	}
 	status, data, _ = request("POST", session+"/answer", "Bearer owner", `{"index":0,"answer":"Right"}`)
 	if status != 200 || strings.Contains(string(data), "correctAnswer") {
