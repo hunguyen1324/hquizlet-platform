@@ -1,200 +1,106 @@
 import React from "react";
-import { useAuth } from "../auth/AuthContext";
-import { protectedQuizApi, type ProtectedQuizView, type QuizStart } from "../../lib/api/protectedQuiz";
-import { ApiError } from "../../lib/api/client";
+import "./quiz/quiz-player.css";
 import { contentProtection } from "./exam/contentProtection";
 import { ExamTopBar } from "./exam/ExamTopBar";
 import { ExamBottomBar } from "./exam/ExamBottomBar";
-import { ExamTimer } from "./exam/ExamTimer";
-import { ExamQuestionLayout, CustomAudioPlayer } from "./exam/ExamQuestionLayout";
+import { ExamQuestionLayout } from "./exam/ExamQuestionLayout";
 import { QuestionNavigatorPanel } from "./exam/QuestionNavigatorPanel";
-import { RichTextContent } from "./exam/RichTextContent";
-import { PART_LABELS } from "./exam/toeic";
-import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import type { ExamItem } from "./exam/types";
-import type { QuizQuestion } from "../../types";
-
-function AnswerInput({ question, selected, disabled, onAnswer }: {
- question: QuizQuestion; selected?: string; disabled: boolean; onAnswer: (answer: string) => void;
-}) {
- const [draft, setDraft] = React.useState(selected ?? "");
- const [order, setOrder] = React.useState(() => (question.options ?? []).map((o) => o.text));
- if (question.questionType === "sorting") return <fieldset disabled={disabled} className="quiz-player-sorting">
-   {order.map((text, i) => <div key={i} className="quiz-player-sort-row"><strong>{text}</strong><button disabled={disabled || i === 0} onClick={() => setOrder((old) => { const next = [...old]; [next[i - 1], next[i]] = [next[i]!, next[i - 1]!]; return next; })}>↑</button><button disabled={disabled || i === order.length - 1} onClick={() => setOrder((old) => { const next = [...old]; [next[i + 1], next[i]] = [next[i]!, next[i + 1]!]; return next; })}>↓</button></div>)}
-   <button className="primary-button" onClick={() => onAnswer(order.join(" → "))}>Lưu thứ tự</button>
- </fieldset>;
- const options = question.questionType === "true_false" ? [{ text: "true", label: "Đúng" }, { text: "false", label: "Sai" }] : (question.options ?? []).map((o) => ({ text: o.text, label: o.text }));
- if (question.questionType !== "written" && options.length) return <fieldset disabled={disabled} className="quiz-player-options">{options.map((o, i) => <button key={i} className={`quiz-player-option${selected === o.text ? " selected" : ""}`} onClick={() => onAnswer(o.text)}><span>{String.fromCharCode(65 + i)}</span>{o.label}</button>)}</fieldset>;
- return <form className="quiz-player-written" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) onAnswer(draft); }}><input aria-label="Câu trả lời" disabled={disabled} value={draft} onChange={(e) => setDraft(e.target.value)} /><button disabled={disabled || !draft.trim()} className="primary-button">Lưu đáp án</button></form>;
-}
+import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
+import { useProtectedQuiz, nextPageIndex, prevPageIndex } from "./quiz/useProtectedQuiz";
+import { useQuizAudioUrl } from "./quiz/QuizAudio";
+import { QuizStartScreen } from "./quiz/QuizStartScreen";
+import { QuizSessionDefault } from "./quiz/QuizSessionDefault";
+import { QuizNavigator } from "./quiz/QuizNavigator";
+import { QuizResult } from "./quiz/QuizResult";
 
 export function ProtectedQuizPlayer({ studySetId, onManageSessions, resumeSessionId }: { studySetId: number; resumeSessionId?: string; onManageSessions?: (studySetId: number) => void }) {
- const { token, user } = useAuth();
- const storageKey = `hquizlet:protected-quiz:${user?.id}:${studySetId}`;
- const [summary, setSummary] = React.useState<{ total: number; parts: Record<number, number>; sessions: string[]; activeCount: number; limit: number; studySetId: number } | null>(null);
- const [sessionLimitError, setSessionLimitError] = React.useState(false);
- const [view, setView] = React.useState<ProtectedQuizView | null>(null);
- const [savedId, setSavedId] = React.useState<string | null>(() => localStorage.getItem(storageKey));
- const [layout, setLayout] = React.useState<QuizStart["layout"]>("default");
- const [part, setPart] = React.useState(0);
- const [instant, setInstant] = React.useState(true);
- const [minutes, setMinutes] = React.useState(120);
- const [timedPractice, setTimedPractice] = React.useState(false);
- const [busy, setBusy] = React.useState(false);
- const busyRef = React.useRef(false);
- const [error, setError] = React.useState("");
- const [timeLeft, setTimeLeft] = React.useState(0);
- const [navigator, setNavigator] = React.useState(false);
- const [flags, setFlags] = React.useState<boolean[]>([]);
- const [confirmSubmit, setConfirmSubmit] = React.useState(false);
- const [audio, setAudio] = React.useState<{ key: string; url: string } | null>(null);
- const mediaCache = React.useRef(new Map<string, { url: string; bytes: number }>());
- React.useEffect(() => () => { for (const entry of mediaCache.current.values()) URL.revokeObjectURL(entry.url); mediaCache.current.clear(); }, [token, studySetId]);
- const [audioError, setAudioError] = React.useState("");
- const [audioRetry, setAudioRetry] = React.useState(0);
- const [muted, setMuted] = React.useState(false);
- const expirySubmitted = React.useRef<string | null>(null);
- const [clockOffset, setClockOffset] = React.useState(0);
+  const quiz = useProtectedQuiz(studySetId, resumeSessionId);
+  const { view, pending, flags, setFlags } = quiz;
+  const audio = useQuizAudioUrl(view, quiz.getAudioUrl, quiz.forgetAudio);
+  const [reviewing, setReviewing] = React.useState(false);
+  const [navigatorOpen, setNavigatorOpen] = React.useState(false);
+  const [confirmSubmit, setConfirmSubmit] = React.useState(false);
+  const [muted, setMuted] = React.useState(false);
 
- React.useEffect(() => {
-   let active = true;
-   // Legacy sessions could contain answers; they are no longer usable.
-   localStorage.removeItem(`hquizlet:quiz-session:${studySetId}`);
-   protectedQuizApi.summary(token, studySetId).then((data) => { if (active) setSummary(data); }).catch((e: Error) => { if (active) setError(e.message); });
-   return () => { active = false; };
- }, [token, studySetId]);
+  // A finished session opens on its result; reviewing is chosen from there.
+  React.useEffect(() => { setReviewing(false); setNavigatorOpen(false); setConfirmSubmit(false); }, [view?.id, view?.submitted]);
 
- async function run(request: () => Promise<ProtectedQuizView>) {
-   if (busyRef.current) return;
-   busyRef.current = true; setBusy(true); setError(""); setSessionLimitError(false);
-   try {
-     const next = await request();
-     setClockOffset(Date.parse(next.serverTime) - Date.now());
-     setView(next); setLayout(next.layout); setInstant(next.instant);
-     localStorage.setItem(storageKey, next.id); setSavedId(next.id);
-   } catch (e) {
-     if (e instanceof ApiError && e.status === 409) { setSessionLimitError(true); return; }
-      setError(e instanceof Error ? e.message : "Không thực hiện được yêu cầu.");
-     if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
-       setView(null); setAudio(null);
-       localStorage.removeItem(storageKey); setSavedId(null);
-     }
-   } finally { busyRef.current = false; setBusy(false); }
- }
- React.useEffect(() => {
-   if (resumeSessionId) void run(() => protectedQuizApi.page(token, studySetId, resumeSessionId));
- }, [token, studySetId, resumeSessionId]);
+  if (!view) {
+    return <div className="qz"><QuizStartScreen summary={quiz.summary} recent={quiz.recent} savedId={quiz.savedId} settings={quiz.settings} setSettings={quiz.setSettings}
+      busy={quiz.busy} error={quiz.error} sessionLimitError={quiz.sessionLimitError} onStart={quiz.start} onOpen={(id) => quiz.open(id)}
+      onManageSessions={onManageSessions} studySetId={studySetId} /></div>;
+  }
 
- function start(mode: QuizStart["mode"]) {
-   setFlags([]); expirySubmitted.current = null;
-   void run(() => protectedQuizApi.start(token, studySetId, { mode, layout, part: layout === "toeic" ? part : 0, instant, durationSeconds: mode === "exam" || timedPractice ? minutes * 60 : 0 }));
- }
- function navigate(index: number) {
-   if (!view) return;
-   setNavigator(false);
-   void run(() => protectedQuizApi.page(token, studySetId, view.id, index));
- }
- function submit() { if (view) { setConfirmSubmit(false); void run(() => protectedQuizApi.submit(token, studySetId, view.id)); } }
- function answer(index: number, value: string) { if (view && !view.submitted) void run(() => protectedQuizApi.answer(token, studySetId, view.id, index, value)); }
+  // While answers are being saved, show them straight away. Instant mode waits for the server's verdict instead.
+  const shownAnswers: Record<number, string> = view.instant ? view.answers : { ...pending, ...view.answers };
+  const answeredCount = Object.keys(shownAnswers).length;
+  const total = view.manifest.length;
+  const toggleFlag = () => setFlags((old) => { const next = [...old]; next[view.currentIndex] = !next[view.currentIndex]; return next; });
+  const requestSubmit = () => setConfirmSubmit(true);
 
- React.useEffect(() => {
-   if (!view?.deadline || view.submitted) return;
-   const tick = () => {
-     const left = Math.max(0, Math.ceil((Date.parse(view.deadline!) - Date.now() - clockOffset) / 1000));
-     setTimeLeft(left);
-     if (left === 0 && !busyRef.current && expirySubmitted.current !== view.id) {
-       expirySubmitted.current = view.id;
-       void run(() => protectedQuizApi.submit(token, studySetId, view.id));
-     }
-   };
-   tick(); const timer = window.setInterval(tick, 500); return () => window.clearInterval(timer);
- }, [view?.id, view?.deadline, view?.submitted, clockOffset, token, studySetId]);
+  if (view.submitted && !reviewing) {
+    return <div className="qz" {...contentProtection}>
+      <QuizResult view={view} onReview={() => setReviewing(true)} onRestart={quiz.exit} /></div>;
+  }
 
- const audioItem = view?.page.find((item) => item.hasAudio);
- const audioKey = view && audioItem ? `${view.id}:${view.manifest[audioItem.index]?.group}:${audioItem.index}` : "";
- React.useEffect(() => {
-   setAudio(null); setAudioError("");
-   if (!view || !audioItem) return;
-   const controller = new AbortController();
-   protectedQuizApi.audio(token, studySetId, view.id, audioItem.index, controller.signal).then(async (url) => {
-     const cached = mediaCache.current.get(audioKey);
-     if (cached) { if (!controller.signal.aborted) setAudio({ key: audioKey, url: cached.url }); return; }
-     // Download once, then reuse the bounded in-memory copy.
-     const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
-     if (!response.ok) throw new Error("Không tải được âm thanh.");
-     const blob = await response.blob();
-     if (controller.signal.aborted) return;
-     if (blob.size > 30 * 1024 * 1024) { setAudio({ key: audioKey, url }); return; }
-     let bytes = [...mediaCache.current.values()].reduce((sum, entry) => sum + entry.bytes, 0);
-     while (mediaCache.current.size && (bytes + blob.size > 40 * 1024 * 1024 || mediaCache.current.size >= 8)) {
-       const key = mediaCache.current.keys().next().value!;
-       const entry = mediaCache.current.get(key)!;
-       bytes -= entry.bytes; URL.revokeObjectURL(entry.url); mediaCache.current.delete(key);
-     }
-     const cachedUrl = URL.createObjectURL(blob);
-     mediaCache.current.set(audioKey, { url: cachedUrl, bytes: blob.size });
-     setAudio({ key: audioKey, url: cachedUrl });
-     return;
-   }).catch((e: Error) => { if (!controller.signal.aborted) setAudioError(e.message); });
-   return () => { controller.abort(); };
- }, [audioKey, audioRetry, token, studySetId]); // Only fetch when the displayed media changes.
- const audioUrl = audio?.key === audioKey ? audio.url : undefined;
+  const unanswered = view.manifest.findIndex((_, i) => shownAnswers[i] === undefined);
+  const dialog = confirmSubmit && <div className="qz-dialog-wrap" onClick={() => setConfirmSubmit(false)}>
+    <div className="qz-dialog" role="dialog" aria-modal="true" aria-label="Nộp bài" onClick={(e) => e.stopPropagation()}>
+      <h3>Nộp bài?</h3>
+      <p>Bạn đã trả lời {answeredCount}/{total} câu{total - answeredCount > 0 ? `, còn ${total - answeredCount} câu chưa làm` : ""}. Sau khi nộp sẽ không sửa được đáp án.</p>
+      <div className="qz-dialog-actions">
+        {unanswered >= 0 && <button className="qz-btn" onClick={() => { setConfirmSubmit(false); quiz.navigate(unanswered); }}>Đến câu chưa làm</button>}
+        <button className="qz-btn" onClick={() => setConfirmSubmit(false)}>Làm tiếp</button>
+        <button className="qz-btn primary" disabled={quiz.busy} onClick={() => { setConfirmSubmit(false); quiz.submit(); }}>Nộp bài</button>
+      </div>
+    </div>
+  </div>;
 
- const manifest: ExamItem[] = view?.manifest.map((item, i) => ({ key: String(i), groupKey: String(item.group), questionNumber: item.number, part: item.part, question: { questionType: "multiple_choice", questionText: "" } })) ?? [];
- const answers = manifest.map((_, i) => view?.answers[i] ?? null);
- const group: ExamItem[] = view?.page.map((item) => ({
-   ...manifest[item.index]!, question: { ...item.question, subQuestions: undefined, audioUrl: item.index === audioItem?.index ? audioUrl : undefined },
-   parent: item.question.paragraphText ? { questionType: "paragraph", questionText: "", paragraphText: item.question.paragraphText, audioUrl } : undefined,
- })) ?? [];
- const answeredCount = view ? Object.keys(view.answers).length : 0;
- const currentPart = view?.manifest[view.currentIndex]?.part ?? 1;
- const results = view?.submitted ? manifest.map((_, i) => ({ isCorrect: view.results[i] ?? false })) : undefined;
- const audioNotice = audioError ? <div role="alert" className="quiz-security-error">{audioError} <button onClick={() => setAudioRetry((n) => n + 1)}>Thử lại</button></div> : audioItem && !audioUrl ? <p role="status">Đang tải âm thanh…</p> : null;
+  if (view.layout !== "toeic") {
+    return <div className="qz" {...contentProtection}>
+      <QuizSessionDefault view={view} answers={shownAnswers} pending={pending} flags={flags} onToggleFlag={toggleFlag} timeLeft={quiz.timeLeft} busy={quiz.busy}
+        audio={audio} onNavigate={quiz.navigate} onAnswer={quiz.answer} onExit={quiz.exit} onRequestSubmit={requestSubmit}
+        onOpenNavigator={() => setNavigatorOpen(true)} onBackToResult={() => setReviewing(false)} />
+      {navigatorOpen && <QuizNavigator view={view} answers={shownAnswers} flags={flags} onNavigate={quiz.navigate} onClose={() => setNavigatorOpen(false)} />}
+      {dialog}
+    </div>;
+  }
 
- if (!view) return <section className="quiz-mode-picker">
-   <div className="quiz-mode-heading"><p className="eyebrow">Quiz</p><h2>Chọn cách học</h2><p>{summary ? `${summary.total} câu hỏi` : "Đang tải thông tin bài…"}</p>
-     {error && <p role="alert" className="quiz-security-error">{error}</p>}
-     <div className="quiz-layout-picker" role="group" aria-label="Giao diện làm bài">{(["default", "toeic"] as const).map((value) => <button key={value} className={`quiz-layout-option${layout === value ? " active" : ""}`} onClick={() => setLayout(value)}>{value === "default" ? "Mặc định" : "TOEIC (IIG)"}</button>)}</div>
-     <div className="quiz-settings">
-       {layout === "toeic" && <label>Chọn Part<select value={part} onChange={(e) => setPart(Number(e.target.value))}><option value={0}>Tất cả các Part</option>{Object.entries(summary?.parts ?? {}).map(([p, count]) => <option key={p} value={p}>{PART_LABELS[Number(p)]} ({count} câu)</option>)}</select></label>}
-       <label>Xem kết quả<select value={instant ? "instant" : "end"} onChange={(e) => setInstant(e.target.value === "instant")}><option value="instant">Ngay sau mỗi câu</option><option value="end">Sau khi nộp bài</option></select></label>
-       <label>Thời gian làm bài (phút)<input type="number" min={1} max={600} value={minutes} onChange={(e) => setMinutes(Math.max(1, Math.min(600, Number(e.target.value) || 1)))} /></label>
-       <label><input type="checkbox" checked={timedPractice} onChange={(e) => setTimedPractice(e.target.checked)} /> Đếm ngược khi luyện tập</label>
-     </div>
-     {(summary?.sessions ?? []).filter((id) => id !== savedId).map((id, i) => <button key={id} disabled={busy} className="secondary-button" onClick={() => void run(() => protectedQuizApi.page(token, studySetId, id))}>Mở phiên trước #{i + 1}</button>)}
-     <small>Tiến độ và kết quả được lưu trong 24 giờ. Tối đa {summary?.limit ?? 5} phiên chưa nộp trên mỗi quiz.</small>
-     {savedId && <button className="secondary-button" disabled={busy} onClick={() => void run(() => protectedQuizApi.page(token, studySetId, savedId))}>Mở phiên gần nhất / kết quả</button>}
-   </div>
-   <button className="quiz-mode-card" disabled={busy || !summary?.total} onClick={() => start("practice")}><strong>Luyện tập</strong><small>Luyện theo Part, chọn thời điểm xem đáp án.</small></button>
-   <button className="quiz-mode-card" disabled={busy || !summary?.total} onClick={() => start("exam")}><strong>Thi thử</strong><small>Đếm ngược và xem kết quả sau khi nộp.</small></button>
- </section>;
+  // TOEIC (IIG) layout: two columns, one passage with its questions per page.
+  const manifest: ExamItem[] = view.manifest.map((item, i) => ({ key: String(i), groupKey: String(item.group), questionNumber: item.number, part: item.part, question: { questionType: "multiple_choice", questionText: "" } }));
+  const answers = manifest.map((_, i) => shownAnswers[i] ?? null);
+  const audioItem = view.page.find((item) => item.hasAudio);
+  const group: ExamItem[] = view.page.map((item) => ({
+    ...manifest[item.index]!, question: { ...item.question, subQuestions: undefined, audioUrl: item.index === audioItem?.index ? audio.url : undefined },
+    parent: item.question.paragraphText ? { questionType: "paragraph", questionText: "", paragraphText: item.question.paragraphText, audioUrl: audio.url } : undefined,
+  }));
+  const currentPart = view.manifest[view.currentIndex]?.part ?? 1;
+  const results = view.submitted ? manifest.map((_, i) => ({ isCorrect: view.results[i] ?? false })) : undefined;
+  const prev = prevPageIndex(view);
+  const next = nextPageIndex(view);
+  const audioNotice = audio.error
+    ? <div role="alert" className="qz-error" style={{ margin: 8 }}>{audio.error} <button onClick={audio.retry}>Thử lại</button></div>
+    : audioItem && !audio.url ? <p role="status" className="qz-hint" style={{ margin: 8 }}>Đang chuẩn bị âm thanh…</p> : null;
 
- const questionContent = <>
-   {audioNotice}
-   {audioUrl && <button className="secondary-button" onClick={() => { const entry = mediaCache.current.get(audioKey); if (entry) URL.revokeObjectURL(entry.url); mediaCache.current.delete(audioKey); setAudioRetry((n) => n + 1); }}>Tải lại âm thanh</button>}
-   {view.layout === "toeic" ? <div className="min-h-0 flex-1 overflow-hidden"><ExamQuestionLayout group={group} groupStart={view.page[0]?.index ?? 0} answers={answers} onAnswer={answer} muted={muted} lockAudio={view.mode === "exam" && !view.submitted} instantFeedback={view.instant || view.submitted} readOnly={busy || view.submitted} resultByIndex={view.results} /></div> : <main className="quiz-player quiz-player--active">
-     {audioUrl && <CustomAudioPlayer key={audioUrl} src={audioUrl} muted={false} />}
-     {view.page.map((item) => <article key={item.index}>
-       <p className="eyebrow">Câu {view.manifest[item.index]?.number} / {view.manifest.length}</p>
-       {item.question.paragraphText && <RichTextContent value={item.question.paragraphText} className="quiz-player-passage" />}
-       <RichTextContent value={item.question.questionText} className="quiz-player-question" />
-       {item.question.imageUrl && <img src={item.question.imageUrl} alt="Hình minh họa câu hỏi" decoding="async" style={{ maxWidth: "100%", maxHeight: 400, objectFit: "contain" }} draggable={false} />}
-       <AnswerInput key={`${view.id}:${item.index}`} question={item.question} selected={view.answers[item.index]} disabled={busy || view.submitted || (view.instant && view.answers[item.index] !== undefined)} onAnswer={(value) => answer(item.index, value)} />
-       {item.revealed && <div className={`quiz-player-feedback ${view.results[item.index] ? "correct" : "wrong"}`}><strong>{view.results[item.index] ? "Chính xác" : "Chưa đúng"}</strong><p>Đáp án: {item.question.options?.find((o) => o.isCorrect)?.text ?? item.question.correctAnswer}</p><RichTextContent value={item.question.answerExplanation} /></div>}
-       {view.submitted && !item.revealed && <p>Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
-     </article>)}
-   </main>}
- </>;
- return <section {...contentProtection} className={view.layout === "toeic" ? "fixed inset-0 z-[130] flex flex-col bg-white" : "quiz-session"}>
-   <ViewerWatermark />
-   <header className="quiz-session-toolbar"><button disabled={busy} className="quiz-exit" onClick={() => setView(null)}>← Lưu và thoát</button><strong>{view.submitted ? "Kết quả" : "Làm bài"}</strong><span>{answeredCount}/{manifest.length} câu</span>{view.deadline && !view.submitted && <ExamTimer secondsLeft={timeLeft} />}<button disabled={busy || view.submitted} className="primary-button" onClick={() => setConfirmSubmit(true)}>Nộp bài</button></header>
-   {error && <p role="alert" className="quiz-security-error">{error}{timeLeft === 0 && view.deadline && !view.submitted && <button onClick={submit}>Thử nộp lại</button>}</p>}
-   {busy && <p role="status" className="text-center text-sm">Đang lưu / tải câu hỏi…</p>}
-   {view.submitted && <div className="quiz-protected-results"><strong>Đúng {view.score}/{manifest.length} · {Math.round((view.score ?? 0) / manifest.length * 100)}%</strong><span>Thời gian: {Math.floor(view.timeUsed / 60)} phút {view.timeUsed % 60} giây</span><div>{Object.keys(summary?.parts ?? {}).map(Number).map((p) => { const indices = manifest.flatMap((item, i) => item.part === p ? [i] : []); return indices.length ? <span key={p}>Part {p}: {indices.filter((i) => view.results[i]).length}/{indices.length} · </span> : null; })}</div><button disabled={busy} className="secondary-button" onClick={() => setView(null)}>Chọn Part / làm lại</button></div>}
-   {view.layout === "toeic" && !view.submitted && <ExamTopBar currentPart={currentPart <= 4 ? "Listening" : "Reading"} questionRange={String(view.manifest[view.currentIndex]?.number ?? 1)} totalQuestions={manifest.length} answeredCount={answeredCount} timeLeft={timeLeft} showTimer={false} muted={muted} onVolumeChange={() => setMuted((v) => !v)} onSubmit={() => setConfirmSubmit(true)} />}
-   {questionContent}
-   <ExamBottomBar isMarked={flags[view.currentIndex] ?? false} onToggleMark={() => setFlags((old) => { const next = [...old]; next[view.currentIndex] = !next[view.currentIndex]; return next; })} onOpenNavigator={() => setNavigator(true)} onPrev={() => navigate(view.currentIndex - 1)} onNext={() => navigate(view.currentIndex + 1)} canPrev={!busy && view.currentIndex > 0} canNext={!busy && view.currentIndex < manifest.length - 1} />
-   <QuestionNavigatorPanel items={manifest} currentIndex={view.currentIndex} answers={answers} flagged={flags} results={results} onNavigate={navigate} isOpen={navigator} onClose={() => setNavigator(false)} />
-   {confirmSubmit && <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/50 p-4"><div role="dialog" aria-modal="true" aria-label="Nộp bài" className="rounded-xl bg-white p-6 text-zinc-900"><h3>Nộp bài?</h3><p>Còn {manifest.length - answeredCount} câu chưa trả lời.</p><button className="secondary-button" onClick={() => setConfirmSubmit(false)}>Tiếp tục</button> <button className="primary-button" disabled={busy} onClick={submit}>Xác nhận nộp bài</button></div></div>}
- </section>;
+  return <div className="qz fixed inset-0 z-[130] flex flex-col bg-white" {...contentProtection}>
+    <ViewerWatermark />
+    {quiz.busy && <div className="qz-loadbar" role="progressbar" aria-label="Đang lưu" />}
+    <button type="button" className="bg-[#1a2744] px-4 py-1 text-left text-sm text-white" onClick={view.submitted ? () => setReviewing(false) : quiz.exit}>
+      {view.submitted ? "← Về kết quả" : "← Lưu và thoát"}
+    </button>
+    {quiz.error && <p role="alert" className="qz-error" style={{ margin: 8 }}>{quiz.error}</p>}
+    <ExamTopBar currentPart={currentPart <= 4 ? "Listening" : "Reading"} questionRange={String(view.manifest[view.currentIndex]?.number ?? 1)} totalQuestions={total}
+      answeredCount={answeredCount} timeLeft={quiz.timeLeft} showTimer={!!view.deadline && !view.submitted} muted={muted} onVolumeChange={() => setMuted((v) => !v)} onSubmit={requestSubmit} />
+    {audioNotice}
+    <div className="min-h-0 flex-1 overflow-hidden">
+      <ExamQuestionLayout group={group} groupStart={view.page[0]?.index ?? 0} answers={answers} onAnswer={quiz.answer} muted={muted}
+        lockAudio={view.mode === "exam" && !view.submitted} instantFeedback={view.instant || view.submitted} readOnly={view.submitted} resultByIndex={view.results} />
+    </div>
+    <ExamBottomBar isMarked={flags[view.currentIndex] ?? false} onToggleMark={toggleFlag} onOpenNavigator={() => setNavigatorOpen(true)}
+      onPrev={() => prev !== null && quiz.navigate(prev)} onNext={() => next !== null && quiz.navigate(next)} canPrev={prev !== null} canNext={next !== null} />
+    <QuestionNavigatorPanel items={manifest} currentIndex={view.currentIndex} answers={answers} flagged={flags} results={results} onNavigate={quiz.navigate}
+      isOpen={navigatorOpen} onClose={() => setNavigatorOpen(false)} />
+    {dialog}
+  </div>;
 }

@@ -77,7 +77,7 @@ func main() {
 	importJobSvc := service.NewImportJobService(importJobRepo, cardRepo, quizRepo, setRepo, importBlob)
 
 	// HTTP
-	quizAudio := storage.NewQuizAudio(db, cfg.AudioAllowedHosts)
+	quizAudio := storage.NewQuizAudio(db, cfg.AudioAllowedHosts).WithCache(storage.DefaultAudioCacheBytes)
 	if backup, ok := importBlob.(storage.AudioBackup); ok {
 		quizAudio.WithBackup(backup)
 	}
@@ -89,7 +89,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithCache(redisCache).WithStats(statsSvc).WithAdmin(service.NewAdminService(repository.NewAdminRepository(db))).WithProtectedQuiz(
-		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL),
+		service.NewProtectedQuizService(setRepo, quizRepo, repository.NewQuizSessionRepository(db), cfg.PaymentServiceURL).WithAccessCache(20*time.Second),
 		quizAudio,
 	).WithViewerMarkSecret(os.Getenv("WATERMARK_SECRET")).Register(mux)
 

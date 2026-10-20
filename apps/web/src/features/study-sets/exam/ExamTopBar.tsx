@@ -53,7 +53,7 @@ export function ExamTopBar({
           onClick={onSubmit}
           className="rounded bg-[#ff8c00] px-5 py-1.5 text-sm font-bold text-white transition-colors hover:bg-[#e67e00]"
         >
-          Submit
+          Nộp bài
         </button>
       </div>
     </div>

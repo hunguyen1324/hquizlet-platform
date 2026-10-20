@@ -41,3 +41,28 @@ func TestMP3WithoutID3(t *testing.T) {
 		}
 	}
 }
+
+func TestAudioCacheEvictsLeastRecentlyUsedAndSkipsHugeFiles(t *testing.T) {
+	c := newAudioCache(100)
+	c.put("a", make([]byte, 40), "audio/mpeg")
+	c.put("b", make([]byte, 40), "audio/mpeg")
+	if _, _, ok := c.get("a"); !ok { // touch a so b becomes the oldest
+		t.Fatal("a missing")
+	}
+	c.put("c", make([]byte, 40), "audio/mpeg")
+	if _, _, ok := c.get("b"); ok {
+		t.Fatal("least recently used entry was not evicted")
+	}
+	if _, _, ok := c.get("a"); !ok {
+		t.Fatal("recently used entry was evicted")
+	}
+	c.put("huge", make([]byte, 80), "audio/mpeg") // more than half the budget
+	if _, _, ok := c.get("huge"); ok {
+		t.Fatal("oversized file must not be cached")
+	}
+	var nilCache *audioCache
+	nilCache.put("x", []byte{1}, "audio/mpeg") // a disabled cache must be a no-op
+	if _, _, ok := nilCache.get("x"); ok {
+		t.Fatal("nil cache returned data")
+	}
+}

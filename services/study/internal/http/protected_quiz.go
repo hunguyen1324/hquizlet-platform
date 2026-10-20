@@ -122,14 +122,19 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 			WriteError(w, 503, "audio storage unavailable")
 			return
 		}
+		if action == "audio-ticket" {
+			// The ticket only needs proof that the audio exists: do not read the whole file.
+			if err := h.quizAudio.Ready(r.Context(), setID, source); err != nil {
+				WriteError(w, 422, "Không tải được file nghe. Chủ bài cần tải file lên kho riêng hoặc cấu hình nguồn audio được phép.")
+				return
+			}
+			ticket := signAudioTicket(audioTicket{SetID: setID, UserID: uid, Session: id, Index: index, Expires: time.Now().Add(2 * time.Hour).Unix()})
+			WriteJSON(w, 200, map[string]string{"path": "/v1/quiz-audio?ticket=" + ticket})
+			return
+		}
 		reader, mime, err := h.quizAudio.Open(r.Context(), setID, source)
 		if err != nil {
 			WriteError(w, 422, "Không tải được file nghe. Chủ bài cần tải file lên kho riêng hoặc cấu hình nguồn audio được phép.")
-			return
-		}
-		if action == "audio-ticket" {
-			ticket := signAudioTicket(audioTicket{SetID: setID, UserID: uid, Session: id, Index: index, Expires: time.Now().Add(2 * time.Hour).Unix()})
-			WriteJSON(w, 200, map[string]string{"path": "/v1/quiz-audio?ticket=" + ticket})
 			return
 		}
 		w.Header().Set("Content-Type", mime)
@@ -137,7 +142,8 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 		http.ServeContent(w, r, "audio", time.Time{}, reader)
 		return
 	}
-	if (action == "page" && r.Method != "GET") || (action != "page" && r.Method != "POST") {
+	readOnlyPage := action == "page" || action == "peek"
+	if (readOnlyPage && r.Method != "GET") || (!readOnlyPage && r.Method != "POST") {
 		WriteError(w, 405, "method not allowed")
 		return
 	}

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
@@ -23,6 +24,39 @@ type ProtectedQuizService struct {
 	sessions   repository.QuizSessions
 	paymentURL string
 	now        func() time.Time
+
+	// Optional short-lived memo of successful checks (see WithAccessCache).
+	// Keys always include the user id; only successes are stored.
+	cacheTTL time.Duration
+	cacheMu  sync.Mutex
+	okAccess map[[2]int64]time.Time
+	okAudio  map[audioGrantKey]audioGrant
+}
+
+type audioGrantKey struct {
+	set, user int64
+	session   string
+	index     int
+}
+type audioGrant struct {
+	source  string
+	expires time.Time
+}
+
+// sessionViewer is implemented by repositories that can read a session without
+// locking or rewriting it. The in-memory test fake does not, so we fall back to Update.
+type sessionViewer interface {
+	View(ctx context.Context, id string, uid, setID int64, fn func(*model.QuizSession) error) error
+}
+
+// WithAccessCache memoizes successful entitlement and audio checks for ttl, so a
+// burst of requests (page turns, audio Range requests) does not hit the database
+// and the payment service every time. Revoked access takes effect within ttl.
+func (s *ProtectedQuizService) WithAccessCache(ttl time.Duration) *ProtectedQuizService {
+	s.cacheTTL = ttl
+	s.okAccess = map[[2]int64]time.Time{}
+	s.okAudio = map[audioGrantKey]audioGrant{}
+	return s
 }
 
 func NewProtectedQuizService(sets repository.StudySets, questions repository.QuizQuestions, sessions repository.QuizSessions, paymentURL string) *ProtectedQuizService {
@@ -32,6 +66,33 @@ func (s *ProtectedQuizService) access(ctx context.Context, setID, uid int64) err
 	if err := requireUserID(uid); err != nil {
 		return err
 	}
+	if s.cacheTTL <= 0 {
+		return s.checkAccess(ctx, setID, uid)
+	}
+	key := [2]int64{setID, uid}
+	now := time.Now()
+	s.cacheMu.Lock()
+	until, hit := s.okAccess[key]
+	s.cacheMu.Unlock()
+	if hit && now.Before(until) {
+		return nil
+	}
+	if err := s.checkAccess(ctx, setID, uid); err != nil {
+		return err
+	}
+	s.cacheMu.Lock()
+	if len(s.okAccess) > 10000 {
+		for k, t := range s.okAccess {
+			if !now.Before(t) {
+				delete(s.okAccess, k)
+			}
+		}
+	}
+	s.okAccess[key] = now.Add(s.cacheTTL)
+	s.cacheMu.Unlock()
+	return nil
+}
+func (s *ProtectedQuizService) checkAccess(ctx context.Context, setID, uid int64) error {
 	set, err := s.sets.Get(ctx, setID)
 	if err != nil {
 		return err
@@ -194,11 +255,16 @@ func (s *ProtectedQuizService) Act(ctx context.Context, setID, uid int64, id, ac
 	if err := s.access(ctx, setID, uid); err != nil {
 		return view, err
 	}
-	if err := s.Allow(ctx, uid, "play", 120, time.Minute); err != nil {
+	bucket := "play"
+	if action == "peek" {
+		bucket = "peek"
+	}
+	if err := s.Allow(ctx, uid, bucket, 120, time.Minute); err != nil {
 		return view, err
 	}
 	err := s.sessions.Update(ctx, id, uid, setID, func(session *model.QuizSession) error {
 		now := s.now().UTC()
+		savedIndex := session.CurrentIndex
 		if index == -1 {
 			index = session.CurrentIndex
 		}
@@ -210,7 +276,7 @@ func (s *ProtectedQuizService) Act(ctx context.Context, setID, uid int64, id, ac
 			session.SubmittedAt = &t
 		}
 		switch action {
-		case "page":
+		case "page", "peek":
 		case "answer":
 			if session.SubmittedAt == nil {
 				if !session.Seen[index] || len(answer) > 8000 {
@@ -233,21 +299,35 @@ func (s *ProtectedQuizService) Act(ctx context.Context, setID, uid int64, id, ac
 			return ErrValidation
 		}
 		view = sessionView(session, index, now)
+		if action == "peek" {
+			// Prefetching the next page must not move the learner's saved position.
+			session.CurrentIndex = savedIndex
+		}
 		return nil
 	})
 	return view, err
 }
 
 // Audio must belong to a delivered question in this exact user's unexpired session.
+// It only reads the session, so it never locks or rewrites the (large) session state.
 func (s *ProtectedQuizService) Audio(ctx context.Context, setID, uid int64, id string, index int) (string, error) {
 	if err := s.access(ctx, setID, uid); err != nil {
 		return "", err
+	}
+	key := audioGrantKey{set: setID, user: uid, session: id, index: index}
+	if s.cacheTTL > 0 {
+		s.cacheMu.Lock()
+		g, ok := s.okAudio[key]
+		s.cacheMu.Unlock()
+		if ok && time.Now().Before(g.expires) {
+			return g.source, nil
+		}
 	}
 	if err := s.Allow(ctx, uid, "audio", 300, time.Minute); err != nil {
 		return "", err
 	}
 	var source string
-	err := s.sessions.Update(ctx, id, uid, setID, func(session *model.QuizSession) error {
+	check := func(session *model.QuizSession) error {
 		if index < 0 || index >= len(session.Items) || !session.Seen[index] {
 			return ErrForbidden
 		}
@@ -258,7 +338,21 @@ func (s *ProtectedQuizService) Audio(ctx context.Context, setID, uid int64, id s
 			return repository.ErrNotFound
 		}
 		return nil
-	})
+	}
+	var err error
+	if v, ok := s.sessions.(sessionViewer); ok {
+		err = v.View(ctx, id, uid, setID, check)
+	} else {
+		err = s.sessions.Update(ctx, id, uid, setID, check)
+	}
+	if err == nil && s.cacheTTL > 0 {
+		s.cacheMu.Lock()
+		if len(s.okAudio) > 10000 {
+			s.okAudio = map[audioGrantKey]audioGrant{}
+		}
+		s.okAudio[key] = audioGrant{source: source, expires: time.Now().Add(s.cacheTTL)}
+		s.cacheMu.Unlock()
+	}
 	return source, err
 }
 func sessionView(s *model.QuizSession, index int, now time.Time) model.QuizSessionView {

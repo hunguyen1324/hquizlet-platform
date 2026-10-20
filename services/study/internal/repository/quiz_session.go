@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -156,6 +157,11 @@ func (r *QuizSessionRepository) Update(ctx context.Context, id string, uid, setI
 		return err
 	}
 	wasSubmitted := s.SubmittedAt != nil
+	// Snapshot before fn so a pure re-read (same page, nothing answered) can skip the rewrite.
+	before, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
 	if err = fn(&s); err != nil {
 		return err
 	}
@@ -168,6 +174,10 @@ func (r *QuizSessionRepository) Update(ctx context.Context, id string, uid, setI
 	data, err = json.Marshal(s)
 	if err != nil {
 		return err
+	}
+	if bytes.Equal(before, data) {
+		// Nothing changed: skip the UPDATE (the whole state is a large JSONB document).
+		return tx.Commit()
 	}
 	activeUntil := s.ExpiresAt
 	if s.Deadline != nil {
@@ -183,6 +193,28 @@ func (r *QuizSessionRepository) Update(ctx context.Context, id string, uid, setI
 		return err
 	}
 	return tx.Commit()
+}
+
+// View runs fn on a read-only snapshot of the session: no row lock and no write-back.
+// Use it for checks such as audio authorization that never change the session.
+func (r *QuizSessionRepository) View(ctx context.Context, id string, uid, setID int64, fn func(*model.QuizSession) error) error {
+	var data []byte
+	err := r.db.QueryRowContext(ctx,
+		`SELECT state FROM protected_quiz_sessions
+         WHERE id=$1 AND user_id=$2 AND study_set_id=$3
+           AND expires_at>now() AND deleted_at IS NULL`,
+		id, uid, setID).Scan(&data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	var s model.QuizSession
+	if err = json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	return fn(&s)
 }
 
 // Recent returns session IDs for an unexpired, non-deleted quiz, most-recent first.

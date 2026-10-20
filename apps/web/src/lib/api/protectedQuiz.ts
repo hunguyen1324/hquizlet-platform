@@ -43,6 +43,9 @@ export const protectedQuizApi = {
     apiFetch<ProtectedQuizView>(path(setId), token, { method: "POST", body: JSON.stringify(input) }),
   page: (token: string, setId: number, id: string, index = -1) =>
     apiFetch<ProtectedQuizView>(`${path(setId)}/${id}`, token, {}, index < 0 ? undefined : { index }),
+  /** Fetch a page without moving the saved position, so the next page can be ready before it is needed. */
+  peek: (token: string, setId: number, id: string, index: number) =>
+    apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/peek`, token, {}, { index }),
   answer: (token: string, setId: number, id: string, index: number, answer: string) =>
     apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/answer`, token, { method: "POST", body: JSON.stringify({ index, answer }) }),
   submit: (token: string, setId: number, id: string) =>

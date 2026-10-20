@@ -286,3 +286,44 @@ func TestSessionItemsInheritParagraphImage(t *testing.T) {
 		t.Fatal("parent image was lost")
 	}
 }
+
+func TestQuizPeekDoesNotMoveSavedPositionButUnlocksThatPage(t *testing.T) {
+	svc, _, _ := securityFixture(t)
+	ctx := context.Background()
+	view := startSecurityQuiz(t, svc, false)
+	peeked, err := svc.Act(ctx, 1, 10, view.ID, "peek", 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peeked.Page) != 1 || peeked.Page[0].Index != 1 {
+		t.Fatalf("peek did not return the requested page: %+v", peeked.Page)
+	}
+	current, err := svc.Act(ctx, 1, 10, view.ID, "page", -1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.CurrentIndex != 0 {
+		t.Fatalf("peek moved the saved position to %d", current.CurrentIndex)
+	}
+	// A peeked page counts as delivered, so its audio can be played.
+	if _, err := svc.Audio(ctx, 1, 10, view.ID, 1); err != nil {
+		t.Fatalf("audio for a prefetched page: %v", err)
+	}
+}
+
+func TestQuizAccessCacheKeepsSuccessesPerUserOnly(t *testing.T) {
+	svc, sets, _ := securityFixture(t)
+	ctx := context.Background()
+	svc.WithAccessCache(time.Minute)
+	if _, err := svc.Summary(ctx, 1, 10); err != nil {
+		t.Fatal(err)
+	}
+	sets.set.Visibility = "private"
+	// The owner (user 10) stays allowed; another user must never inherit that grant.
+	if _, err := svc.Summary(ctx, 1, 10); err != nil {
+		t.Fatalf("owner lost access: %v", err)
+	}
+	if _, err := svc.Summary(ctx, 1, 20); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("access leaked to another user: %v", err)
+	}
+}

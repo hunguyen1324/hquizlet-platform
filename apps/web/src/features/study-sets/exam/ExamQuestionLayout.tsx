@@ -282,7 +282,7 @@ function renderOptions(
       <textarea
         value={selected ?? ""}
         onChange={(e) => onAnswer(flatIdx, e.target.value)}
-        placeholder="Type your answer here..."
+        placeholder="Nhập câu trả lời..."
         className="min-h-28 w-full resize-none rounded-md border border-zinc-300 p-3 text-sm focus:border-[#4a90d9] focus:outline-none focus:ring-1 focus:ring-[#4a90d9]"
       />
     );
@@ -339,8 +339,8 @@ export function ExamQuestionLayout({
   }, [lockAudio, audioUrl, groupKey]);
 
   return (
-    <div className="flex h-full w-full">
-      <div className="w-1/2 shrink-0 space-y-4 overflow-y-auto border-r border-zinc-200 bg-[#fafbfc] p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300">
+    <div className="flex h-full w-full flex-col md:flex-row">
+      <div className="max-h-[42%] w-full shrink-0 space-y-4 overflow-y-auto border-b border-zinc-200 bg-[#fafbfc] p-4 md:max-h-none md:w-1/2 md:border-b-0 md:border-r md:p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300">
         <p className="text-[13px] font-bold leading-relaxed text-[#1a56a0]">
           {PART_DIRECTIONS[part]}
         </p>
@@ -378,9 +378,9 @@ export function ExamQuestionLayout({
             <CustomAudioPlayer src={audioUrl} srtUrl={srtUrl} muted={muted} />
           ))}
       </div>
-      <div className="w-1/2 min-w-0 overflow-y-auto p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300">
+      <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto p-4 md:w-1/2 md:flex-none md:p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300">
         <h2 className="mb-5 border-b border-zinc-200 pb-2 text-lg font-bold text-zinc-900">
-          Question
+          Câu hỏi
         </h2>
         {group.map((item, gi) => {
           const flatIdx = groupStart + gi;

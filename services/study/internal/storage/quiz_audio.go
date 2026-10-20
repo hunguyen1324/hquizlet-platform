@@ -28,13 +28,62 @@ type QuizAudio struct {
 	hosts  map[string]bool
 	client *http.Client
 	backup AudioBackup
+	cache  *audioCache
 }
+
+// DefaultAudioCacheBytes bounds the in-process audio cache (per replica).
+const DefaultAudioCacheBytes = 64 << 20
 
 type AudioBackup interface {
 	PutAudio(context.Context, string, []byte, string) error
 }
 
 func (a *QuizAudio) WithBackup(backup AudioBackup) *QuizAudio { a.backup = backup; return a }
+
+// WithCache keeps up to maxBytes of recently played audio in memory (0 disables it).
+func (a *QuizAudio) WithCache(maxBytes int) *QuizAudio {
+	if maxBytes > 0 {
+		a.cache = newAudioCache(maxBytes)
+	} else {
+		a.cache = nil
+	}
+	return a
+}
+
+// audioID maps a stored reference to its private row id, or reports that the source is not allowed.
+func (a *QuizAudio) audioID(setID int64, source string) (string, error) {
+	if strings.HasPrefix(source, "private-audio:") {
+		return strings.TrimPrefix(source, "private-audio:"), nil
+	}
+	if !a.allowed(source) {
+		return "", ErrAudioSource
+	}
+	sum := sha256.Sum256([]byte(strconv.FormatInt(setID, 10) + ":" + source))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// Ready reports whether the audio can be served without reading its body. It is used to
+// issue playback tickets; the body is only loaded when the browser actually streams it.
+func (a *QuizAudio) Ready(ctx context.Context, setID int64, source string) error {
+	id, err := a.audioID(setID, source)
+	if err != nil {
+		return err
+	}
+	if _, _, ok := a.cache.get(strconv.FormatInt(setID, 10) + ":" + id); ok {
+		return nil
+	}
+	var one int
+	err = a.db.QueryRowContext(ctx, `SELECT 1 FROM protected_quiz_audio WHERE id=$1 AND study_set_id=$2`, id, setID).Scan(&one)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) || strings.HasPrefix(source, "private-audio:") {
+		return err
+	}
+	// Remote import not downloaded yet: fetch it once so the later stream is a local read.
+	_, _, err = a.Open(ctx, setID, source)
+	return err
+}
 
 func (a *QuizAudio) backupAudio(ctx context.Context, id string, data []byte, mime string) error {
 	if a.backup == nil {
@@ -133,25 +182,26 @@ func (a *QuizAudio) Put(ctx context.Context, setID int64, r io.Reader) (string, 
 	return "private-audio:" + id, err
 }
 func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (*bytes.Reader, string, error) {
-	id := strings.TrimPrefix(source, "private-audio:")
-	if !strings.HasPrefix(source, "private-audio:") {
-		if !a.allowed(source) {
-			return nil, "", ErrAudioSource
-		}
-		// Cache remote imports privately by source URL and set. Never redirect the learner to the origin.
-		sum := sha256.Sum256([]byte(strconv.FormatInt(setID, 10) + ":" + source))
-		id = hex.EncodeToString(sum[:])
+	// Remote imports are cached privately by source URL and set. Never redirect the learner to the origin.
+	id, err := a.audioID(setID, source)
+	if err != nil {
+		return nil, "", err
+	}
+	cacheKey := strconv.FormatInt(setID, 10) + ":" + id
+	if data, mime, ok := a.cache.get(cacheKey); ok {
+		return bytes.NewReader(data), mime, nil
 	}
 	var data []byte
 	var mime string
 	var objectKey sql.NullString
-	err := a.db.QueryRowContext(ctx, `SELECT body,content_type,object_key FROM protected_quiz_audio WHERE id=$1 AND study_set_id=$2`, id, setID).Scan(&data, &mime, &objectKey)
+	err = a.db.QueryRowContext(ctx, `SELECT body,content_type,object_key FROM protected_quiz_audio WHERE id=$1 AND study_set_id=$2`, id, setID).Scan(&data, &mime, &objectKey)
 	if err == nil {
 		if !objectKey.Valid {
 			if err := a.backupAudio(ctx, id, data, mime); err != nil {
 				return nil, "", err
 			}
 		}
+		a.cache.put(cacheKey, data, mime)
 		return bytes.NewReader(data), mime, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) || strings.HasPrefix(source, "private-audio:") {
@@ -187,5 +237,6 @@ func (a *QuizAudio) Open(ctx context.Context, setID int64, source string) (*byte
 	if err := a.backupAudio(ctx, id, data, mime); err != nil {
 		return nil, "", err
 	}
+	a.cache.put(cacheKey, data, mime)
 	return bytes.NewReader(data), mime, nil
 }
