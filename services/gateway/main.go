@@ -92,6 +92,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", health("gateway"))
 	mux.HandleFunc("GET /healthz/services", servicesHealth)
+	mux.HandleFunc("GET /metrics", rateLimitStats.writePrometheus)
 
 	authURL := env("AUTH_SERVICE_URL", "http://localhost:8081")
 	studyURL := env("STUDY_SERVICE_URL", "http://localhost:8082")
@@ -189,8 +190,11 @@ func main() {
 	mux.HandleFunc("/v1/admin/classes", adminAuthenticatedProxy(authURL, classURL))
 	mux.HandleFunc("GET /v1/admin/payments/stats", adminAuthenticatedProxy(authURL, paymentURL))
 
-	log.Printf("[gateway] listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, cors(logging(requestID(mux)))); err != nil {
+	log.Printf("[gateway] listening on :%s (trusted proxies: %s)", port, trustedProxySpec)
+	// Public per-IP limits run before routing; per-user and per-participant
+	// budgets run inside the proxy helpers once the identity is verified.
+	handler := cors(logging(requestID(rateLimits.ipRateLimit(mux))))
+	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -269,6 +273,9 @@ func authenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc {
 			writeGatewayError(w, r, status, "AUTH_UNAVAILABLE", "authentication service unavailable")
 			return
 		}
+		if !rateLimits.allowUser(w, r, identity.UserID, ruleAPIUser) {
+			return
+		}
 		// Strip all client-supplied identity headers and inject
 		injectIdentityHeaders(r, identity)
 		reverseProxy(serviceTarget)(w, r)
@@ -305,9 +312,11 @@ func adminAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFunc 
 			writeGatewayError(w, r, http.StatusForbidden, "FORBIDDEN", "admin access required")
 			return
 		}
-		if !allowAdminRequest(identity.UserID, r.Method != http.MethodGet) {
-			w.Header().Set("Retry-After", "60")
-			writeGatewayError(w, r, 429, "RATE_LIMITED", "too many admin requests")
+		adminRule := ruleAdminRead
+		if r.Method != http.MethodGet {
+			adminRule = ruleAdminWrite
+		}
+		if !rateLimits.allowUser(w, r, identity.UserID, adminRule) {
 			return
 		}
 		injectIdentityHeaders(r, identity)
@@ -350,6 +359,9 @@ func optionalAuthenticatedProxy(authTarget, serviceTarget string) http.HandlerFu
 // Never injects participant ID from client headers.
 func participantProxy(serviceTarget string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !rateLimits.allowParticipant(w, r, ruleLivePlayer) {
+			return
+		}
 		// Strip spoofed identity headers
 		r.Header.Del("X-User-ID")
 		r.Header.Del("X-Participant-ID")
@@ -379,7 +391,9 @@ func authenticatedOrParticipantProxy(authTarget, serviceTarget string) http.Hand
 	}
 }
 
-// rateLimitProxy is a public proxy with basic rate limiting for join endpoints.
+// rateLimitProxy is the public join proxy: it applies per-IP and per-room-code
+// limits, and locks an IP out for a while after it burns through its budget of
+// wrong room codes (room-code enumeration defence).
 func rateLimitProxy(serviceTarget string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Strip all identity headers from public requests
@@ -387,8 +401,27 @@ func rateLimitProxy(serviceTarget string) http.HandlerFunc {
 		r.Header.Del("X-Participant-ID")
 		r.Header.Del("X-Live-Role")
 		r.Header.Del("Authorization")
-		// Basic rate limit could be added here
-		reverseProxy(serviceTarget)(w, r)
+
+		ip := clientIPFromRequest(r)
+		code := strings.ToUpper(strings.TrimSpace(liveSessionID(r.URL.Path)))
+		if blocked, retry := rateLimits.badCodeBlocked("POST /v1/live-sessions/{code}/join", ip); blocked {
+			writeRateLimited(w, r, retry)
+			return
+		}
+		if allowed, retry := rateLimits.check("POST /v1/live-sessions/{code}/join", "ip:"+ip, ruleLiveJoinIP); !allowed {
+			writeRateLimited(w, r, retry)
+			return
+		}
+		if allowed, retry := rateLimits.check("POST /v1/live-sessions/{code}/join", "ipcode:"+ip+":"+code, ruleLiveJoinCode); !allowed {
+			writeRateLimited(w, r, retry)
+			return
+		}
+
+		recorder := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		reverseProxy(serviceTarget)(recorder, r)
+		if recorder.status == http.StatusNotFound && code != "" {
+			rateLimits.recordBadCode(ip)
+		}
 	}
 }
 
@@ -420,7 +453,9 @@ func sseProxy(authTarget, serviceTarget string) http.HandlerFunc {
 			return
 		}
 		req.Header = r.Header.Clone()
-		req.Header.Set("X-Forwarded-For", r.RemoteAddr)
+		// Replace any client-supplied forwarding chain with the resolved client IP.
+		req.Header.Set("X-Forwarded-For", clientIPFromRequest(r))
+		req.Header.Del("X-Real-IP")
 		req.Header.Set("X-Forwarded-Host", r.Host)
 
 		// Don't use default client timeout for SSE
@@ -597,7 +632,9 @@ func reverseProxy(target string) http.HandlerFunc {
 			return
 		}
 		req.Header = r.Header.Clone()
-		req.Header.Set("X-Forwarded-For", r.RemoteAddr)
+		// Replace any client-supplied forwarding chain with the resolved client IP.
+		req.Header.Set("X-Forwarded-For", clientIPFromRequest(r))
+		req.Header.Del("X-Real-IP")
 		req.Header.Set("X-Forwarded-Host", r.Host)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {

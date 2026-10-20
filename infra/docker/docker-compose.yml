@@ -49,6 +49,12 @@ services:
       PAYMENT_SERVICE_URL: "${PAYMENT_SERVICE_URL:-http://payment:8085}"
       FILE_SERVICE_URL:    "${FILE_SERVICE_URL:-http://file:8086}"
       INTERNAL_SIGNING_KEY: "${INTERNAL_SIGNING_KEY:-}"
+      # Rate limiting (xem docs/security/rate-limits.md)
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
+      RATE_LIMIT_SHADOW:  "${RATE_LIMIT_SHADOW:-false}"
+      RATE_LIMIT_MAX_KEYS: "${RATE_LIMIT_MAX_KEYS:-100000}"
+      # Leer = dùng dải mặc định (loopback + private). Đặt rõ khi có proxy/Cloudflare.
+      TRUSTED_PROXIES:    "${TRUSTED_PROXIES:-}"
     # Không expose port ra host – nginx gọi qua Docker network
     expose:
       - "8080"

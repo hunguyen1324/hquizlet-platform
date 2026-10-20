@@ -129,6 +129,9 @@ Golden JSON examples: [`packages/api-contracts/examples/quiz/`](packages/api-con
 
 Internal API docs: [`packages/api-contracts/quiz-study-internal-api.md`](packages/api-contracts/quiz-study-internal-api.md)
 
+Bảo mật / vận hành: rate limit (3 lớp nginx–gateway–service), ngưỡng, cách chỉnh và
+cách tắt tạm: [`docs/security/rate-limits.md`](docs/security/rate-limits.md).
+
 ---
 
 ## Cấu trúc thư mục

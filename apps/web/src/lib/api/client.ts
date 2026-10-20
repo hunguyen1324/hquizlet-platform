@@ -45,7 +45,21 @@ export async function apiFetch<T>(path: string, token: string, init: RequestInit
   });
   if (res.status === 204) return undefined as unknown as T;
   const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
-  if (!res.ok) throw new ApiError(res.status, body.message ?? body.error ?? `Request failed ${res.status}`, body.code, body.field, body.requestId);
+  if (!res.ok) {
+    // 429 từ gateway/nginx: hiển thị thời gian chờ thay vì câu tiếng Anh thô.
+    if (res.status === 429) {
+      const retryHeader = Number(res.headers.get("Retry-After"));
+      const retryDetail = body.details?.retryAfter;
+      const retrySeconds = Number.isFinite(retryHeader) && retryHeader > 0
+        ? retryHeader
+        : typeof retryDetail === "number" && Number.isFinite(retryDetail) && retryDetail > 0 ? retryDetail : 0;
+      const message = retrySeconds > 0
+        ? `Thao tác quá nhanh, vui lòng thử lại sau ${Math.ceil(retrySeconds)} giây.`
+        : "Thao tác quá nhanh, vui lòng thử lại sau ít giây.";
+      throw new ApiError(429, message, body.code ?? "RATE_LIMITED", body.field, body.requestId);
+    }
+    throw new ApiError(res.status, body.message ?? body.error ?? `Request failed ${res.status}`, body.code, body.field, body.requestId);
+  }
   return body as T;
 }
 

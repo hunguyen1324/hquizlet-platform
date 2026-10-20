@@ -123,6 +123,18 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as unknown as T;
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
+    // 429 (rate limit / sai mã phòng quá nhiều lần): nói rõ thời gian chờ.
+    if (res.status === 429) {
+      const header = Number(res.headers.get("Retry-After"));
+      const detail = body.details as { retryAfter?: number } | undefined;
+      const seconds = Number.isFinite(header) && header > 0
+        ? header
+        : detail && typeof detail.retryAfter === "number" && detail.retryAfter > 0 ? detail.retryAfter : 0;
+      const message = seconds > 0
+        ? `Thao tác quá nhanh, vui lòng thử lại sau ${Math.ceil(seconds)} giây.`
+        : "Thao tác quá nhanh, vui lòng thử lại sau ít giây.";
+      throw new ApiError(res.status, message, (body.code as string) ?? "RATE_LIMITED", body.requestId as string);
+    }
     throw new ApiError(
       res.status,
       (body.message as string) ?? `Request failed ${res.status}`,

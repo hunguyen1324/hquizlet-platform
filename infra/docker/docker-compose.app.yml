@@ -40,6 +40,12 @@ services:
       CLASS_SERVICE_URL:   "http://class:8084"
       PAYMENT_SERVICE_URL: "http://payment:8085"
       FILE_SERVICE_URL:    "http://file:8086"
+      # Rate limiting (xem docs/security/rate-limits.md)
+      RATE_LIMIT_ENABLED: "${RATE_LIMIT_ENABLED:-true}"
+      RATE_LIMIT_SHADOW:  "${RATE_LIMIT_SHADOW:-false}"
+      RATE_LIMIT_MAX_KEYS: "${RATE_LIMIT_MAX_KEYS:-100000}"
+      # Empty = loopback + private ranges (nginx/Docker networks).
+      TRUSTED_PROXIES:    "${TRUSTED_PROXIES:-}"
     expose: ["8080"]
     depends_on:
       auth: { condition: service_healthy }

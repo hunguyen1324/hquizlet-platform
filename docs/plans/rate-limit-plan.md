@@ -1,6 +1,8 @@
 # Kế hoạch thêm Rate Limit cho hquizlet-platform
 
-> Trạng thái: kế hoạch, chưa sửa code. Dựa trên code ở commit `59a9158` (main).
+> Trạng thái: **đã triển khai RL-1 → RL-5 và RL-7**; RL-6 (Redis) và RL-8 (Turnstile)
+> còn để sau. Tài liệu vận hành: [`docs/security/rate-limits.md`](../security/rate-limits.md).
+> Kế hoạch gốc dựa trên code ở commit `59a9158` (main).
 
 ## 1. Hiện trạng: đã có gì, chưa có gì
 

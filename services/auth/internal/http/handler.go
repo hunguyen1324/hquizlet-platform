@@ -341,11 +341,26 @@ func loginHandler(svc *service.AuthService) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON body")
 			return
 		}
+		ip := clientIP(r)
+		// Per-account backoff: the gateway already limits attempts per IP, this
+		// covers one account being guessed from many addresses.
+		if blocked, retryAfter := failedLogins.Blocked(input.Email, ip); blocked {
+			writeLoginRateLimited(w, retryAfter)
+			return
+		}
 		resp, err := svc.Login(r.Context(), input)
 		if err != nil {
+			if errors.Is(err, service.ErrInvalidCredential) {
+				failedLogins.RecordFailure(input.Email, ip)
+				if blocked, retryAfter := failedLogins.Blocked(input.Email, ip); blocked {
+					writeLoginRateLimited(w, retryAfter)
+					return
+				}
+			}
 			writeServiceError(w, err)
 			return
 		}
+		failedLogins.RecordSuccess(input.Email, ip)
 		writeJSON(w, http.StatusOK, resp)
 	}
 }
