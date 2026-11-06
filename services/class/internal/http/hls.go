@@ -56,13 +56,16 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 	default:
 		return errors.New("video converter busy")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Minute)
 	defer cancel()
 	dir, err := os.MkdirTemp("", "hquizlet-hls-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
+	if free, diskErr := videoDiskFree(dir); diskErr != nil || free < uint64(h.videoMaxBytes+512*1024*1024) {
+		return errors.New("insufficient temporary disk space for video processing")
+	}
 	src, err := os.OpenFile(filepath.Join(dir, "input"), os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
@@ -103,7 +106,8 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 						size += info.Size()
 					}
 				}
-				if size > h.videoMaxBytes*4 {
+				free, diskErr := videoDiskFree(dir)
+				if size > h.videoMaxBytes*4 || diskErr != nil || free < 512*1024*1024 {
 					cancel()
 					return
 				}

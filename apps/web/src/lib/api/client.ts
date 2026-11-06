@@ -245,9 +245,46 @@ export const classStudySetApi = {
 export type ClassVideo = { id: number; title: string; youtubeId: string; source?: "youtube" | "sftp"; sizeBytes?: number; processingState?: "ready" | "processing" | "failed"; audience: "all" | "selected"; viewerIds: number[] };
 export type ClassVideoInput = { title: string; url: string; audience: "all" | "selected"; viewerIds: number[] };
 export const classVideoApi = {
-  upload: (token: string, classId: number, input: ClassVideoInput, file: File): Promise<ClassVideo> => {
-    const body = new FormData(); body.append("file", file);
-    return apiFetch(`/v1/classes/${classId}/videos/upload`, token, { method: "POST", body }, { title: input.title, audience: input.audience, viewerIds: JSON.stringify(input.viewerIds) });
+  upload: async (token: string, classId: number, input: ClassVideoInput, file: File, onProgress?: (percent: number) => void): Promise<ClassVideo> => {
+    if (file.size <= 0 || file.size > 1024 * 1024 * 1024) throw new Error("Video phải có dung lượng từ 1 byte đến 1 GiB.");
+    const contentType = /\.webm$/i.test(file.name) ? "video/webm" : /\.mp4$/i.test(file.name) ? "video/mp4" : "";
+    if (!contentType) throw new Error("Chỉ hỗ trợ file MP4 hoặc WebM.");
+    const base = `/v1/classes/${classId}/videos/uploads`;
+    const session = await apiFetch<{ uploadId: string; chunkSize: number }>(base, token, { method: "POST", body: JSON.stringify({ ...input, contentType, size: file.size }) });
+    if (!Number.isSafeInteger(session.chunkSize) || session.chunkSize < 1 || session.chunkSize > 8 * 1024 * 1024) throw new Error("Cấu hình tải video không hợp lệ.");
+    const path = `${base}/${session.uploadId}`;
+    try {
+      for (let offset = 0; offset < file.size;) {
+        const end = Math.min(offset + session.chunkSize, file.size);
+        let uploaded = false;
+        for (let attempt = 0; attempt < 3 && !uploaded; attempt++) {
+          try {
+            await apiFetch(path, token, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file.slice(offset, end), signal: AbortSignal.timeout(120000) }, { offset });
+            uploaded = true;
+          } catch (err) {
+            if (err instanceof ApiError && err.status < 500 && err.status !== 409 && err.status !== 429) throw err;
+            // A response may be lost after the server commits a chunk. Query its durable offset before retrying.
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+            const status = await apiFetch<{ received: number }>(path, token);
+            if (status.received === end) uploaded = true;
+            else if (status.received !== offset || attempt === 2) throw err;
+          }
+        }
+        offset = end; onProgress?.(Math.round(offset * 100 / file.size));
+      }
+    } catch (err) {
+      await apiFetch(path, token, { method: "DELETE" }).catch(() => {});
+      throw err;
+    }
+    // Do not abort on an ambiguous completion error: the server may already have created the video.
+    // Completion is idempotent and can safely be retried after a lost response.
+    for (let attempt = 0; ; attempt++) {
+      try { return await apiFetch<ClassVideo>(`${path}/complete`, token, { method: "POST" }); }
+      catch (err) {
+        if (attempt === 2 || (err instanceof ApiError && err.status < 500 && err.status !== 429)) throw err;
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
   },
   playback: async (token: string, classId: number, id: number): Promise<string> => {
     const data = await apiFetch<{ path: string }>(`/v1/classes/${classId}/videos/${id}/playback`, token, { method: "POST" });

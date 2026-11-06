@@ -48,10 +48,10 @@ export function PlaySection({ onNavigate }: Props) {
             <h3 className="text-sm font-bold">{mode.title}</h3>
             <p className="text-xs text-[var(--muted-foreground)]">{mode.description}</p>
             <button
-              onClick={() => onNavigate(mode.id)}
+              onClick={() => onNavigate("dashboard")}
               className="mt-auto px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-sm font-bold hover:opacity-90 transition-opacity"
             >
-              {mode.button}
+              Chọn học phần →
             </button>
           </Card>
         ))}

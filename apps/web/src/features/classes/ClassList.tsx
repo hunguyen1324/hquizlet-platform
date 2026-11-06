@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { classApi } from "../../lib/api";
 import type { ClassSummary } from "../../types";
+import { WorkspaceEmpty } from "../../components/ui/WorkspaceUI";
 
 type Props = {
   onCreate: () => void;
@@ -51,10 +52,7 @@ export function ClassList({ onCreate, onJoin, onSelect }: Props) {
       </div>
 
       {classes.length === 0 ? (
-        <div className="empty-state">
-          <p>Bạn chưa có lớp học nào.</p>
-          <p>Tạo lớp mới hoặc tham gia lớp bằng mã mời!</p>
-        </div>
+        <div className="panel"><WorkspaceEmpty icon="sparkles" title="Học cùng nhau, tiến xa hơn" description="Tạo nhóm để chia sẻ tài liệu, tổ chức quiz và đồng hành cùng bạn bè." action={<button className="primary-button" onClick={onCreate}>+ Tạo nhóm đầu tiên</button>} /></div>
       ) : (
         <div className="group-card-list">
           {classes.map((cls) => (
@@ -65,7 +63,7 @@ export function ClassList({ onCreate, onJoin, onSelect }: Props) {
               <span className="group-card-copy">
                 <span className="group-card-title-row">
                   <strong>{cls.name}</strong>
-                  <span className="role-badge" data-role={cls.myRole}>{cls.myRole}</span>
+                  <span className="role-badge" data-role={cls.myRole}>{{ owner: "Chủ nhóm", teacher: "Giáo viên", student: "Học viên" }[cls.myRole]}</span>
                 </span>
                 <span className="group-card-description">{cls.description || "Không gian học tập chung của nhóm"}</span>
                 <span className="group-card-stats">

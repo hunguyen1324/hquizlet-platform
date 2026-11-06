@@ -132,7 +132,7 @@ services:
       start_period: 15s
 
   class:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-class:${IMAGE_TAG:-latest}
+    image: ${CLASS_IMAGE:-${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-class:${IMAGE_TAG:-latest}}
     environment:
       PORT: "8084"
       DATABASE_URL:         "postgres://${POSTGRES_USER:-hquizlet}:${POSTGRES_PASSWORD}@${DATA_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-hquizlet}?sslmode=disable"
@@ -150,7 +150,7 @@ services:
       VIDEO_SFTP_MAX_CONNECTIONS: "${VIDEO_SFTP_MAX_CONNECTIONS:-4}"
       VIDEO_TICKET_SECRET: "${VIDEO_TICKET_SECRET:-}"
       VIDEO_HLS_MASTER_KEY: "${VIDEO_HLS_MASTER_KEY:-}"
-      VIDEO_MAX_UPLOAD_MB: "${VIDEO_MAX_UPLOAD_MB:-80}"
+      VIDEO_MAX_UPLOAD_MB: "${VIDEO_MAX_UPLOAD_MB:-1024}"
     volumes:
       - ./video-secrets:/run/video-secrets:ro
     expose: ["8084"]

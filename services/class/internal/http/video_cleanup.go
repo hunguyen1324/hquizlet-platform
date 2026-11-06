@@ -12,6 +12,9 @@ func (h *Handler) RunVideoCleanup(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
+		if err := h.cleanupVideoUploads(ctx); err != nil {
+			log.Printf("[class] upload cleanup: %v", err)
+		}
 		if err := h.cleanupVideos(ctx); err != nil {
 			log.Printf("[class] video cleanup: %v", err)
 		}

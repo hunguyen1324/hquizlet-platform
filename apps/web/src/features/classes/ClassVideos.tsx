@@ -19,6 +19,7 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -48,42 +49,47 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
     return () => { active = false; window.clearInterval(timer); };
   }, [token, classId, hasProcessing]);
 
-  return <div className="tab-content">
-    <p>Video tải lên chỉ phát cho thành viên được cấp quyền trong nhóm. Với video YouTube, quyền riêng tư vẫn do YouTube quản lý.</p>
+  return <div className="tab-content class-videos">
+    <div className="class-section-heading"><div><h2>Góc video của nhóm</h2><p>Chia sẻ bài giảng, lưu lại kiến thức, học theo cách của bạn.</p></div><span className="class-section-icon" aria-hidden="true">▷</span></div>
+    <div className="class-video-notice"><span aria-hidden="true">ⓘ</span><p>Video tải lên chỉ dành cho thành viên được cấp quyền. Quyền riêng tư của video YouTube do YouTube quản lý.</p></div>
     {error && <p role="alert" className="error-message">{error}</p>}
-    {canManage && <form onSubmit={async event => {
+    {canManage && <form className="class-compose class-video-form" onSubmit={async event => {
       event.preventDefault(); if (!token || busy) return;
-      setBusy(true); setError("");
+      setBusy(true); setError(""); setUploadProgress(0);
       try {
         if (!editing && source === "sftp") {
           if (!file) throw new Error("Hãy chọn file video MP4 hoặc WebM.");
-          await classVideoApi.upload(token, classId, input, file);
+          await classVideoApi.upload(token, classId, input, file, setUploadProgress);
         } else {
           await classVideoApi.save(token, classId, input, editing);
         }
         setInput(emptyInput); setEditing(undefined); setFile(undefined); setFileInputKey(k => k + 1); await refresh();
       } catch (err) { setError(err instanceof Error ? err.message : "Không lưu được video"); }
       finally { setBusy(false); }
-    }} style={{ display: "grid", gap: 12, marginBlock: 20 }}>
-      <label>Tiêu đề video<input required maxLength={200} value={input.title} onChange={e => setInput({ ...input, title: e.target.value })} /></label>
+    }}>
+      <div className="class-compose-title"><h3>{editing ? "Chỉnh sửa video" : "Chia sẻ video mới"}</h3><p>{editing ? "Cập nhật thông tin và quyền xem của video." : "Một bài giảng hay có thể truyền cảm hứng cho cả nhóm."}</p></div>
+      <label className="class-field-wide">Tiêu đề video<input required placeholder="Ví dụ: Ôn tập chương 1 — Những kiến thức cần nhớ" maxLength={200} value={input.title} onChange={e => setInput({ ...input, title: e.target.value })} /></label>
       {!editing && <label>Nguồn video<select value={source} onChange={e => setSource(e.target.value as "sftp" | "youtube")} disabled={busy}>
         <option value="sftp">Tải video riêng tư lên</option><option value="youtube">Liên kết YouTube</option>
       </select></label>}
       {source === "youtube" ? <label>Liên kết YouTube<input required type="url" placeholder="https://www.youtube.com/watch?v=..." value={input.url} onChange={e => setInput({ ...input, url: e.target.value })} /></label>
-        : !editing && <label>File video (MP4 hoặc WebM)<input key={fileInputKey} required type="file" accept="video/mp4,video/webm,.mp4,.webm" disabled={busy} onChange={e => setFile(e.target.files?.[0])} /></label>}
+        : !editing && <label className="class-upload-field class-field-wide"><span className="class-upload-symbol" aria-hidden="true">↑</span><strong>{file ? file.name : "Chọn video để tải lên"}</strong><span>MP4 hoặc WebM · Tối đa 1 GiB</span><input aria-label="Chọn file video MP4 hoặc WebM" key={fileInputKey} required type="file" accept="video/mp4,video/webm,.mp4,.webm" disabled={busy} onChange={e => setFile(e.target.files?.[0])} /></label>}
       <label>Ai được xem?<select value={input.audience} onChange={e => setInput({ ...input, audience: e.target.value as ClassVideoInput["audience"] })}>
         <option value="all">Tất cả thành viên nhóm</option><option value="selected">Chọn thành viên</option>
       </select></label>
-      {input.audience === "selected" && <fieldset><legend>Thành viên được xem (chủ nhóm và giáo viên luôn có quyền)</legend>
+      {input.audience === "selected" && <fieldset className="class-field-wide"><legend>Thành viên được xem (chủ nhóm và giáo viên luôn có quyền)</legend>
         {members.filter(m => m.role === "student").map(m => <label key={m.userId} style={{ display: "block" }}>
           <input type="checkbox" checked={input.viewerIds.includes(m.userId)} onChange={e => setInput({ ...input, viewerIds: e.target.checked ? [...input.viewerIds, m.userId] : input.viewerIds.filter(id => id !== m.userId) })} /> Thành viên #{m.userId}
         </label>)}
       </fieldset>}
-      <div><button className="primary-button" disabled={busy}>{busy ? source === "sftp" && !editing ? "Đang tải video..." : "Đang lưu..." : editing ? "Lưu thay đổi" : "Thêm video"}</button>
+      {source === "sftp" && !editing && <small className="class-field-wide">Video sẽ được xử lý sau khi tải lên để sẵn sàng phát cho nhóm.</small>}
+      {busy && source === "sftp" && !editing && <progress className="class-field-wide" value={uploadProgress} max={100} aria-label="Tiến độ tải video" />}
+      <div className="class-form-actions class-field-wide"><button className="primary-button" disabled={busy}>{busy ? source === "sftp" && !editing ? uploadProgress === 100 ? "Đang hoàn tất tải lên..." : `Đang tải video... ${uploadProgress}%` : "Đang lưu..." : editing ? "Lưu thay đổi" : "+ Thêm video"}</button>
         {editing && <button type="button" className="ghost-button" disabled={busy} onClick={() => { setEditing(undefined); setInput(emptyInput); setSource("sftp"); }}>Hủy</button>}
       </div>
     </form>}
-    {loading ? <p>Đang tải video...</p> : videos.length === 0 && !error ? <div className="empty-state">Chưa có video được chia sẻ với bạn.</div> : null}
+    <div className="class-list-heading"><h3>Video đã chia sẻ</h3><span>{videos.length} video</span></div>
+    {loading ? <p role="status">Đang tải video...</p> : videos.length === 0 && !error ? <div className="empty-state"><span className="class-empty-icon" aria-hidden="true">▷</span><h3>Góc học tập đang chờ bạn</h3><p>Những video được chia sẻ với bạn sẽ xuất hiện tại đây.</p></div> : null}
     <ul className="group-resource-list" style={{ listStyle: "none", padding: 0 }}>
       {videos.map(video => <li key={video.id} className="group-resource-item" style={{ marginBottom: 12 }}>
         <button className="group-resource-main" disabled={video.processingState === "processing" || video.processingState === "failed"} onClick={async () => {
@@ -99,11 +105,11 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
             const url = allowed.source === "sftp" ? await classVideoApi.playback(token, classId, allowed.id) : "";
             setPlaybackURL(url); setPlaying(allowed);
           } catch (err) { setError(err instanceof Error ? err.message : "Không mở được video"); }
-        }}>▶ {video.title}</button>
+        }}><span className="class-video-play" aria-hidden="true">▶</span><span><strong>{video.title}</strong><small>{video.source === "sftp" ? "Video riêng tư" : "YouTube"}</small></span></button>
         {video.processingState === "processing" && <span role="status">Đang xử lý và mã hóa video...</span>}
         {video.processingState === "failed" && <span role="status">Xử lý thất bại. Hãy xóa và tải lại video.</span>}
         {canManage && <>
-          <span>{video.audience === "all" ? "Cả nhóm" : `${video.viewerIds.length} người được chọn`}</span>
+          <span className="class-audience-badge">{video.audience === "all" ? "Cả nhóm" : `${video.viewerIds.length} người được chọn`}</span>
           <button className="ghost-button" disabled={busy} onClick={() => { setEditing(video.id); setSource(video.source === "sftp" ? "sftp" : "youtube"); setInput({ title: video.title, url: video.youtubeId ? `https://www.youtube.com/watch?v=${video.youtubeId}` : "", audience: video.audience, viewerIds: video.viewerIds }); }}>Sửa / Quyền xem</button>
           <button className="danger-button" disabled={busy} onClick={async () => {
             if (!token || !confirm("Xóa video khỏi nhóm?")) return;
@@ -115,7 +121,7 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
         </>}
       </li>)}
     </ul>
-    {playing && <section aria-label={playing.title}>
+    {playing && <section className="class-video-player" aria-label={playing.title}>
       <h3>{playing.title}</h3><button className="ghost-button" onClick={() => setPlaying(undefined)}>Đóng video</button>
       {playing.source === "sftp" ? <PrivateVideoPlayer key={playing.id} title={playing.title} url={playbackURL} token={token ?? ""} classId={classId} videoId={playing.id} onError={setError} />
         : <iframe key={playing.id} title={playing.title} src={`https://www.youtube-nocookie.com/embed/${playing.youtubeId}?rel=0`} style={{ width: "100%", aspectRatio: "16 / 9", border: 0 }} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />}

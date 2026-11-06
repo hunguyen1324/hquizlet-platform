@@ -36,6 +36,8 @@ import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDe
 
 import { AppShell } from "./components/layout/AppShell";
 import { HomePage } from "./components/home/HomePage";
+import { Dashboard } from "./features/dashboard/Dashboard";
+import "./design-system.css";
 
 // Dashboard screens are code-split so recharts/date libs stay out of the initial bundle.
 const PersonalDashboard = React.lazy(() =>
@@ -233,6 +235,7 @@ function RootApp() {
 
   return (
     <AppShell
+      onSelectSet={(set) => void handleOpenSet(set.id)}
       currentView={routeView ?? view}
       onNavigate={handleNavigate}
     >
@@ -286,13 +289,13 @@ function RootApp() {
       )}
       {navigationError && <div className="message message--error" role="alert">{navigationError}</div>}
 
-      {/* NEW: HomePage — shown for home & dashboard views */}
-      {(view === "home" || view === "dashboard") && !loadingSet && (
+      {view === "home" && !loadingSet && (
         <HomePage
           onOpenSet={(id) => void handleOpenSet(id)}
           onNavigate={handleNavigate}
         />
       )}
+      {view === "dashboard" && !loadingSet && <Dashboard healthStatus={healthStatus} onOpen={(id) => void handleOpenSet(id)} onCreate={() => handleNavigate("create-type")} />}
 
       {view === "create-type" && (
         <CreateTypeSelector
@@ -429,20 +432,20 @@ function RootApp() {
 
       {!loadingSet && view === "wallet" && (
         <WalletPage
-          onDeposit={() => setView("deposit")}
-          onBack={() => setView("dashboard")}
+          onDeposit={() => handleNavigate("deposit")}
+          onBack={() => handleNavigate("dashboard")}
         />
       )}
 
       {view === "deposit" && (
         <DepositPage
-          onBack={() => setView("wallet")}
-          onSuccess={() => setView("wallet")}
+          onBack={() => handleNavigate("wallet")}
+          onSuccess={() => handleNavigate("wallet")}
         />
       )}
 
       {!loadingSet && view === "activity" && (
-        <ActivityFeed onBack={() => setView("dashboard")} />
+        <ActivityFeed onBack={() => handleNavigate("dashboard")} />
       )}
 
       {!loadingSet && view === "admin-payments" && (

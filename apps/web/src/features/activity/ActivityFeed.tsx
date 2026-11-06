@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { activityApi } from "../../lib/api";
 import type { ActivityItem, ActivityFeedResponse } from "../../types";
+import { WorkspaceEmpty, WorkspaceHeading } from "../../components/ui/WorkspaceUI";
 
 type Props = {
   onBack: () => void;
@@ -64,6 +65,7 @@ export function ActivityFeed({ onBack }: Props) {
     if (!token) return;
     setLoading(!!cursor === false);
     setLoadingMore(!!cursor);
+    setError(null);
     try {
       const resp: ActivityFeedResponse = await activityApi.getFeed(token, cursor, 20);
       if (cursor) {
@@ -83,21 +85,13 @@ export function ActivityFeed({ onBack }: Props) {
 
   return (
     <div className="activity-feed-page">
-      <div className="activity-header">
-        <button className="ghost-button" onClick={onBack}>← Quay lại</button>
-        <h1>Hoạt động gần đây</h1>
-      </div>
+      <WorkspaceHeading eyebrow="CẬP NHẬT CỦA BẠN" title="Thông báo & hoạt động" description="Theo dõi hành trình học tập và những cập nhật trong nhóm." action={<button className="ghost-button" onClick={onBack}>← Thư viện học phần</button>} />
 
       {loading && <div className="loading-overlay"><span>Đang tải...</span></div>}
 
-      {error && <div className="error-state"><p>Lỗi: {error}</p></div>}
+      {error && <div className="error-alert" role="alert"><p>{error}</p><button className="ghost-button" onClick={() => void loadFeed()}>Thử lại</button></div>}
 
-      {!loading && items.length === 0 && (
-        <div className="empty-state">
-          <p>Chưa có hoạt động nào.</p>
-          <p>Bắt đầu học hoặc tham gia một lớp!</p>
-        </div>
-      )}
+      {!loading && !error && items.length === 0 && <div className="panel"><WorkspaceEmpty icon="activity" title="Bạn đã xem hết mọi cập nhật" description="Hoạt động học tập và thông báo từ các nhóm sẽ xuất hiện tại đây." action={<button className="secondary-button" onClick={onBack}>Khám phá học phần →</button>} /></div>}
 
       <ul className="activity-list">
         {items.map((item) => {

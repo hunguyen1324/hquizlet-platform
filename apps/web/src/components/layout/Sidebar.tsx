@@ -55,12 +55,13 @@ const adminNav = {
 export function Sidebar({ currentView, onNavigate, onCreateFolder }: SidebarProps) {
   const isAdmin = useIsAdmin();
   return (
-    <aside className="hq-sidebar">
+    <aside className="hq-sidebar" role="navigation" aria-label="Menu chính">
       <div className="hq-sidebar-section">
         {primaryNav.map((item) => (
           <button
             key={item.id}
             className={`hq-sidebar-link${currentView === item.id ? " active" : ""}`}
+            aria-current={currentView === item.id ? "page" : undefined}
             onClick={() => onNavigate(item.id)}
           >
             {item.icon}
@@ -77,6 +78,7 @@ export function Sidebar({ currentView, onNavigate, onCreateFolder }: SidebarProp
           <button
             key={item.id}
             className={`hq-sidebar-link${currentView === item.id ? " active" : ""}`}
+            aria-current={currentView === item.id ? "page" : undefined}
             onClick={() => onNavigate(item.id)}
           >
             {item.icon}
@@ -92,6 +94,7 @@ export function Sidebar({ currentView, onNavigate, onCreateFolder }: SidebarProp
             <span className="hq-sidebar-label">Hệ thống</span>
             <button
               className={`hq-sidebar-link${currentView === adminNav.id ? " active" : ""}`}
+              aria-current={currentView === adminNav.id ? "page" : undefined}
               onClick={() => onNavigate(adminNav.id)}
             >
               {adminNav.icon}

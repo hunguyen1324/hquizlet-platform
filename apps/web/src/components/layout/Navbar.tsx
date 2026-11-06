@@ -13,9 +13,12 @@ type NavbarProps = {
   onLogout: () => void;
   onNavigate?: (view: string) => void;
   onSelectSet?: (set: StudySet) => void;
+  navigationOpen?: boolean;
+  onToggleNavigation?: () => void;
+  navigationToggleRef?: React.RefObject<HTMLButtonElement>;
 };
 
-export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSelectSet }: NavbarProps) {
+export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSelectSet, navigationOpen, onToggleNavigation, navigationToggleRef }: NavbarProps) {
   const { token } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -50,14 +53,12 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
   function handleSearchChange(value: string) {
     setSearchQuery(value);
     setShowDropdown(!!value.trim());
-    onSearch?.(value);
   }
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (searchQuery.trim()) {
-      onSearch?.(searchQuery.trim());
-      setShowDropdown(false);
+      setShowDropdown(true);
     }
   }
 
@@ -105,7 +106,7 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
               <button
                 type="button"
                 className="hq-nav-search-clear"
-                onClick={() => { setSearchQuery(""); setShowDropdown(false); onSearch?.(""); }}
+                onClick={() => { setSearchQuery(""); setShowDropdown(false); }}
                 aria-label="Xóa tìm kiếm"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -145,7 +146,7 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
                 <svg className="hq-di-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
                 Thẻ ghi nhớ mới
               </button>
-              <button className="hq-dropdown-item" onClick={() => { setShowCreate(false); onNavigate?.("classes"); }}>
+              <button className="hq-dropdown-item" onClick={() => { setShowCreate(false); onNavigate?.("class-create"); }}>
                 <svg className="hq-di-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
                 Nhóm học mới
               </button>
@@ -178,9 +179,9 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
               <div className="hq-dropdown-header">
                 <p>{user.name}</p>
               </div>
-              <button className="hq-dropdown-item" onClick={() => { setShowUser(false); onNavigate?.("profile"); }}>
+              <button className="hq-dropdown-item" onClick={() => { setShowUser(false); onNavigate?.("overview"); }}>
                 <svg className="hq-di-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                Profile
+                Tổng quan cá nhân
               </button>
               <button className="hq-dropdown-item" onClick={() => { setShowUser(false); onNavigate?.("wallet"); }}>
                 <svg className="hq-di-ico" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h3v-4h-3z"/></svg>
@@ -200,7 +201,7 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
         </div>
 
         {/* Mobile hamburger */}
-        <button className="hq-nav-hamburger" aria-label="Menu">
+        <button ref={navigationToggleRef} className="hq-nav-hamburger" aria-label="Mở menu điều hướng" aria-expanded={navigationOpen} aria-controls="primary-navigation" onClick={onToggleNavigation}>
           <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
             <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16"/>
           </svg>

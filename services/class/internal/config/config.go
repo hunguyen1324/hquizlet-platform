@@ -37,7 +37,7 @@ func Load() Config {
 			PrivateKeyFile: os.Getenv("VIDEO_SFTP_PRIVATE_KEY_FILE"), MaxConnections: envNumber("VIDEO_SFTP_MAX_CONNECTIONS", 4),
 		},
 		VideoTicketSecret: os.Getenv("VIDEO_TICKET_SECRET"),
-		VideoMaxBytes:     int64(envNumber("VIDEO_MAX_UPLOAD_MB", 80)) * 1024 * 1024,
+		VideoMaxBytes:     int64(envNumber("VIDEO_MAX_UPLOAD_MB", 1024)) * 1024 * 1024,
 	}
 }
 

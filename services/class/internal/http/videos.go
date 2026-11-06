@@ -66,6 +66,14 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		writeServiceError(w, r, classservice.ErrForbidden)
 		return
 	}
+	if len(parts) > 0 && parts[0] == "uploads" {
+		if !staff {
+			writeServiceError(w, r, classservice.ErrForbidden)
+			return
+		}
+		h.chunkedVideo(w, r, classID, cls.OwnerUserID, parts)
+		return
+	}
 	if len(parts) == 1 && parts[0] == "upload" && r.Method == http.MethodPost {
 		if !staff {
 			writeServiceError(w, r, classservice.ErrForbidden)

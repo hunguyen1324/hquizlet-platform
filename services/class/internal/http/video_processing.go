@@ -41,7 +41,7 @@ func (r closeOnEOF) Read(p []byte) (int, error) {
 }
 
 func (h *Handler) processNextVideo(parent context.Context) (bool, error) {
-	ctx, cancel := context.WithTimeout(parent, 12*time.Minute)
+	ctx, cancel := context.WithTimeout(parent, 65*time.Minute)
 	defer cancel()
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {

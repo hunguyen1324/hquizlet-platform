@@ -61,6 +61,9 @@ export function Card({
   return (
     <div
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); } } : undefined}
       className={`bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-sm ${onClick ? "cursor-pointer" : ""} ${className}`}
     >
       {children}
@@ -148,7 +151,7 @@ export function Carousel({
         <button
           onClick={() => scroll("left")}
           className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 border border-[var(--border)] shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-slate-700"
-          aria-label="Scroll left"
+          aria-label="Cuộn sang trái"
         >
           ‹
         </button>
@@ -165,7 +168,7 @@ export function Carousel({
         <button
           onClick={() => scroll("right")}
           className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 border border-[var(--border)] shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-slate-700"
-          aria-label="Scroll right"
+          aria-label="Cuộn sang phải"
         >
           ›
         </button>

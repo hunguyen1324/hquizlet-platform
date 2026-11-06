@@ -20,10 +20,12 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
   const { token } = useAuth();
   const [sets, setSets] = useState<StudySet[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("updated");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -33,11 +35,12 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
     try {
       const result = await studySetApi.list(
         token,
-        { search: query.trim() || undefined, sort },
+        { search: query.trim() || undefined, sort, page, per_page: 24 },
         signal
       );
       setSets(result.items ?? []);
       setTotal(result.total ?? 0);
+      setTotalPages(result.totalPages ?? 1);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Không tải được study sets.");
@@ -48,6 +51,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
   };
 
   useEffect(() => {
+    setLoading(true);
     // Debounce 300ms, hủy request cũ khi query/sort đổi trước khi nó kịp trả về
     const timer = setTimeout(() => {
       abortRef.current?.abort();
@@ -60,15 +64,15 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
       clearTimeout(timer);
       abortRef.current?.abort();
     };
-  }, [token, query, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token, query, sort, page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
       <section className="page-heading">
         <div>
-          <p className="eyebrow">Dashboard</p>
+          <p className="eyebrow">KHÔNG GIAN KIẾN THỨC</p>
           <h1>Thư viện học phần</h1>
-          <p>Quản lý bộ thẻ và tiếp tục học từ dữ liệu PostgreSQL.</p>
+          <p>Tất cả học phần của bạn, sẵn sàng cho lần ôn tập tiếp theo.</p>
         </div>
         <button className="primary-button" onClick={onCreate}>
           Tạo học phần
@@ -77,16 +81,16 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
 
       <section className="summary-grid">
         <div className="metric-card">
-          <span>Study sets</span>
+          <span>Học phần trong thư viện</span>
           <strong>{total}</strong>
         </div>
         <div className="metric-card">
-          <span>Backend</span>
-          <strong>{healthStatus}</strong>
+          <span>Học phần trên trang này</span>
+          <strong>{sets.length}</strong>
         </div>
         <div className="metric-card">
-          <span>Tổng thẻ</span>
-          <strong>{sets.reduce((n, s) => n + (s.flashcards?.length ?? 0), 0)}</strong>
+          <span>Thẻ trong danh sách hiện tại</span>
+          <strong>{sets.reduce((n, s) => n + (s.flashcardCount ?? s.flashcards?.length ?? 0), 0)}</strong>
         </div>
       </section>
 
@@ -96,13 +100,13 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
           type="search"
           placeholder="Tìm học phần..."
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setPage(1); }}
           aria-label="Tìm kiếm học phần"
         />
         <select
           className="sort-select"
           value={sort}
-          onChange={(e) => setSort(e.target.value as SortKey)}
+          onChange={(e) => { setSort(e.target.value as SortKey); setPage(1); }}
           aria-label="Sắp xếp"
         >
           <option value="updated">Mới nhất</option>
@@ -156,7 +160,7 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
           </div>
         )}
 
-        {sets.map((set) => (
+        {!loading && !error && sets.map((set) => (
           <button className="set-card" key={set.id} onClick={() => onOpen(set.id)}>
             <span>{set.description || "Chưa có mô tả"}</span>
             <strong>
@@ -165,11 +169,12 @@ export function Dashboard({ healthStatus, onOpen, onCreate }: Props) {
             </strong>
             <small>
               {set.contentType === "quiz" ? "Quiz" : set.contentType === "grammar" ? "Ngữ pháp" : "Thẻ học"}
-              {' · '}{set.flashcards?.length ?? 0} thẻ · Mở học phần
+              {' · '}{set.flashcardCount ?? set.flashcards?.length ?? 0} thẻ · Mở học phần →
             </small>
           </button>
         ))}
       </section>
+      {totalPages > 1 && <nav className="library-pagination" aria-label="Phân trang học phần"><button className="ghost-button" disabled={page <= 1 || loading} onClick={() => setPage(p => p - 1)}>← Trang trước</button><span aria-live="polite">Trang {page} / {totalPages}</span><button className="ghost-button" disabled={page >= totalPages || loading} onClick={() => setPage(p => p + 1)}>Trang sau →</button></nav>}
     </>
   );
 }

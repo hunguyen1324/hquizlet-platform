@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { useAuth } from "./AuthContext";
 import type { AuthMode, HealthStatus } from "../../types";
+import { WorkspaceIcon } from "../../components/ui/WorkspaceUI";
 
 type Props = {
   healthStatus: HealthStatus;
@@ -15,7 +16,7 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
   const { login, register, loading, error } = useAuth();
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("demo@hquizlet.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accountType, setAccountType] = useState<"teacher" | "student">("student");
 
@@ -32,13 +33,9 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
     <main className="auth-shell">
       <section className="auth-hero">
         <p className="eyebrow">HQuizlet Platform</p>
-        <h1>Học bằng flashcard, backend Go, dữ liệu PostgreSQL.</h1>
-        <p>Đăng nhập hoặc đăng ký để tạo study set, thêm flashcard và thử Flashcards, Learn, Test, Match.</p>
-        <div className="service-strip">
-          <strong>{liveCount} / {serviceCount}</strong>
-          <span>services live</span>
-          <span className={`badge badge--${healthStatus}`}>{healthStatus}</span>
-        </div>
+        <h1>Học thông minh hơn.<br />Tiến bộ mỗi ngày.</h1>
+        <p>Biến kiến thức thành thói quen. Tạo thẻ ghi nhớ, thử sức với quiz và cùng bạn bè chinh phục mục tiêu học tập.</p>
+        <div className="auth-benefits"><span><WorkspaceIcon name="book" size={16} /> Ghi nhớ chủ động</span><span><WorkspaceIcon name="sparkles" size={16} /> Học cùng bạn bè</span><span><WorkspaceIcon name="check" size={16} /> Theo dõi tiến bộ</span></div>
       </section>
 
       <section className="panel auth-card">
@@ -65,6 +62,7 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
               <label>
                 Tên
                 <input
+                  autoComplete="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Nguyen Van A"
@@ -100,6 +98,7 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
             Email
             <input
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="email@example.com"
@@ -110,6 +109,7 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
             Mật khẩu
             <input
               type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -117,7 +117,7 @@ export function AuthScreen({ healthStatus, liveCount, serviceCount }: Props) {
             />
           </label>
 
-          {error && <p className="message message--error">{error}</p>}
+          {error && <p className="message message--error" role="alert">{error}</p>}
 
           <button className="primary-button" disabled={loading} type="submit">
             {loading ? "Đang xử lý..." : mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}
