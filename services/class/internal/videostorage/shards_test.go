@@ -215,3 +215,24 @@ func TestShardReadersBoundMemoryAndReleaseOnClose(t *testing.T) {
 	}
 	r.Close()
 }
+
+func TestShardProgressDoesNotCountFailedTransfers(t *testing.T) {
+	s, p, nodes, key, dir := shardFixture(t)
+	var completed []int
+	ctx := WithPublishProgress(context.Background(), func(done, total int) {
+		if total != 8 {
+			t.Fatal(total)
+		}
+		completed = append(completed, done)
+		// Simulate all storage disappearing after the first verified segment.
+		for _, node := range nodes {
+			node.down = true
+		}
+	})
+	if err := s.PublishHLS(ctx, key, dir); err == nil {
+		t.Fatal("publish succeeded after storage disappeared")
+	}
+	if len(completed) != 1 || completed[0] != 1 || len(p.data) != 0 {
+		t.Fatal("failed transfers were counted or manifest published", completed)
+	}
+}

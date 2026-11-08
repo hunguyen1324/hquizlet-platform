@@ -13,14 +13,16 @@ import (
 )
 
 type classVideo struct {
-	ID              int64   `json:"id"`
-	Title           string  `json:"title"`
-	YouTubeID       string  `json:"youtubeId"`
-	Audience        string  `json:"audience"`
-	ViewerIDs       []int64 `json:"viewerIds"`
-	Source          string  `json:"source,omitempty"`
-	SizeBytes       int64   `json:"sizeBytes,omitempty"`
-	ProcessingState string  `json:"processingState,omitempty"`
+	ID                int64   `json:"id"`
+	Title             string  `json:"title"`
+	YouTubeID         string  `json:"youtubeId"`
+	Audience          string  `json:"audience"`
+	ViewerIDs         []int64 `json:"viewerIds"`
+	Source            string  `json:"source,omitempty"`
+	SizeBytes         int64   `json:"sizeBytes,omitempty"`
+	ProcessingState   string  `json:"processingState,omitempty"`
+	ProcessingPercent *int    `json:"processingPercent"`
+	ProcessingStage   string  `json:"processingStage,omitempty"`
 }
 
 func youtubeID(raw string) string {
@@ -105,7 +107,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 	}
 	if r.Method == http.MethodGet && id == 0 {
 		viewer, _ := json.Marshal([]int64{uid})
-		rows, err := h.db.QueryContext(r.Context(), `SELECT id,title,COALESCE(youtube_id,''),audience,viewer_ids,CASE WHEN storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(size_bytes,0),processing_state FROM class_videos WHERE class_id=$1 AND ($2 OR audience='all' OR viewer_ids @> $3::jsonb) ORDER BY created_at DESC,id DESC`, classID, staff, string(viewer))
+		rows, err := h.db.QueryContext(r.Context(), `SELECT v.id,v.title,COALESCE(v.youtube_id,''),v.audience,v.viewer_ids,CASE WHEN v.storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(v.size_bytes,0),v.processing_state,CASE WHEN v.processing_state='ready' THEN 100 WHEN p.video_id IS NULL THEN 0 ELSE p.percent END,CASE WHEN v.processing_state<>'processing' THEN v.processing_state ELSE COALESCE(p.stage,'queued') END FROM class_videos v LEFT JOIN class_video_processing_progress p ON p.video_id=v.id WHERE v.class_id=$1 AND ($2 OR v.audience='all' OR v.viewer_ids @> $3::jsonb) ORDER BY v.created_at DESC,v.id DESC`, classID, staff, string(viewer))
 		if err != nil {
 			writeServiceError(w, r, err)
 			return
@@ -115,9 +117,14 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		for rows.Next() {
 			v := classVideo{}
 			var raw []byte
-			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes, &v.ProcessingState); err != nil {
+			var percent sql.NullInt64
+			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes, &v.ProcessingState, &percent, &v.ProcessingStage); err != nil {
 				writeServiceError(w, r, err)
 				return
+			}
+			if percent.Valid {
+				value := int(percent.Int64)
+				v.ProcessingPercent = &value
 			}
 			if err := json.Unmarshal(raw, &v.ViewerIDs); err != nil {
 				writeServiceError(w, r, err)

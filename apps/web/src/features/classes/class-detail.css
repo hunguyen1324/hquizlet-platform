@@ -135,3 +135,9 @@
   .group-detail-page .class-member-copy { min-width: 100px; }
   .group-detail-page h2 { font-size: 19px; }
 }
+
+/* Processing remains separate from upload progress. */
+.group-detail-page .class-video-processing { display: grid; gap: 5px; flex: 0 1 230px; min-width: 160px; max-width: 100%; padding: 8px 0; font-size: 12px; }
+.group-detail-page .class-video-processing progress { width: 100%; height: 8px; accent-color: #4255ff; }
+.group-detail-page .class-video-processing small { color: var(--class-muted); }
+@media (max-width: 640px) { .group-detail-page .class-video-processing { flex-basis: 100%; min-width: 0; } }

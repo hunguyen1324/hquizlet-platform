@@ -49,6 +49,10 @@ func hlsKey(secret []byte, object string) []byte {
 // Store a seekable, uncompressed ZIP of encrypted segments and the playlist.
 // This keeps the existing single-object deletion/outbox lifecycle atomic.
 func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) error {
+	return h.putHLSWithProgress(ctx, object, input, nil)
+}
+
+func (h *Handler) putHLSWithProgress(ctx context.Context, object string, input io.Reader, report func(int, string)) error {
 	if len(h.hlsSecret) != 32 {
 		return errors.New("HLS encryption is not configured")
 	}
@@ -87,6 +91,15 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 		return err
 	}
 	plan := probeHLSPlan(ctx, filepath.Join(dir, "input"))
+	var duration float64
+	if report != nil {
+		duration = probeHLSDuration(ctx, filepath.Join(dir, "input"))
+		if duration > 0 {
+			report(5, "encoding")
+		} else {
+			report(-1, "encoding")
+		}
+	}
 	// Bound disk use while FFmpeg is active, rather than only after it exits.
 	done := make(chan struct{})
 	defer close(done)
@@ -119,8 +132,15 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 	var stderr boundedFFmpegLog
 	started := time.Now()
 	run := func() error {
-		cmd := exec.CommandContext(ctx, "ffmpeg", hlsFFmpegArgs(dir, plan)...)
+		args := hlsFFmpegArgs(dir, plan)
+		if report != nil {
+			args = append([]string{"-progress", "pipe:1", "-nostats"}, args...)
+		}
+		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 		cmd.Stderr = &stderr
+		if report != nil {
+			cmd.Stdout = &ffmpegProgressWriter{duration: duration, report: report, highest: 5}
+		}
 		return cmd.Run()
 	}
 	err = run()
@@ -150,6 +170,14 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 		return fmt.Errorf("FFmpeg conversion failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	log.Printf("[class] HLS processing mode=%s elapsed=%s", plan.mode(), time.Since(started).Round(time.Millisecond))
+	if report != nil {
+		report(90, "storing")
+		ctx = videostorage.WithPublishProgress(ctx, func(done, total int) {
+			if total > 0 {
+				report(90+9*done/total, "storing")
+			}
+		})
+	}
 	if store, ok := h.videoStore.(videostorage.HLSAssets); ok {
 		return store.PublishHLS(ctx, object, dir)
 	}

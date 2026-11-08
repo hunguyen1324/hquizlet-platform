@@ -2,6 +2,7 @@
 package http
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,7 @@ type Handler struct {
 	videoSecret   []byte
 	hlsSecret     []byte
 	videoMaxBytes int64
+	videoProgress func(context.Context, int64, int, string)
 }
 
 // WithDashboard wires the class dashboard service (GET /v1/classes/{id}/dashboard).
@@ -56,11 +58,12 @@ func New(
 	db *sql.DB,
 ) *Handler {
 	return &Handler{
-		classes:   classes,
-		members:   members,
-		studySets: studySets,
-		activity:  activity,
-		db:        db,
+		classes:       classes,
+		members:       members,
+		studySets:     studySets,
+		activity:      activity,
+		db:            db,
+		videoProgress: databaseVideoProgress(db),
 	}
 }
 

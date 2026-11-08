@@ -50,18 +50,24 @@ func (h *Handler) processNextVideo(parent context.Context) (bool, error) {
 	defer tx.Rollback()
 	var id int64
 	var source, output string
-	err = tx.QueryRowContext(ctx, `SELECT id,storage_key,hls_output_key FROM class_videos WHERE processing_state='processing' AND hls_output_key IS NOT NULL ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id, &source, &output)
+	// NO KEY UPDATE still excludes competing workers/deletion, while allowing
+	// the separate progress writer's foreign-key KEY SHARE check to proceed.
+	err = tx.QueryRowContext(ctx, `SELECT id,storage_key,hls_output_key FROM class_videos WHERE processing_state='processing' AND hls_output_key IS NOT NULL ORDER BY id FOR NO KEY UPDATE SKIP LOCKED LIMIT 1`).Scan(&id, &source, &output)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
+	report := h.videoProgressReporter(ctx, id)
+	if report != nil {
+		report(0, "preparing")
+	}
 	f, conversionErr := h.videoStore.Open(ctx, source)
 	if conversionErr == nil {
 		// Release the SFTP source connection after local spooling, before Put opens
 		// another connection; works even when VIDEO_SFTP_MAX_CONNECTIONS=1.
-		conversionErr = h.putHLS(ctx, output, closeOnEOF{f})
+		conversionErr = h.putHLSWithProgress(ctx, output, closeOnEOF{f}, report)
 		f.Close()
 	}
 	if parent.Err() != nil {

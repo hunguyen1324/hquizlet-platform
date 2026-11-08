@@ -25,7 +25,7 @@ func TestBackgroundVideoPublishAndFailure(t *testing.T) {
 				store.putErr = errors.New("SFTP unavailable")
 			}
 			mock.ExpectBegin()
-			mock.ExpectQuery("SELECT id,storage_key,hls_output_key.*FOR UPDATE SKIP LOCKED").WillReturnRows(sqlmock.NewRows([]string{"id", "storage_key", "hls_output_key"}).AddRow(3, source, output))
+			mock.ExpectQuery("SELECT id,storage_key,hls_output_key.*FOR NO KEY UPDATE SKIP LOCKED").WillReturnRows(sqlmock.NewRows([]string{"id", "storage_key", "hls_output_key"}).AddRow(3, source, output))
 			if tc.fail {
 				mock.ExpectExec("UPDATE class_videos SET processing_state='failed'").WithArgs(int64(3)).WillReturnResult(sqlmock.NewResult(0, 1))
 			} else {

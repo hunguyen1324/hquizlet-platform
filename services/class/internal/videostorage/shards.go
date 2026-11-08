@@ -244,6 +244,7 @@ func (s *Sharded) PublishHLS(ctx context.Context, key, dir string) error {
 			return fmt.Errorf("store HLS segment %s: %w", name, last)
 		}
 		m.Assets[name] = shardAsset{Node: chosen, Size: int64(len(data)), SHA256: hex.EncodeToString(sum[:])}
+		reportPublishProgress(ctx, i+1, len(names))
 	}
 	raw, err := json.Marshal(m)
 	if err != nil {

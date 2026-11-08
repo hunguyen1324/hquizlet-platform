@@ -54,3 +54,30 @@ upload table or staged files until pending sessions have been inspected.
 
 Logs include upload ID, total bytes and committed bytes for each chunk. A completed
 upload is not yet playable until `processingState` becomes `ready`.
+
+## Processing percentage
+
+The video list includes `processingPercent` (number or null) and
+`processingStage` (`queued`, `preparing`, `encoding`, `storing`, `ready`,
+`failed`). The UI refreshes the list every five seconds while jobs are pending.
+Upload progress remains separate from server processing progress.
+
+Progress is an estimate of the full pipeline: preparing is 0%, FFmpeg media
+output time maps to 5–90%, and successfully stored/verified HLS segments map
+to 90–99%. Only a committed `ready` video reports 100%. No wall-clock timer
+invents progress. If ffprobe cannot determine duration, encoding reports null
+and the UI uses an indeterminate bar until storage starts.
+
+Migration `020_video_processing_progress.up.sql` stores progress separately
+from the video job row. The worker uses `FOR NO KEY UPDATE SKIP LOCKED`, which
+still excludes competing workers/deletion while permitting the progress row's
+foreign-key check. Updates commit at most every two seconds within a phase;
+phase changes commit immediately. The main job transaction still controls
+publication. Deleting a video cascades progress cleanup. Restarting a worker
+starts the job again and resets its progress to preparing; the percentage does
+not imply that an FFmpeg job can resume from that point.
+
+Deploy the updated Class service (migration runs automatically), then publish
+the updated frontend assets. The workers.dev frontend uses the Worker ASSETS
+binding; publishing only the Nginx image does not publish that asset bundle.
+The schema addition remains compatible with the previous Class image.

@@ -3,6 +3,7 @@ import { PrivateVideoPlayer } from "./PrivateVideoPlayer";
 import { classVideoApi, type ClassVideo, type ClassVideoInput } from "../../lib/api";
 import type { ClassMember } from "../../types";
 import { useAuth } from "../auth/AuthContext";
+import { VideoProcessingProgress } from "./VideoProcessingProgress";
 
 const emptyInput: ClassVideoInput = { title: "", url: "", audience: "all", viewerIds: [] };
 
@@ -106,7 +107,7 @@ export function ClassVideos({ classId, members, canManage }: { classId: number; 
             setPlaybackURL(url); setPlaying(allowed);
           } catch (err) { setError(err instanceof Error ? err.message : "Không mở được video"); }
         }}><span className="class-video-play" aria-hidden="true">▶</span><span><strong>{video.title}</strong><small>{video.source === "sftp" ? "Video riêng tư" : "YouTube"}</small></span></button>
-        {video.processingState === "processing" && <span role="status">Đang xử lý và mã hóa video...</span>}
+        {video.processingState === "processing" && <VideoProcessingProgress video={video} />}
         {video.processingState === "failed" && <span role="status">Xử lý thất bại. Hãy xóa và tải lại video.</span>}
         {canManage && <>
           <span className="class-audience-badge">{video.audience === "all" ? "Cả nhóm" : `${video.viewerIds.length} người được chọn`}</span>
