@@ -82,9 +82,13 @@ thay ZIP bằng manifest bằng POSIX rename nguyên tử. Nếu publish chưa t
 công, ZIP cũ vẫn còn nguyên. Nếu backup cũ đã tồn tại do lần thử trước thất
 bại, dùng thư mục backup mới; không ghi đè bản backup một cách im lặng.
 
-Image triển khai: hquizlet-class:shards-20261108-v1.
-CLASS_IMAGE đang ghim image này. Khi CI đã build đủ mã mới, chỉ bỏ override
-sau khi xác nhận registry image hỗ trợ manifest phân tán và migration tool.
+Image triển khai ban đầu: hquizlet-class:shards-20261108-v1.
+Đã bỏ CLASS_IMAGE khỏi .env server sau khi xác minh image GHCR của commit
+22bbf22ee845f09bdac5096c63b7a7dff1feb302 có mã HLS và migration tool.
+Khi deploy có IMAGE_TAG tường minh, setup-nat-mini.sh xóa override CLASS_IMAGE
+trong môi trường tiến trình để Class dùng image registry cùng commit với
+các service khác. Deploy thủ công không truyền tag vẫn giữ override nếu có.
+Không pull image local từ Docker Hub. Cấu hình bốn node và service key giữ nguyên.
 Release/backup cấu hình riêng tư:
 /opt/hquizlet/releases/hls-shards-20261108-v1/
 
