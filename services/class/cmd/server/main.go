@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
 	"log"
 	"net/http"
@@ -71,7 +72,22 @@ func main() {
 		if err != nil {
 			log.Fatalf("video storage configuration: %v", err)
 		}
-		h.ConfigureVideos(store, cfg.VideoTicketSecret, cfg.VideoMaxBytes)
+		var videoStore videostorage.Store = store
+		if file := os.Getenv("VIDEO_HLS_NODES_FILE"); file != "" {
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				log.Fatalf("read HLS nodes: %v", err)
+			}
+			var nodes []videostorage.NodeConfig
+			if err := json.Unmarshal(raw, &nodes); err != nil {
+				log.Fatalf("HLS nodes JSON: %v", err)
+			}
+			videoStore, err = videostorage.NewSharded(store, nodes)
+			if err != nil {
+				log.Fatalf("HLS shards: %v", err)
+			}
+		}
+		h.ConfigureVideos(videoStore, cfg.VideoTicketSecret, cfg.VideoMaxBytes)
 		if secret := os.Getenv("VIDEO_HLS_MASTER_KEY"); secret != "" {
 			if err := h.ConfigureHLS(secret); err != nil {
 				log.Fatal(err)

@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/videostorage"
 )
 
 const hlsContentType = "application/vnd.apple.mpegurl"
@@ -148,6 +150,9 @@ func (h *Handler) putHLS(ctx context.Context, object string, input io.Reader) er
 		return fmt.Errorf("FFmpeg conversion failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	log.Printf("[class] HLS processing mode=%s elapsed=%s", plan.mode(), time.Since(started).Round(time.Millisecond))
+	if store, ok := h.videoStore.(videostorage.HLSAssets); ok {
+		return store.PublishHLS(ctx, object, dir)
+	}
 	bundle, err := os.OpenFile(filepath.Join(dir, "bundle"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
@@ -301,6 +306,32 @@ func (h *Handler) serveHLS(w http.ResponseWriter, r *http.Request) {
 	if asset != "index.m3u8" && !hlsSegmentName.MatchString(asset) {
 		WriteError(w, 400, "Invalid asset")
 		return
+	}
+	if store, ok := h.videoStore.(videostorage.HLSAssets); ok {
+		reader, assetErr := store.OpenHLSAsset(r.Context(), object, asset)
+		if assetErr == nil {
+			defer reader.Close()
+			if asset == "index.m3u8" {
+				raw, readErr := io.ReadAll(io.LimitReader(reader, 1024*1024))
+				playlist, rewriteErr := rewriteHLS(string(raw), r.URL.Query().Get("ticket"))
+				if readErr != nil || rewriteErr != nil {
+					WriteError(w, 502, "Invalid playlist")
+					return
+				}
+				w.Header().Set("Content-Type", hlsContentType)
+				io.WriteString(w, playlist)
+			} else {
+				w.Header().Set("Content-Type", "video/mp2t")
+				w.Header().Set("X-Accel-Buffering", "no")
+				io.Copy(w, reader)
+			}
+			return
+		}
+		if !errors.Is(assetErr, videostorage.ErrLegacyBundle) {
+			log.Printf("[class] HLS shard read failed: %v", assetErr)
+			WriteError(w, 502, "Không đọc được đoạn video từ máy lưu trữ")
+			return
+		}
 	}
 	f, err := h.videoStore.Open(r.Context(), object)
 	if err != nil {

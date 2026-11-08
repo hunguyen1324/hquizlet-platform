@@ -1,0 +1,50 @@
+[
+  {
+    "ID": "video-1",
+    "Config": {
+      "Host": "2001:470:24:849::85",
+      "Port": 22,
+      "User": "hqsegments",
+      "Root": "/segments",
+      "HostFingerprint": "SHA256:iLJ9Jc0zYhCb0Oqkr+RW7gEFrCRbNvTDFsXadsEPsnI",
+      "PrivateKeyFile": "/run/video-secrets/shards-key",
+      "MaxConnections": 4
+    }
+  },
+  {
+    "ID": "video-2",
+    "Config": {
+      "Host": "2402:800:61ca:921b:be24:11ff:feca:b58c",
+      "Port": 22,
+      "User": "hqsegments",
+      "Root": "/segments",
+      "HostFingerprint": "SHA256:wpv0bRGI5DByKFSSUX0vhyWtRx4z2f7nlhAP9VOwXW4",
+      "PrivateKeyFile": "/run/video-secrets/shards-key",
+      "MaxConnections": 4
+    }
+  },
+  {
+    "ID": "video-3",
+    "Config": {
+      "Host": "2402:800:61ca:921b:be24:11ff:fe8b:edea",
+      "Port": 22,
+      "User": "hqsegments",
+      "Root": "/segments",
+      "HostFingerprint": "SHA256:JTrUHNAf6a59CeJrmeRon2wiP2bftx46ZNrZRlmlXlM",
+      "PrivateKeyFile": "/run/video-secrets/shards-key",
+      "MaxConnections": 4
+    }
+  },
+  {
+    "ID": "video-4",
+    "Config": {
+      "Host": "2402:800:61ca:921b:be24:11ff:fec7:eca7",
+      "Port": 22,
+      "User": "hqsegments",
+      "Root": "/segments",
+      "HostFingerprint": "SHA256:64Wid8Aq0OpZr0lAQVlwYm1v/Gj5OpoztA4bXLn7OJg",
+      "PrivateKeyFile": "/run/video-secrets/shards-key",
+      "MaxConnections": 4
+    }
+  }
+]

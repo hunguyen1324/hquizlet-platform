@@ -33,6 +33,7 @@ type Store interface {
 
 type Config struct {
 	Host, User, Root, HostFingerprint      string
+	HostKeyAlgorithm                       string
 	Port                                   int
 	Password, PasswordFile, PrivateKeyFile string
 	MaxConnections                         int
@@ -92,7 +93,7 @@ func New(cfg Config) (*SFTP, error) {
 	if cfg.MaxConnections < 1 || cfg.MaxConnections > 32 {
 		return nil, errors.New("VIDEO_SFTP_MAX_CONNECTIONS must be between 1 and 32")
 	}
-	return &SFTP{cfg: cfg, slots: make(chan struct{}, cfg.MaxConnections), sshConfig: &ssh.ClientConfig{
+	sshConfig := &ssh.ClientConfig{
 		User: cfg.User, Auth: auth, Timeout: 10 * time.Second,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			if subtle.ConstantTimeCompare([]byte(ssh.FingerprintSHA256(key)), []byte(cfg.HostFingerprint)) != 1 {
@@ -100,7 +101,11 @@ func New(cfg Config) (*SFTP, error) {
 			}
 			return nil
 		},
-	}}, nil
+	}
+	if cfg.HostKeyAlgorithm != "" {
+		sshConfig.HostKeyAlgorithms = []string{cfg.HostKeyAlgorithm}
+	}
+	return &SFTP{cfg: cfg, slots: make(chan struct{}, cfg.MaxConnections), sshConfig: sshConfig}, nil
 }
 
 var keyPattern = regexp.MustCompile(`^[a-f0-9]{32}\.(mp4|webm)$`)
@@ -170,7 +175,7 @@ func (s *SFTP) Put(ctx context.Context, key string, src io.Reader) error {
 		c.Remove(name + ".part")
 		return errors.Join(copyErr, closeErr)
 	}
-	if err := c.Rename(name+".part", name); err != nil {
+	if err := c.PosixRename(name+".part", name); err != nil {
 		c.Remove(name + ".part")
 		return err
 	}

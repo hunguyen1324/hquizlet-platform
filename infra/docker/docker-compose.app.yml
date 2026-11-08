@@ -150,6 +150,7 @@ services:
       VIDEO_SFTP_MAX_CONNECTIONS: "${VIDEO_SFTP_MAX_CONNECTIONS:-4}"
       VIDEO_TICKET_SECRET: "${VIDEO_TICKET_SECRET:-}"
       VIDEO_HLS_MASTER_KEY: "${VIDEO_HLS_MASTER_KEY:-}"
+      VIDEO_HLS_NODES_FILE: "${VIDEO_HLS_NODES_FILE:-}"
       VIDEO_MAX_UPLOAD_MB: "${VIDEO_MAX_UPLOAD_MB:-1024}"
     volumes:
       - ./video-secrets:/run/video-secrets:ro

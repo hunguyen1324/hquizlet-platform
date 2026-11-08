@@ -24,12 +24,14 @@ RUN if [ -d "./cmd/server" ]; then \
       go build -o /out/service .; \
     fi
 
+RUN if [ "$SERVICE" = "class" ]; then go build -o /out/shard-migrate ./cmd/shard-migrate; fi
+
 FROM alpine:3.20
 ARG SERVICE
 RUN if [ "$SERVICE" = "class" ]; then apk add --no-cache ffmpeg; fi
 LABEL org.opencontainers.image.source="https://github.com/hunguyen1324/hquizlet-platform"
 WORKDIR /app
-COPY --from=build /out/service /app/service
+COPY --from=build /out/ /app/
 
 EXPOSE 8080 8081 8082 8083 8084 8085
 CMD ["/app/service"]

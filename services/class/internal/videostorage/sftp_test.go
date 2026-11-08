@@ -2,7 +2,9 @@ package videostorage
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"io"
 	"net"
@@ -29,6 +31,15 @@ func testSFTPServer(t *testing.T) Config {
 	}
 	cfg := &ssh.ServerConfig{PasswordCallback: func(c ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) { return nil, nil }}
 	cfg.AddHostKey(signer)
+	other, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherSigner, err := ssh.NewSignerFromKey(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.AddHostKey(otherSigner)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +90,7 @@ func testSFTPServer(t *testing.T) Config {
 	}()
 	_, port, _ := net.SplitHostPort(l.Addr().String())
 	p, _ := strconv.Atoi(port)
-	return Config{Host: "127.0.0.1", Port: p, User: "test", Root: "/private-videos", HostFingerprint: ssh.FingerprintSHA256(signer.PublicKey()), Password: "test", MaxConnections: 2}
+	return Config{Host: "127.0.0.1", Port: p, User: "test", Root: "/private-videos", HostFingerprint: ssh.FingerprintSHA256(signer.PublicKey()), HostKeyAlgorithm: "ssh-ed25519", Password: "test", MaxConnections: 2}
 }
 
 func TestSFTPRoundTripAndHostPinning(t *testing.T) {
