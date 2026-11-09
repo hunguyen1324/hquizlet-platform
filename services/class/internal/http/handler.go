@@ -200,6 +200,10 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, 200, map[string]any{"actions": actions, "platformRoles": p.PlatformRoles, "legacyRole": p.LegacyRole, "classId": classID})
 		return
 	}
+	if len(parts) >= 2 && parts[1] == "documents" {
+		h.documentRouter(w, r, classID, parts[2:])
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "videos" {
 		h.videoRouter(w, r, classID, parts[2:])
 		return

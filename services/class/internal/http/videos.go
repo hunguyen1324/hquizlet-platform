@@ -13,6 +13,7 @@ import (
 )
 
 type classVideo struct {
+	Category          string  `json:"category"`
 	ID                int64   `json:"id"`
 	Title             string  `json:"title"`
 	YouTubeID         string  `json:"youtubeId"`
@@ -93,6 +94,41 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		h.privateVideoPlayback(w, r, classID, id, uid, staff)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "category" && r.Method == http.MethodPut {
+		if !staff {
+			writeServiceError(w, r, classservice.ErrForbidden)
+			return
+		}
+		id, e := strconv.ParseInt(parts[0], 10, 64)
+		var in struct {
+			Category string `json:"category"`
+		}
+		if e != nil || id <= 0 || json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in) != nil {
+			WriteError(w, 400, "invalid category request")
+			return
+		}
+		in.Category = strings.TrimSpace(in.Category)
+		if len([]rune(in.Category)) > 100 {
+			WriteError(w, 422, "Chủ đề tối đa 100 ký tự")
+			return
+		}
+		result, e := h.db.ExecContext(r.Context(), `UPDATE class_videos SET category=$1 WHERE class_id=$2 AND id=$3`, in.Category, classID, id)
+		if e != nil {
+			writeServiceError(w, r, e)
+			return
+		}
+		n, e := result.RowsAffected()
+		if e != nil {
+			writeServiceError(w, r, e)
+			return
+		}
+		if n == 0 {
+			WriteError(w, 404, "video not found")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if len(parts) > 1 {
 		WriteError(w, 404, "not found")
 		return
@@ -107,7 +143,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 	}
 	if r.Method == http.MethodGet && id == 0 {
 		viewer, _ := json.Marshal([]int64{uid})
-		rows, err := h.db.QueryContext(r.Context(), `SELECT v.id,v.title,COALESCE(v.youtube_id,''),v.audience,v.viewer_ids,CASE WHEN v.storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(v.size_bytes,0),v.processing_state,CASE WHEN v.processing_state='ready' THEN 100 WHEN p.video_id IS NULL THEN 0 ELSE p.percent END,CASE WHEN v.processing_state<>'processing' THEN v.processing_state ELSE COALESCE(p.stage,'queued') END FROM class_videos v LEFT JOIN class_video_processing_progress p ON p.video_id=v.id WHERE v.class_id=$1 AND ($2 OR v.audience='all' OR v.viewer_ids @> $3::jsonb) ORDER BY v.created_at DESC,v.id DESC`, classID, staff, string(viewer))
+		rows, err := h.db.QueryContext(r.Context(), `SELECT v.id,v.title,COALESCE(v.youtube_id,''),v.audience,v.viewer_ids,CASE WHEN v.storage_key IS NULL THEN 'youtube' ELSE 'sftp' END,COALESCE(v.size_bytes,0),v.category,v.processing_state,CASE WHEN v.processing_state='ready' THEN 100 WHEN p.video_id IS NULL THEN 0 ELSE p.percent END,CASE WHEN v.processing_state<>'processing' THEN v.processing_state ELSE COALESCE(p.stage,'queued') END FROM class_videos v LEFT JOIN class_video_processing_progress p ON p.video_id=v.id WHERE v.class_id=$1 AND ($2 OR v.audience='all' OR v.viewer_ids @> $3::jsonb) ORDER BY v.created_at DESC,v.id DESC`, classID, staff, string(viewer))
 		if err != nil {
 			writeServiceError(w, r, err)
 			return
@@ -118,7 +154,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 			v := classVideo{}
 			var raw []byte
 			var percent sql.NullInt64
-			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes, &v.ProcessingState, &percent, &v.ProcessingStage); err != nil {
+			if err := rows.Scan(&v.ID, &v.Title, &v.YouTubeID, &v.Audience, &raw, &v.Source, &v.SizeBytes, &v.Category, &v.ProcessingState, &percent, &v.ProcessingStage); err != nil {
 				writeServiceError(w, r, err)
 				return
 			}

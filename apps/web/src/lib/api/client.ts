@@ -242,9 +242,10 @@ export const classStudySetApi = {
   remove: (token: string, classId: number, studySetId: number): Promise<void> => apiFetch(`/v1/classes/${classId}/study-sets/${studySetId}`, token, { method: "DELETE" }),
 };
 
-export type ClassVideo = { id: number; title: string; youtubeId: string; source?: "youtube" | "sftp"; sizeBytes?: number; processingState?: "ready" | "processing" | "failed"; processingPercent?: number | null; processingStage?: "queued" | "preparing" | "encoding" | "storing" | "ready" | "failed"; audience: "all" | "selected"; viewerIds: number[] };
+export type ClassVideo = { category?: string; id: number; title: string; youtubeId: string; source?: "youtube" | "sftp"; sizeBytes?: number; processingState?: "ready" | "processing" | "failed"; processingPercent?: number | null; processingStage?: "queued" | "preparing" | "encoding" | "storing" | "ready" | "failed"; audience: "all" | "selected"; viewerIds: number[] };
 export type ClassVideoInput = { title: string; url: string; audience: "all" | "selected"; viewerIds: number[] };
 export const classVideoApi = {
+  setCategory: (token: string, classId: number, id: number, category: string): Promise<void> => apiFetch(`/v1/classes/${classId}/videos/${id}/category`, token, { method: "PUT", body: JSON.stringify({ category }) }),
   upload: async (token: string, classId: number, input: ClassVideoInput, file: File, onProgress?: (percent: number) => void): Promise<ClassVideo> => {
     if (file.size <= 0 || file.size > 1024 * 1024 * 1024) throw new Error("Video phải có dung lượng từ 1 byte đến 1 GiB.");
     const contentType = /\.webm$/i.test(file.name) ? "video/webm" : /\.mp4$/i.test(file.name) ? "video/mp4" : "";
@@ -497,3 +498,21 @@ export type { ActivityFeedResponse,
   StudySet,
   User,
 } from "../../types";
+
+export type ClassDocument = { id: number; name: string; contentType: string; sizeBytes: number; createdAt: string };
+export const classDocumentApi = {
+  list: (token: string, classId: number): Promise<ClassDocument[]> => apiFetch(`/v1/classes/${classId}/documents`, token),
+  upload: (token: string, classId: number, file: File): Promise<ClassDocument> => {
+    if (!/\.(pdf|docx?|pptx?|xlsx?)$/i.test(file.name)) return Promise.reject(new Error("Chỉ hỗ trợ PDF, Word, PowerPoint và Excel."));
+    if (!file.size || file.size > 20 * 1024 * 1024) return Promise.reject(new Error("Tài liệu phải có dung lượng từ 1 byte đến 20 MiB."));
+    return apiFetch(`/v1/classes/${classId}/documents`, token, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file }, { name: file.name });
+  },
+  remove: (token: string, classId: number, id: number): Promise<void> => apiFetch(`/v1/classes/${classId}/documents/${id}`, token, { method: "DELETE" }),
+  download: async (token: string, classId: number, doc: ClassDocument): Promise<void> => {
+    const res = await fetch(`${gatewayUrl}/v1/classes/${classId}/documents/${doc.id}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) { const body = await res.json().catch(() => ({})); throw new ApiError(res.status, body.message ?? body.error ?? "Không tải được tài liệu."); }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a"); a.href = url; a.download = doc.name; document.body.appendChild(a); a.click(); a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+};

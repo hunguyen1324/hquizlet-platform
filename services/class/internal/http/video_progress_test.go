@@ -60,7 +60,7 @@ func TestDatabaseVideoProgressCanPersistUnknownDuration(t *testing.T) {
 
 func TestVideoListIncludesProgressWithoutExposingOtherViewers(t *testing.T) {
 	h, mock, _ := privateTestHandler(t, "student")
-	mock.ExpectQuery("SELECT v.id,v.title.*LEFT JOIN class_video_processing_progress").WithArgs(int64(1), false, "[2]").WillReturnRows(sqlmock.NewRows([]string{"id", "title", "youtube_id", "audience", "viewer_ids", "source", "size_bytes", "processing_state", "percent", "stage"}).AddRow(3, "Lesson", "", "selected", []byte("[2,4]"), "sftp", 100, "processing", 47, "encoding").AddRow(4, "Unknown duration", "", "all", []byte("[]"), "sftp", 100, "processing", nil, "encoding").AddRow(5, "Ready", "", "all", []byte("[]"), "sftp", 100, "ready", 100, "ready"))
+	mock.ExpectQuery("SELECT v.id,v.title.*LEFT JOIN class_video_processing_progress").WithArgs(int64(1), false, "[2]").WillReturnRows(sqlmock.NewRows([]string{"id", "title", "youtube_id", "audience", "viewer_ids", "source", "size_bytes", "category", "processing_state", "percent", "stage"}).AddRow(3, "Lesson", "", "selected", []byte("[2,4]"), "sftp", 100, "", "processing", 47, "encoding").AddRow(4, "Unknown duration", "", "all", []byte("[]"), "sftp", 100, "", "processing", nil, "encoding").AddRow(5, "Ready", "", "all", []byte("[]"), "sftp", 100, "", "ready", 100, "ready"))
 	r := httptest.NewRequest("GET", "/v1/classes/1/videos", nil)
 	r.Header.Set("X-User-ID", "2")
 	w := httptest.NewRecorder()

@@ -2,6 +2,7 @@
 // Class detail page with Study Sets and Members tabs.
 
 import { useEffect, useState } from "react";
+import { ClassDocuments } from "./ClassDocuments";
 import { ClassVideos } from "./ClassVideos";
 import { useAuth } from "../auth/AuthContext";
 import { classApi, memberApi, classStudySetApi } from "../../lib/api";
@@ -27,14 +28,14 @@ type Props = {
   onOpenDashboard?: () => void;
 };
 
-type Tab = "study-sets" | "members" | "videos";
+type Tab = "study-sets" | "members" | "videos" | "upload" | "permissions" | "documents";
 
 export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, onOpenSet, onOpenDashboard }: Props) {
   const { token } = useAuth();
   const [cls, setCls] = useState<ClassDetailType | null>(null);
   const [members, setMembers] = useState<ClassMember[]>([]);
   const [studySets, setStudySets] = useState<ClassStudySet[]>([]);
-  const [tab, setTab] = useState<Tab>("study-sets");
+  const [tab, setTab] = useState<Tab>("videos");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,7 +84,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
           <div className="class-meta">
           <span className="role-badge" data-role={cls.myRole}>{roleLabels[cls.myRole]}</span>
           <span>{cls.memberCount} thành viên</span>
-          <span>{cls.studySetCount} tài liệu</span>
+          <span>{cls.studySetCount} học phần</span>
           {isOwner && <button className="group-code" onClick={() => void navigator.clipboard?.writeText(cls.inviteCode)} title="Sao chép mã mời">⌁ {cls.inviteCode}</button>}
           </div>
         </div>
@@ -112,17 +113,20 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
       <div className="class-tabs" aria-label="Nội dung nhóm">
         <button aria-pressed={tab === "videos"} className={tab === "videos" ? "active" : ""} onClick={() => setTab("videos")}><TabIcon kind="videos" />Video</button>
         <button aria-pressed={tab === "study-sets"} className={tab === "study-sets" ? "active" : ""} onClick={() => setTab("study-sets")}>
-          <TabIcon kind="study-sets" />Tài liệu <span className="class-tab-count">{studySets.length}</span>
+          <TabIcon kind="study-sets" />Học phần <span className="class-tab-count">{studySets.length}</span>
         </button>
         <button aria-pressed={tab === "members"} className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>
           <TabIcon kind="members" />Thành viên <span className="class-tab-count">{members.length}</span>
         </button>
+        <button aria-pressed={tab === "documents"} className={tab === "documents" ? "active" : ""} onClick={() => setTab("documents")}><TabIcon kind="study-sets" />Tài liệu</button>
+        {isTeacher && <><button aria-pressed={tab === "upload"} className={tab === "upload" ? "active" : ""} onClick={() => setTab("upload")}>↑ Tải video</button><button aria-pressed={tab === "permissions"} className={tab === "permissions" ? "active" : ""} onClick={() => setTab("permissions")}>⚙ Phân quyền</button></>}
       </div>
 
-      {tab === "videos" && <ClassVideos key={classId} classId={classId} members={members} canManage={isTeacher} />}
+      {(tab === "videos" || tab === "upload" || tab === "permissions") && <ClassVideos key={classId} classId={classId} members={members} canManage={isTeacher} mode={tab} />}
+      {tab === "documents" && <ClassDocuments key={classId} classId={classId} canManage={isTeacher} />}
       {tab === "study-sets" && (
         <div className="tab-content">
-          <div className="class-section-heading"><div><h2>Tài liệu học tập</h2><p>Tập hợp kiến thức, cùng nhau tiến bộ mỗi ngày.</p></div><span className="class-section-icon"><TabIcon kind="study-sets" /></span></div>
+          <div className="class-section-heading"><div><h2>Học phần của nhóm</h2><p>Tập hợp kiến thức, cùng nhau tiến bộ mỗi ngày.</p></div><span className="class-section-icon"><TabIcon kind="study-sets" /></span></div>
           {isTeacher && (
             <AddStudySetForm classId={classId} onAdded={loadData} />
           )}
