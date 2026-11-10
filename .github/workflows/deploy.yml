@@ -31,6 +31,12 @@ jobs:
   # ── 1. Test / lint (dùng lại target có sẵn trong Makefile) ────────────────
   test:
     runs-on: [self-hosted]
+    # This runner shares memory with the developer's Windows desktop. Avoid
+    # concurrent rustc/link.exe processes exhausting the Windows commit limit.
+    env:
+      CARGO_BUILD_JOBS: "1"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - name: Install frontend dependencies

@@ -1342,6 +1342,7 @@ components:
 paths:
   /v1/quiz-sessions:
     get:
+      operationId: getQuizSessions
       summary: List the authenticated user's quiz sessions
       tags: [quiz]
       security: [{ BearerAuth: [] }]
@@ -1375,6 +1376,7 @@ paths:
         '401': { description: Authentication required }
   /v1/quiz-sessions/{id}:
     delete:
+      operationId: deleteQuizSessionsById
       summary: Soft-delete an owned quiz session (idempotent)
       tags: [quiz]
       security: [{ BearerAuth: [] }]
@@ -1387,6 +1389,7 @@ paths:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postStudySetsByStudySetIdQuizGenerate
       tags: [quiz]
       summary: Generate a deterministic learning session
       security: [{ BearerAuth: [] }]
@@ -1413,6 +1416,7 @@ paths:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postStudySetsByStudySetIdQuizEvaluate
       tags: [quiz]
       summary: Evaluate answers using server-owned card data
       security: [{ BearerAuth: [] }]
@@ -1442,6 +1446,7 @@ paths:
 
   /v1/live-sessions:
     post:
+      operationId: postLiveSessions
       tags: [live-sessions]
       summary: Create a live quiz session (host only)
       security: [{ BearerAuth: [] }]
@@ -1461,6 +1466,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getLiveSessionsBySessionId
       tags: [live-sessions]
       summary: Get host state/detail for a live session
       security: [{ BearerAuth: [] }]
@@ -1488,6 +1494,7 @@ paths:
     parameters:
       - { in: path, name: code, required: true, schema: { type: string, pattern: '^[A-Z2-9]{6}$' } }
     post:
+      operationId: postLiveSessionsByCodeJoin
       tags: [live-join]
       summary: Join a live session by code (public, rate-limited)
       security: []
@@ -1509,6 +1516,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getLiveSessionsBySessionIdPlayerState
       tags: [live-player]
       summary: Player polling fallback for current state
       security: [{ ParticipantAuth: [] }]
@@ -1532,6 +1540,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getLiveSessionsBySessionIdEvents
       tags: [live-sessions]
       summary: SSE event stream (host or player scope)
       security: [{ BearerAuth: [] }, { ParticipantAuth: [] }]
@@ -1550,6 +1559,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postLiveSessionsBySessionIdStart
       tags: [live-sessions]
       summary: Start session and open first question (host only)
       security: [{ BearerAuth: [] }]
@@ -1565,6 +1575,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postLiveSessionsBySessionIdQuestionsCurrentClose
       tags: [live-sessions]
       summary: Close current question (host only, idempotent)
       security: [{ BearerAuth: [] }]
@@ -1580,6 +1591,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postLiveSessionsBySessionIdQuestionsNext
       tags: [live-sessions]
       summary: Open next question (host only)
       security: [{ BearerAuth: [] }]
@@ -1595,6 +1607,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postLiveSessionsBySessionIdAnswers
       tags: [live-player]
       summary: Submit answer for current question (player only, one per question)
       security: [{ ParticipantAuth: [] }]
@@ -1615,6 +1628,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getLiveSessionsBySessionIdLeaderboard
       tags: [live-leaderboard]
       summary: Current leaderboard (host or player)
       security: [{ BearerAuth: [] }, { ParticipantAuth: [] }]
@@ -1628,6 +1642,7 @@ paths:
     parameters:
       - { in: path, name: sessionId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postLiveSessionsBySessionIdEnd
       tags: [live-sessions]
       summary: End session (host only)
       security: [{ BearerAuth: [] }]
@@ -1645,6 +1660,7 @@ paths:
 
   /v1/classes:
     get:
+      operationId: getClasses
       tags: [classes]
       summary: List classes the current user is a member of
       security: [{ BearerAuth: [] }]
@@ -1658,6 +1674,7 @@ paths:
                 items: { $ref: '#/components/schemas/ClassSummary' }
         '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
+      operationId: postClasses
       tags: [classes]
       summary: Create a new class
       security: [{ BearerAuth: [] }]
@@ -1676,6 +1693,7 @@ paths:
     parameters:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getClassesByClassId
       tags: [classes]
       summary: Get class detail (member only)
       security: [{ BearerAuth: [] }]
@@ -1687,6 +1705,7 @@ paths:
         '403': { description: Not a member, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     put:
+      operationId: putClassesByClassId
       tags: [classes]
       summary: Update class (owner only)
       security: [{ BearerAuth: [] }]
@@ -1701,6 +1720,7 @@ paths:
         '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
+      operationId: deleteClassesByClassId
       tags: [classes]
       summary: Delete class (owner only)
       security: [{ BearerAuth: [] }]
@@ -1713,6 +1733,7 @@ paths:
     parameters:
       - { in: path, name: code, required: true, schema: { type: string, pattern: '^[A-Z2-9]{8}$' } }
     post:
+      operationId: postClassesByCodeJoin
       tags: [classes]
       summary: Join class by invite code
       security: [{ BearerAuth: [] }]
@@ -1729,6 +1750,7 @@ paths:
     parameters:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postClassesByClassIdInviteCodeReset
       tags: [classes]
       summary: Reset invite code (owner only)
       security: [{ BearerAuth: [] }]
@@ -1748,6 +1770,7 @@ paths:
     parameters:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getClassesByClassIdMembers
       tags: [class-members]
       summary: List class members (member only)
       security: [{ BearerAuth: [] }]
@@ -1762,6 +1785,7 @@ paths:
         '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Not a member, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
+      operationId: postClassesByClassIdMembers
       tags: [class-members]
       summary: Add member manually (owner/teacher only)
       security: [{ BearerAuth: [] }]
@@ -1780,6 +1804,7 @@ paths:
     parameters:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     delete:
+      operationId: deleteClassesByClassIdMembersMe
       tags: [class-members]
       summary: Leave class (non-owner only)
       security: [{ BearerAuth: [] }]
@@ -1793,6 +1818,7 @@ paths:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
       - { in: path, name: userId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     put:
+      operationId: putClassesByClassIdMembersByUserId
       tags: [class-members]
       summary: Update member role (owner only)
       security: [{ BearerAuth: [] }]
@@ -1804,6 +1830,7 @@ paths:
         '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
+      operationId: deleteClassesByClassIdMembersByUserId
       tags: [class-members]
       summary: Remove member (owner only)
       security: [{ BearerAuth: [] }]
@@ -1816,6 +1843,7 @@ paths:
     parameters:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getClassesByClassIdStudySets
       tags: [class-study-sets]
       summary: List class study sets (member only)
       security: [{ BearerAuth: [] }]
@@ -1830,6 +1858,7 @@ paths:
         '401': { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: Not a member, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
+      operationId: postClassesByClassIdStudySets
       tags: [class-study-sets]
       summary: Add study set to class (owner/teacher only)
       security: [{ BearerAuth: [] }]
@@ -1848,6 +1877,7 @@ paths:
       - { in: path, name: classId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     delete:
+      operationId: deleteClassesByClassIdStudySetsByStudySetId
       tags: [class-study-sets]
       summary: Remove study set from class (owner/teacher only)
       security: [{ BearerAuth: [] }]
@@ -1858,6 +1888,7 @@ paths:
 
   /v1/activity:
     get:
+      operationId: getActivity
       tags: [activity]
       summary: Get activity feed for current user
       security: [{ BearerAuth: [] }]
@@ -1874,6 +1905,7 @@ paths:
 
   /v1/files/presign:
     post:
+      operationId: postFilesPresign
       tags: [files]
       summary: Request a presigned URL for file upload
       security: [{ BearerAuth: [] }]
@@ -1904,6 +1936,7 @@ paths:
     parameters:
       - { in: path, name: fileId, required: true, schema: { type: string, format: uuid } }
     get:
+      operationId: getFilesByFileId
       tags: [files]
       summary: Get file metadata (owner only)
       security: [{ BearerAuth: [] }]
@@ -1917,6 +1950,7 @@ paths:
         '403': { description: Not owner }
         '404': { description: File not found }
     delete:
+      operationId: deleteFilesByFileId
       tags: [files]
       summary: Soft delete a file (owner only)
       security: [{ BearerAuth: [] }]
@@ -1930,6 +1964,7 @@ paths:
     parameters:
       - { in: path, name: fileId, required: true, schema: { type: string, format: uuid } }
     post:
+      operationId: postFilesByFileIdConfirm
       tags: [files]
       summary: Confirm upload and activate file metadata
       security: [{ BearerAuth: [] }]
@@ -1950,6 +1985,7 @@ paths:
 
   /v1/files:
     get:
+      operationId: getFiles
       tags: [files]
       summary: List user files with quota info
       security: [{ BearerAuth: [] }]
@@ -1970,6 +2006,7 @@ paths:
 
   /healthz:
     get:
+      operationId: getHealthz
       security: []
       tags: [health]
       responses:
@@ -1985,6 +2022,7 @@ paths:
 
   /healthz/services:
     get:
+      operationId: getHealthzServices
       security: []
       tags: [health]
       responses:
@@ -2006,6 +2044,7 @@ paths:
 
   /v1/auth/register:
     post:
+      operationId: postAuthRegister
       security: []
       tags: [auth]
       requestBody:
@@ -2028,6 +2067,7 @@ paths:
 
   /v1/auth/login:
     post:
+      operationId: postAuthLogin
       security: []
       tags: [auth]
       requestBody:
@@ -2046,27 +2086,34 @@ paths:
 
   /v1/auth/me:
     get:
+      operationId: getAuthMe
       tags: [auth]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Current auth state, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
 
   /v1/auth/logout:
     post:
+      operationId: postAuthLogout
       tags: [auth]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Logged out }
 
   /v1/auth/logout-all:
     post:
+      operationId: postAuthLogoutAll
       tags: [auth]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: All sessions revoked }
 
   /v1/auth/refresh:
     post:
+      operationId: postAuthRefresh
       tags: [auth]
       security: [{ BearerAuth: [] }]
       responses:
@@ -2075,11 +2122,14 @@ paths:
 
   /v1/auth/profile:
     get:
+      operationId: getAuthProfile
       tags: [auth]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
     patch:
+      operationId: patchAuthProfile
       tags: [auth]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2092,10 +2142,12 @@ paths:
                 name: { type: string }
                 image: { type: string }
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Updated profile, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
 
   /v1/study-sets:
     get:
+      operationId: getStudySets
       tags: [study-sets]
       security: [{ BearerAuth: [] }]
       parameters:
@@ -2104,8 +2156,10 @@ paths:
         - { in: query, name: page, schema: { type: integer, minimum: 1, default: 1 } }
         - { in: query, name: per_page, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Paginated study sets, content: { application/json: { schema: { $ref: '#/components/schemas/StudySetList' } } } }
     post:
+      operationId: postStudySets
       tags: [study-sets]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2119,12 +2173,14 @@ paths:
                 title: { type: string }
                 description: { type: string }
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/StudySet' } } } }
 
   /v1/study-sets/{id}:
     parameters:
       - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
     get:
+      operationId: getStudySetsById
       tags: [study-sets]
       security: [{ BearerAuth: [] }]
       responses:
@@ -2132,6 +2188,7 @@ paths:
         '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     put:
+      operationId: putStudySetsById
       tags: [study-sets]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2144,17 +2201,21 @@ paths:
                 title: { type: string }
                 description: { type: string }
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/StudySet' } } } }
     delete:
+      operationId: deleteStudySetsById
       tags: [study-sets]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Deleted }
 
   /v1/study-sets/{studySetId}/flashcards:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64 } }
     post:
+      operationId: postStudySetsByStudySetIdFlashcards
       tags: [flashcards]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2168,12 +2229,14 @@ paths:
                 term: { type: string }
                 definition: { type: string }
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Flashcard' } } } }
 
   /v1/study-sets/{studySetId}/flashcards/bulk:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64 } }
     post:
+      operationId: postStudySetsByStudySetIdFlashcardsBulk
       tags: [flashcards]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2182,12 +2245,14 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/BulkSaveFlashcardsRequest' }
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Bulk result, content: { application/json: { schema: { $ref: '#/components/schemas/BulkSaveResult' } } } }
 
   /v1/flashcards/{id}:
     parameters:
       - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
     put:
+      operationId: putFlashcardsById
       tags: [flashcards]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2204,27 +2269,34 @@ paths:
         '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
+      operationId: deleteFlashcardsById
       tags: [flashcards]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Deleted }
 
   /v1/flashcards/{id}/star:
     parameters:
       - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
     post:
+      operationId: postFlashcardsByIdStar
       tags: [flashcards]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Starred card, content: { application/json: { schema: { $ref: '#/components/schemas/Flashcard' } } } }
 
   /v1/folders:
     get:
+      operationId: getFolders
       tags: [folders]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Folders, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/FolderSummary' } } } } }
     post:
+      operationId: postFolders
       tags: [folders]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2241,11 +2313,14 @@ paths:
     parameters:
       - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
     get:
+      operationId: getFoldersById
       tags: [folders]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Folder detail, content: { application/json: { schema: { $ref: '#/components/schemas/FolderDetail' } } } }
     put:
+      operationId: putFoldersById
       tags: [folders]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2255,17 +2330,21 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateFolderRequest'
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/FolderSummary' } } } }
     delete:
+      operationId: deleteFoldersById
       tags: [folders]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Deleted }
 
   /v1/folders/{id}/study-sets:
     parameters:
       - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
     post:
+      operationId: postFoldersByIdStudySets
       tags: [folders]
       security: [{ BearerAuth: [] }]
       requestBody:
@@ -2275,6 +2354,7 @@ paths:
             schema:
               $ref: '#/components/schemas/AddStudySetToFolderRequest'
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Added }
 
   /v1/folders/{id}/study-sets/{studySetId}:
@@ -2282,15 +2362,18 @@ paths:
       - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64 } }
     delete:
+      operationId: deleteFoldersByIdStudySetsByStudySetId
       tags: [folders]
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200': { description: Removed }
 
   /v1/study-sets/{studySetId}/progress:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postStudySetsByStudySetIdProgress
       tags: [progress]
       summary: Save one completed learning session
       security: [{ BearerAuth: [] }]
@@ -2312,6 +2395,7 @@ paths:
         '404': { description: Study set or flashcard not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '409': { description: Idempotency conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     get:
+      operationId: getStudySetsByStudySetIdProgress
       tags: [progress]
       summary: Progress summary and paginated history
       security: [{ BearerAuth: [] }]
@@ -2328,6 +2412,7 @@ paths:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getStudySetsByStudySetIdProgressLatest
       tags: [progress]
       summary: Latest progress per learning mode
       security: [{ BearerAuth: [] }]
@@ -2344,6 +2429,7 @@ paths:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     get:
+      operationId: getStudySetsByStudySetIdQuizQuestions
       tags: [quiz-questions]
       summary: List quiz questions for a study set
       security: [{ BearerAuth: [] }]
@@ -2359,6 +2445,7 @@ paths:
         '403': { description: Study set is private and not owned by caller, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Study set not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     post:
+      operationId: postStudySetsByStudySetIdQuizQuestions
       tags: [quiz-questions]
       summary: Bulk save quiz questions (replaces all existing)
       security: [{ BearerAuth: [] }]
@@ -2373,6 +2460,7 @@ paths:
         '403': { description: Not owner, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '422': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
     delete:
+      operationId: deleteStudySetsByStudySetIdQuizQuestions
       tags: [quiz-questions]
       summary: Delete all quiz questions for a study set
       security: [{ BearerAuth: [] }]
@@ -2387,6 +2475,7 @@ paths:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postStudySetsByStudySetIdImportFlashcards
       tags: [import]
       summary: Import flashcards from Excel file (.xlsx)
       security: [{ BearerAuth: [] }]
@@ -2420,6 +2509,7 @@ paths:
     parameters:
       - { in: path, name: studySetId, required: true, schema: { type: integer, format: int64, minimum: 1 } }
     post:
+      operationId: postStudySetsByStudySetIdImportQuiz
       tags: [import]
       summary: Import quiz questions from Excel file (.xlsx)
       security: [{ BearerAuth: [] }]
@@ -2453,6 +2543,7 @@ paths:
 
   /v1/tts:
     get:
+      operationId: getTts
       tags: [tts]
       summary: Text-to-speech audio stream
       security: [{ BearerAuth: [] }]
@@ -2473,10 +2564,12 @@ paths:
 
   /v1/languages:
     get:
+      operationId: getLanguages
       tags: [languages]
       summary: List supported TTS languages
       security: [{ BearerAuth: [] }]
       responses:
+        '401': { description: Authentication required or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '200':
           description: Language list
           content:
@@ -2491,6 +2584,7 @@ paths:
     parameters:
       - { in: path, name: templateName, required: true, schema: { type: string }, description: 'Template file name' }
     get:
+      operationId: getTemplatesByTemplateName
       tags: [import]
       summary: Download an Excel template file (no auth required)
       security: []
