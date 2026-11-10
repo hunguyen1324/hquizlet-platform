@@ -13,7 +13,7 @@ import { StudyModes } from "./StudyModes";
 import { FlashcardListCard } from "./FlashcardListCard";
 import { FlashcardSearchBar } from "./FlashcardSearchBar";
 import { InlineFlashcardEditor } from "./InlineFlashcardEditor";
-import { ProtectedQuizPlayer } from "./ProtectedQuizPlayer";
+import { QuizDetailOverview } from "./QuizDetailOverview";
 import "./StudyDetail.css";
 
 type Props = {
@@ -26,7 +26,7 @@ type Props = {
   onManageSessions?: (setId: number) => void;
 };
 
-const INFINITE_PAGE_SIZE = 30; // thẻ mỗi lần load
+const CARD_PAGE_SIZE = 50;
 
 export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onManageSessions, resumeSessionId }: Props) {
   const { token } = useAuth();
@@ -41,22 +41,22 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
   const [folderDialogOpen, setFolderDialogOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  // Infinite scroll state — allCards accumulates pages
-  const [allCards, setAllCards] = React.useState<Flashcard[]>(set.flashcards ?? []);
+  // Cards accumulate only when the learner requests another page.
+  const [allCards, setAllCards] = React.useState<Flashcard[]>((set.flashcards ?? []).slice(0, CARD_PAGE_SIZE));
   const [cardPage, setCardPage] = React.useState(1);
   const [cardTotal, setCardTotal] = React.useState(set.flashcardCount ?? (set.flashcards?.length ?? 0));
   const [cardTotalPages, setCardTotalPages] = React.useState(
-    Math.max(1, Math.ceil((set.flashcardCount ?? (set.flashcards?.length ?? 0)) / INFINITE_PAGE_SIZE)),
+    Math.max(1, Math.ceil((set.flashcardCount ?? (set.flashcards?.length ?? 0)) / CARD_PAGE_SIZE)),
   );
   const [cardLoading, setCardLoading] = React.useState(false);
   const [cardError, setCardError] = React.useState("");
-  const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const cardRequest = React.useRef(0);
+  const cardLoadingRef = React.useRef(false);
   const hasMore = cardPage < cardTotalPages;
 
   // Search state
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  const observerRef = React.useRef<IntersectionObserver | null>(null);
 
   // Inline edit state
   const [editingCardId, setEditingCardId] = React.useState<number | null>(null);
@@ -65,50 +65,48 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [actionToast, setActionToast] = React.useState<string | null>(null);
 
-  // pagedCards alias — keep compat with rest of component
-  const pagedCards = allCards;
-
   const loadNextPage = React.useCallback(async (page: number, reset = false) => {
-    if (cardLoading) return;
+    if (cardLoadingRef.current) return;
+    cardLoadingRef.current = true;
+    const request = ++cardRequest.current;
     setCardLoading(true);
     setCardError("");
     try {
-      const result = await flashcardApi.listPaged(token, set.id, page, INFINITE_PAGE_SIZE);
+      const result = await flashcardApi.listPaged(token, set.id, page, CARD_PAGE_SIZE);
+      if (request !== cardRequest.current) return;
       setAllCards((prev) => reset ? result.items : [...prev, ...result.items.filter((r) => !prev.some((p) => p.id === r.id))]);
       setCardPage(result.page);
       setCardTotal(result.total);
       setCardTotalPages(result.totalPages);
     } catch (err) {
+      if (request !== cardRequest.current) return;
       setCardError(err instanceof Error ? err.message : "Không tải được thẻ.");
     } finally {
-      setCardLoading(false);
+      if (request === cardRequest.current) {
+        cardLoadingRef.current = false;
+        setCardLoading(false);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, set.id]);
 
-  // Initial load & reset on set/sort change
   React.useEffect(() => {
-    setAllCards([]);
+    cardRequest.current++;
+    cardLoadingRef.current = false;
+    setCardLoading(false);
+    setCardError("");
+    setSearchQuery("");
     setCardPage(1);
-    void loadNextPage(1, true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [set.id, sortOrder]);
-
-  // Infinite scroll observer
-  React.useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel || !hasMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !cardLoading && hasMore) {
-          void loadNextPage(cardPage + 1);
-        }
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasMore, cardPage, cardLoading, loadNextPage]);
+    const total = set.flashcardCount ?? set.flashcards?.length ?? 0;
+    setCardTotal(total);
+    setCardTotalPages(Math.max(1, Math.ceil(total / CARD_PAGE_SIZE)));
+    const initial = (set.flashcards ?? []).slice(0, CARD_PAGE_SIZE);
+    setAllCards(initial);
+    if (set.contentType !== "quiz" && set.contentType !== "grammar" && (set.flashcards === undefined || initial.length < Math.min(CARD_PAGE_SIZE, total))) {
+      void loadNextPage(1, true);
+    }
+    return () => { cardRequest.current++; cardLoadingRef.current = false; };
+  }, [set.id, token, loadNextPage]);
 
   React.useEffect(() => {
     if (!menuOpen) return;
@@ -246,7 +244,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
   }
 
   return (
-    <div className="sd-page">
+    <div className={`sd-page${set.contentType === "quiz" ? " sd-page--quiz" : ""}`}>
       {/* Toast notification */}
       {actionToast && (
         <div className="sd-toast" role="status" aria-live="polite">{actionToast}</div>
@@ -321,9 +319,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
 
       {isFlashcardSet && (
         <div className="sd-learning-wrapper" ref={learningRef}>
-          {/* Truyền allCards (đã infinite-scroll đầy đủ) và cardTotal thật từ server.
-              set.flashcards chỉ là initial payload bị giới hạn trang đầu — không dùng trực tiếp. */}
-          <LearningContainer set={set} mode={studyMode} cards={allCards} totalCount={cardTotal} />
+          {/* Use loaded pages and the server total for learning progress. */}
+          <LearningContainer set={set} mode={studyMode} cards={allCards} totalCount={cardTotal} onExit={() => setStudyMode("flashcards")} />
         </div>
       )}
 
@@ -350,6 +347,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
             </div>
           </div>
 
+          {cardLoading && allCards.length === 0 && <p role="status">Đang tải thẻ…</p>}
+
           {/* Search bar */}
           <FlashcardSearchBar
             value={searchQuery}
@@ -366,7 +365,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
           {cardError && (
             <div className="sd-empty">
               <p>{cardError}</p>
-              <button type="button" className="ghost-button" onClick={() => void loadNextPage(cardPage, true)}>Thử lại</button>
+              <button type="button" className="ghost-button" onClick={() => void loadNextPage(allCards.length ? cardPage + 1 : 1, !allCards.length)}>Thử lại</button>
             </div>
           )}
 
@@ -374,7 +373,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
             <div className="sd-empty"><p>Chưa có thẻ học nào.</p></div>
           )}
 
-          {!cardLoading && !cardError && (
+          {(allCards.length > 0 || !cardLoading) && (
             <div className="sd-fc-list">
               {filteredCards.map((card) => (
                 <div key={card.id} className="sd-fc-row-wrap">
@@ -418,9 +417,11 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
                 </div>
               )}
 
-              {/* Sentinel for infinite scroll */}
-              {cardPage < cardTotalPages && !cardLoading && (
-                <div ref={sentinelRef} style={{ height: "1px" }} />
+              {hasMore && (
+                <button type="button" className="sd-load-more" disabled={cardLoading}
+                  onClick={() => void loadNextPage(cardPage + 1)}>
+                  {cardLoading ? "Đang tải…" : "Hiển thị thêm 50 thẻ"}
+                </button>
               )}
 
               {searchQuery && filteredCards.length === 0 && (
@@ -459,7 +460,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
         </div>
       )}
 
-      {set.contentType === "quiz" && <ProtectedQuizPlayer key={`${set.id}:${resumeSessionId ?? ""}`} studySetId={set.id} resumeSessionId={resumeSessionId} onManageSessions={onManageSessions} />}
+      {set.contentType === "quiz" && <QuizDetailOverview key={`${set.id}:${resumeSessionId ?? ""}`} set={set} resumeSessionId={resumeSessionId} onManageSessions={onManageSessions} onEdit={onEdit} onSave={() => void openFolderDialog()} />}
 
       {folderDialogOpen && <div className="sd-modal-backdrop" role="presentation" onMouseDown={() => setFolderDialogOpen(false)}><section className="sd-folder-dialog" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><p className="eyebrow">Sắp xếp quiz</p><h2>Thêm vào thư mục</h2></div><button className="ghost-button" onClick={() => setFolderDialogOpen(false)}>×</button></header>{folders.length === 0 ? <p>Bạn chưa có thư mục. Hãy tạo thư mục từ thanh bên trước.</p> : <div className="sd-folder-options">{folders.map((folder) => <button key={folder.id} onClick={() => void addToFolder(folder.id)}><span>📁</span><div><strong>{folder.title}</strong><small>{folder.studySetCount} học phần</small></div><b>Thêm</b></button>)}</div>}</section></div>}
     </div>

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { PrivateVideoPlayer } from "./PrivateVideoPlayer";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+const PrivateVideoPlayer = lazy(() => import("./PrivateVideoPlayer").then(module => ({ default: module.PrivateVideoPlayer })));
+import { VideoWatchDialog } from "./VideoWatchDialog";
+import "./ClassVideos.css";
 import { classVideoApi, type ClassVideo, type ClassVideoInput } from "../../lib/api";
 import type { ClassMember } from "../../types";
 import { useAuth } from "../auth/AuthContext";
@@ -21,25 +23,28 @@ export function ClassVideos({ classId, members, canManage, mode = "videos" }: { 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const playerDialog = useRef<HTMLDialogElement>(null);
+  const playbackRequest = useRef(0);
+  const [openingId, setOpeningId] = useState<number>();
+  const [playbackError, setPlaybackError] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
   const [success, setSuccess] = useState("");
-  useEffect(() => {
-    if (playing && mode !== "upload") playerDialog.current?.showModal();
-  }, [playing, mode]);
+  useEffect(() => { playbackRequest.current++; setOpeningId(undefined); }, [mode]);
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   useEffect(() => { if (!busy) { setEditing(undefined); setInput(emptyInput); setCategory(""); setPlaying(undefined); setSuccess(""); } }, [mode]);
-  const filtered = videos.filter(v => v.title.toLocaleLowerCase("vi").includes(search.toLocaleLowerCase("vi")));
+  const filtered = videos.filter(v => v.title.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi")) && (!filterCategory || (v.category || "Video khác") === filterCategory));
+  const allCategories = [...new Set(videos.map(video => video.category || "Video khác"))];
   const categories = [...new Set(filtered.map(v => v.category || "Video khác"))];
 
   useEffect(() => {
     let active = true;
-    setPlaying(undefined); setPlaybackURL(""); setVideos([]); setLoading(true); setError("");
+    playbackRequest.current++; setOpeningId(undefined);
+    setPlaying(undefined); setPlaybackURL(""); setPlaybackError(""); setFilterCategory(""); setSearch(""); setVideos([]); setLoading(true); setError("");
     if (!token) return;
     classVideoApi.list(token, classId).then(data => { if (active) setVideos(data); })
       .catch(err => { if (active) setError(err instanceof Error ? err.message : "Không tải được video"); })
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; playbackRequest.current++; };
   }, [token, classId]);
 
   async function refresh() {
@@ -59,6 +64,28 @@ export function ClassVideos({ classId, members, canManage, mode = "videos" }: { 
     }, 5000);
     return () => { active = false; window.clearInterval(timer); };
   }, [token, classId, hasProcessing]);
+
+  async function openVideo(video: ClassVideo) {
+    if (!token) return;
+    const request = ++playbackRequest.current;
+    setOpeningId(video.id); setError(""); setPlaybackError("");
+    try {
+      const current = await classVideoApi.list(token, classId);
+      if (request !== playbackRequest.current) return;
+      setVideos(current);
+      const allowed = current.find(item => item.id === video.id);
+      if (!allowed) throw new Error("Bạn không còn quyền xem video này.");
+      if (allowed.processingState === "processing") throw new Error("Video đang được xử lý. Hãy chờ xử lý hoàn tất.");
+      if (allowed.processingState === "failed") throw new Error("Xử lý video thất bại. Hãy xóa và tải lại video.");
+      const url = allowed.source === "sftp" ? await classVideoApi.playback(token, classId, allowed.id) : "";
+      if (request !== playbackRequest.current) return;
+      setPlaybackURL(url); setPlaying(allowed);
+    } catch (reason) {
+      if (request === playbackRequest.current) setError(reason instanceof Error ? reason.message : "Không mở được video");
+    } finally {
+      if (request === playbackRequest.current) setOpeningId(undefined);
+    }
+  }
 
   return <div className="tab-content class-videos">
     <div className="class-section-heading"><div><h2>{mode === "upload" ? "Tải video lên nhóm" : mode === "permissions" ? "Phân quyền video" : "Thư viện video"}</h2><p>Chia sẻ bài giảng, lưu lại kiến thức, học theo cách của bạn.</p></div><span className="class-section-icon" aria-hidden="true">▷</span></div>
@@ -108,25 +135,24 @@ export function ClassVideos({ classId, members, canManage, mode = "videos" }: { 
       </div>
     </form>}
     {mode !== "upload" && <>
-    <div className="class-list-heading"><h3>{mode === "permissions" ? "Quản lý quyền xem" : "Tất cả video"}</h3><span>{videos.length} video</span></div><label className="video-search">Tìm video<input type="search" placeholder="Tìm theo tiêu đề…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+    <div className="video-library-toolbar">
+      <div className="class-list-heading"><h3>{mode === "permissions" ? "Quản lý quyền xem" : "Tất cả video"}</h3><span>{filtered.length}{filtered.length !== videos.length ? ` / ${videos.length}` : ""} video</span></div>
+      <label className="video-library-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" aria-label="Tìm video" placeholder="Tìm kiếm video theo tiêu đề…" value={search} onChange={event => setSearch(event.target.value)} /></label>
+    </div>
+    {allCategories.length > 1 && <div className="video-category-filters" role="group" aria-label="Lọc theo chủ đề">
+      {["", ...allCategories].map(name => <button type="button" key={name} aria-pressed={filterCategory === name} onClick={() => setFilterCategory(name)}>{name || "Tất cả"}</button>)}
+    </div>}
     {loading ? <p role="status">Đang tải video...</p> : videos.length === 0 && !error ? <div className="empty-state"><span className="class-empty-icon" aria-hidden="true">▷</span><h3>Góc học tập đang chờ bạn</h3><p>Những video được chia sẻ với bạn sẽ xuất hiện tại đây.</p></div> : null}
-    {!loading && videos.length > 0 && filtered.length === 0 && <p>Không tìm thấy video phù hợp.</p>}
-    {categories.map(name => <section key={name} className="video-category"><h3>{name}</h3><ul className="video-library-grid">
+    {!loading && videos.length > 0 && filtered.length === 0 && <div className="video-search-empty"><h3>Không tìm thấy video phù hợp</h3><p>Thử từ khóa khác hoặc chọn lại chủ đề.</p><button type="button" className="ghost-button" onClick={() => { setSearch(""); setFilterCategory(""); }}>Xóa bộ lọc</button></div>}
+    {categories.map(name => <section key={name} className="video-category"><h3>{name}<span>{filtered.filter(video => (video.category || "Video khác") === name).length}</span></h3><ul className="video-library-grid">
       {filtered.filter(v => (v.category || "Video khác") === name).map(video => <li key={video.id} className="video-library-card">
-        <button className="video-library-open" disabled={video.processingState === "processing" || video.processingState === "failed"} onClick={async () => {
-          if (!token) return;
-          setError(""); setPlaying(undefined);
-          try {
-            const current = await classVideoApi.list(token, classId);
-            setVideos(current);
-            const allowed = current.find(v => v.id === video.id);
-            if (!allowed) throw new Error("Bạn không còn quyền xem video này.");
-            if (allowed.processingState === "processing") throw new Error("Video đang được mã hóa. Hãy chờ xử lý hoàn tất.");
-            if (allowed.processingState === "failed") throw new Error("Xử lý video thất bại. Hãy xóa và tải lại video.");
-            const url = allowed.source === "sftp" ? await classVideoApi.playback(token, classId, allowed.id) : "";
-            setPlaybackURL(url); setPlaying(allowed);
-          } catch (err) { setError(err instanceof Error ? err.message : "Không mở được video"); }
-        }}><span className="video-thumbnail">{video.youtubeId ? <img src={`https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`} alt="" loading="lazy" /> : <span className="video-thumbnail-art" aria-hidden="true">▷</span>}<span className="video-thumbnail-play" aria-hidden="true">▶</span></span><strong>{video.title}</strong><small>{video.source === "sftp" ? "Bài giảng của nhóm" : "YouTube"}</small></button>
+        <button type="button" className="video-library-open" aria-label={`Xem video: ${video.title}`} aria-busy={openingId === video.id} disabled={openingId === video.id || video.processingState === "processing" || video.processingState === "failed"} onClick={() => void openVideo(video)}>
+          <span className="video-thumbnail">{video.youtubeId ? <img src={`https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`} alt="" loading="lazy" /> : <span className="video-thumbnail-art" aria-hidden="true"><svg width="60" height="60" viewBox="0 0 64 64" fill="none"><rect x="9" y="14" width="46" height="36" rx="9" stroke="currentColor" strokeWidth="2"/><path d="m27 24 13 8-13 8V24Z" fill="currentColor"/></svg></span>}
+            <span className="video-card-source">{video.source === "sftp" ? "Bài giảng" : "YouTube"}</span>
+            <span className="video-thumbnail-play" aria-hidden="true">{openingId === video.id ? <span className="video-opening-spinner" /> : <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7V5Z" /></svg>}</span>
+          </span>
+          <span className="video-card-copy"><strong>{video.title}</strong><small>{openingId === video.id ? "Đang mở video…" : video.source === "sftp" ? "Video của nhóm" : "Video từ YouTube"}</small><span className="video-card-watch">Xem video <span aria-hidden="true">→</span></span></span>
+        </button>
         {video.processingState === "processing" && <VideoProcessingProgress video={video} />}
         {video.processingState === "failed" && <span role="status">Xử lý thất bại. Hãy xóa và tải lại video.</span>}
         {canManage && mode === "permissions" && <>
@@ -143,10 +169,11 @@ export function ClassVideos({ classId, members, canManage, mode = "videos" }: { 
       </li>)}
     </ul></section>)}
     </>}
-    {playing && mode !== "upload" && <dialog ref={playerDialog} className="video-modal-backdrop" aria-label={playing.title} onCancel={() => setPlaying(undefined)}><section className="class-video-player">
-      <h3>{playing.title}</h3><button className="ghost-button" onClick={() => setPlaying(undefined)}>Đóng video</button>
-      {playing.source === "sftp" ? <PrivateVideoPlayer key={playing.id} title={playing.title} url={playbackURL} token={token ?? ""} classId={classId} videoId={playing.id} onError={setError} />
-        : <iframe key={playing.id} title={playing.title} src={`https://www.youtube-nocookie.com/embed/${playing.youtubeId}?rel=0`} style={{ width: "100%", aspectRatio: "16 / 9", border: 0 }} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />}
-    </section></dialog>}
+    {playing && mode !== "upload" && <VideoWatchDialog video={playing} error={playbackError} onClose={() => { setPlaying(undefined); setPlaybackURL(""); setPlaybackError(""); }}>
+      <Suspense fallback={<div className="video-player-loading" role="status">Đang tải trình phát video…</div>}>
+      {playing.source === "sftp" ? <PrivateVideoPlayer key={playing.id} title={playing.title} url={playbackURL} token={token ?? ""} classId={classId} videoId={playing.id} onError={setPlaybackError} />
+        : <iframe key={playing.id} title={playing.title} src={`https://www.youtube-nocookie.com/embed/${playing.youtubeId}?rel=0`} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />}
+      </Suspense>
+    </VideoWatchDialog>}
   </div>;
 }

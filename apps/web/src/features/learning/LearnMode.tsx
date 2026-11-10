@@ -437,7 +437,7 @@ export function LearnMode({ cards, studySetId }: Props) {
       {/* Written */}
       {!useMcq && !useTF && (
         <div className="learn-input-area">
-          <label className="learn-input-label" htmlFor="learn-answer">Nhập định nghĩa</label>
+          <label className="learn-input-label" htmlFor="learn-answer">Nhập {settings.swapSides ? "thuật ngữ" : "định nghĩa"}</label>
           <input
             id="learn-answer"
             ref={inputRef}

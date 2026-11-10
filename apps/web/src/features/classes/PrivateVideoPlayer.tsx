@@ -31,5 +31,5 @@ export function PrivateVideoPlayer({ url, token, classId, videoId, title, onErro
     hls.attachMedia(video); hls.loadSource(url);
     return () => { active = false; hls.destroy(); video.removeAttribute("src"); video.load(); };
   }, [url, token, classId, videoId]);
-  return <video ref={ref} aria-label={title} controls playsInline preload="metadata" controlsList="nodownload" style={{ width: "100%", aspectRatio: "16 / 9", background: "#000" }} />;
+  return <video ref={ref} aria-label={title} controls playsInline onError={() => errorRef.current("Không tải được video. Hãy đóng và mở lại video để thử lại.")} preload="metadata" controlsList="nodownload" style={{ width: "100%", aspectRatio: "16 / 9", background: "#000" }} />;
 }

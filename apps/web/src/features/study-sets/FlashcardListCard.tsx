@@ -11,18 +11,13 @@ type Props = {
 export function FlashcardListCard({ card, onToggleStar, onEdit, onDelete }: Props) {
   const [expanded, setExpanded] = React.useState(false);
   const hasExtra = Boolean(
-    card.imageUrl || card.exampleSentence || card.hintExplanation,
+    card.exampleSentence || card.hintExplanation,
   );
 
   return (
     <div className="sd-fc-row-wrap">
       <article className="sd-fc-row ql-card-row">
         <div className="sd-fc-row-main">
-          {card.imageUrl && (
-            <div className="sd-fc-row-thumb">
-              <img src={card.imageUrl} alt="" />
-            </div>
-          )}
           <div className="sd-fc-row-term">{card.term}</div>
           <div className="sd-fc-row-sep" aria-hidden />
           <div className="sd-fc-row-def">{card.definition}</div>
@@ -72,13 +67,6 @@ export function FlashcardListCard({ card, onToggleStar, onEdit, onDelete }: Prop
 
         {expanded && (
           <div className="sd-fc-row-expanded">
-            {card.imageUrl && (
-              <img
-                src={card.imageUrl}
-                alt={card.term}
-                className="sd-fc-row-expanded-img"
-              />
-            )}
             {card.exampleSentence && (
               <div className="sd-fc-extra-block">
                 <div className="sd-fc-extra-label">Example</div>

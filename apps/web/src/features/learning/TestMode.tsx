@@ -14,7 +14,7 @@ import { TrueFalseQuestion } from "./TrueFalseQuestion";
 import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
 
-type Props = { cards: Flashcard[]; studySetId: number };
+type Props = { cards: Flashcard[]; studySetId: number; title?: string };
 
 type TestItem = {
   flashcardId: number;
@@ -53,122 +53,70 @@ function assignQuestionType(
   return available[index % available.length];
 }
 
-/** Settings Dialog — popup gear icon style */
-function TestSettingsDialog({
-  settings,
-  totalCards,
-  onClose,
-  onChange,
-}: {
-  settings: TestSettings;
-  totalCards: number;
-  onClose: () => void;
-  onChange: (s: TestSettings) => void;
+/** The same setup dialog is used before starting and when changing settings. */
+function TestSettingsDialog({ settings, totalCards, title, onClose, onChange }: {
+  settings: TestSettings; totalCards: number; title: string;
+  onClose: () => void; onChange: (settings: TestSettings) => void;
 }) {
   const maxCards = Math.min(totalCards, 20);
   const [local, setLocal] = React.useState<TestSettings>(settings);
-
-  function toggleType(t: QuestionTypeOption) {
-    setLocal((prev) => {
-      if (prev.questionTypes.includes(t)) {
-        if (prev.questionTypes.length === 1) return prev;
-        return { ...prev, questionTypes: prev.questionTypes.filter((x) => x !== t) };
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    panel?.querySelector<HTMLElement>("button, input, select")?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key === "Tab" && panel) {
+        const elements = Array.from(panel.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled)"));
+        const first = elements[0], last = elements[elements.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
-      return { ...prev, questionTypes: [...prev.questionTypes, t] };
-    });
+    };
+    document.addEventListener("keydown", keydown);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", keydown); document.body.style.overflow = overflow; previous?.focus(); };
+  }, []);
+  function toggleType(type: QuestionTypeOption) {
+    setLocal(previous => previous.questionTypes.includes(type)
+      ? previous.questionTypes.length > 1 ? { ...previous, questionTypes: previous.questionTypes.filter(item => item !== type) } : previous
+      : { ...previous, questionTypes: [...previous.questionTypes, type] });
   }
-
-  return (
-    <div className="ql-settings-overlay" role="dialog" aria-modal="true" aria-label="Cài đặt kiểm tra">
-      <div className="ql-settings-panel ql-settings-panel--test">
-        <div className="ql-settings-header">
-          <h3>Cài đặt bài kiểm tra</h3>
-          <button type="button" className="ql-settings-close" onClick={onClose} aria-label="Đóng">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Số câu */}
-        <div className="ql-settings-section">
-          <p className="ql-settings-label">Số câu hỏi</p>
-          <div className="ql-test-slider-wrap">
-            <input
-              type="range"
-              min={2}
-              max={maxCards}
-              value={local.limit}
-              onChange={(e) => setLocal((p) => ({ ...p, limit: Number(e.target.value) }))}
-              className="ql-test-slider"
-            />
-            <span className="ql-test-slider-val">{local.limit}</span>
-          </div>
-          <p className="ql-settings-hint">{totalCards} thẻ trong bộ này · tối đa 20</p>
-        </div>
-
-        {/* Loại câu hỏi */}
-        <div className="ql-settings-section">
-          <p className="ql-settings-label">Loại câu hỏi</p>
-          {(["multipleChoice", "written", "trueFalse"] as QuestionTypeOption[]).map((t) => (
-            <label key={t} className="ql-settings-check">
-              <input
-                type="checkbox"
-                checked={local.questionTypes.includes(t)}
-                onChange={() => toggleType(t)}
-              />
-              <span>{TYPE_LABELS[t]}</span>
-            </label>
-          ))}
-        </div>
-
-        {/* Hỏi theo term hay definition */}
-        <div className="ql-settings-section">
-          <p className="ql-settings-label">Hỏi theo</p>
-          <label className="ql-settings-check">
-            <input
-              type="radio"
-              name="test-ask-side"
-              checked={local.askTerm}
-              onChange={() => setLocal((p) => ({ ...p, askTerm: true }))}
-            />
-            <span>Thuật ngữ → điền định nghĩa</span>
-          </label>
-          <label className="ql-settings-check">
-            <input
-              type="radio"
-              name="test-ask-side"
-              checked={!local.askTerm}
-              onChange={() => setLocal((p) => ({ ...p, askTerm: false }))}
-            />
-            <span>Định nghĩa → điền thuật ngữ</span>
-          </label>
-        </div>
-
-        <div className="ql-settings-footer">
-          <button type="button" className="secondary-button" onClick={onClose}>Hủy</button>
-          <button type="button" className="primary-button" onClick={() => { onChange(local); onClose(); }}>
-            Áp dụng & Bắt đầu lại
-          </button>
-        </div>
-      </div>
+  return <div className="ql-settings-overlay test-setup-overlay" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="test-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="test-setup-title" ref={panelRef}>
+      <button type="button" className="ql-settings-close test-setup-close" onClick={onClose} aria-label="Đóng thiết lập">×</button>
+      <header className="test-setup-heading"><div><p>{title}</p><h2 id="test-setup-title">Thiết lập bài kiểm tra</h2></div><span className="study-mode-art" aria-hidden="true"><i /><i /></span></header>
+      <label className="test-setup-row"><span>Câu hỏi <small>(tối đa {maxCards})</small></span>
+        <input type="number" min={2} max={maxCards} value={local.limit} aria-label="Số câu hỏi"
+          onChange={event => setLocal(previous => ({ ...previous, limit: Math.max(2, Math.min(maxCards, Number(event.target.value) || 2)) }))} />
+      </label>
+      <label className="test-setup-row"><span>Trả lời bằng</span><select value={local.askTerm ? "definition" : "term"}
+        onChange={event => setLocal(previous => ({ ...previous, askTerm: event.target.value === "definition" }))}>
+        <option value="definition">Định nghĩa</option><option value="term">Thuật ngữ</option>
+      </select></label>
+      <div className="test-setup-types">{(["trueFalse", "multipleChoice", "written"] as QuestionTypeOption[]).map(type => <label key={type} className="test-setup-row">
+        <span>{TYPE_LABELS[type]}</span><input className="study-switch" type="checkbox" role="switch" checked={local.questionTypes.includes(type)} onChange={() => toggleType(type)} />
+      </label>)}</div>
+      <footer><button type="button" className="primary-button study-pill-button" onClick={() => onChange(local)}>Bắt đầu làm kiểm tra</button></footer>
     </div>
-  );
+  </div>;
 }
 
-export function TestMode({ cards, studySetId }: Props) {
+export function TestMode({ cards, studySetId, title = "Học phần" }: Props) {
   const { token } = useAuth();
   const generation = useQuizGeneration(studySetId, "test", Math.min(cards.length, 100));
   const { status: saveStatus, onSessionComplete, reset: resetSave } = useProgressSave({ studySetId, mode: "test" });
 
   const defaultSettings: TestSettings = {
     limit: Math.min(cards.length, 20),
-    questionTypes: ["multipleChoice", "written", "trueFalse"],
+    questionTypes: ["multipleChoice"],
     askTerm: true,
   };
 
   const [settings, setSettings] = React.useState<TestSettings>(defaultSettings);
-  const [showSettings, setShowSettings] = React.useState(false);
+  const [showSettings, setShowSettings] = React.useState(true);
   const [questions, setQuestions] = React.useState<TestItem[]>([]);
   const [answers, setAnswers] = React.useState<Record<number, AnswerState>>({});
   const [writtenInputs, setWrittenInputs] = React.useState<Record<number, string>>({});
@@ -251,71 +199,16 @@ export function TestMode({ cards, studySetId }: Props) {
     return <LearningEmptyState message="Backend không trả về câu hỏi hợp lệ." hint="Thử lại để tạo một bài kiểm tra mới." />;
   }
 
-  /* ── Pre-start screen ── */
   if (!started) {
-    const maxCards = Math.min(cards.length, 20);
-    return (
-      <div className="test-prestart-screen">
-        <ViewerWatermark />
-        <div className="test-prestart-icon" aria-hidden="true">
-          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-          </svg>
-        </div>
-        <h2 className="test-prestart-title">Kiểm tra</h2>
-        <p className="test-prestart-desc">
-          Tự đánh giá kiến thức với {Math.min(cards.length, settings.limit)} câu hỏi gồm trắc nghiệm, tự luận và đúng/sai.
-        </p>
-
-        {/* Preview settings */}
-        <div className="test-prestart-settings">
-          <div className="test-prestart-setting-row">
-            <span className="test-prestart-setting-label">Số câu</span>
-            <span className="test-prestart-setting-val">{Math.min(cards.length, settings.limit)} / {cards.length}</span>
-          </div>
-          <div className="test-prestart-setting-row">
-            <span className="test-prestart-setting-label">Loại câu</span>
-            <span className="test-prestart-setting-val">
-              {settings.questionTypes.map((t) => TYPE_LABELS[t]).join(", ")}
-            </span>
-          </div>
-          <div className="test-prestart-setting-row">
-            <span className="test-prestart-setting-label">Hỏi theo</span>
-            <span className="test-prestart-setting-val">{settings.askTerm ? "Thuật ngữ" : "Định nghĩa"}</span>
-          </div>
-        </div>
-
-        <div className="test-prestart-actions">
-          <button
-            type="button"
-            className="secondary-button test-prestart-settings-btn"
-            onClick={() => setShowSettings(true)}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            Tùy chỉnh
-          </button>
-          <button
-            type="button"
-            className="primary-button test-prestart-start-btn"
-            onClick={() => { setStarted(true); setStartedAt(new Date()); }}
-          >
-            Bắt đầu kiểm tra
-          </button>
-        </div>
-
-        {showSettings && (
-          <TestSettingsDialog
-            settings={settings}
-            totalCards={cards.length}
-            onClose={() => setShowSettings(false)}
-            onChange={(s) => { setSettings(s); }}
-          />
-        )}
-      </div>
-    );
+    return <div className="test-setup-landing">
+      <span className="study-mode-art" aria-hidden="true"><i /><i /></span>
+      <p>{title}</p><h2>Kiểm tra kiến thức của bạn</h2>
+      <p>Chọn số câu hỏi và cách trả lời để bắt đầu.</p>
+      <button type="button" className="primary-button study-pill-button" onClick={() => setShowSettings(true)}>Thiết lập bài kiểm tra</button>
+      {showSettings && <TestSettingsDialog settings={settings} totalCards={cards.length} title={title}
+        onClose={() => setShowSettings(false)}
+        onChange={next => { setSettings(next); setStartedAt(new Date()); setStarted(true); setShowSettings(false); }} />}
+    </div>;
   }
 
   /* ── Answer handlers ── */
@@ -517,9 +410,12 @@ export function TestMode({ cards, studySetId }: Props) {
       {showSettings && (
         <TestSettingsDialog
           settings={settings}
+          title={title}
           totalCards={cards.length}
           onClose={() => setShowSettings(false)}
           onChange={(s) => {
+            setShowSettings(false);
+            setStartedAt(new Date());
             setSettings(s);
             setAnswers({});
             setWrittenInputs({});
@@ -565,26 +461,12 @@ export function TestMode({ cards, studySetId }: Props) {
             return (
               <section key={q.flashcardId} className="test-question-block">
                 <div className="test-question-header">
-                  <span className="test-question-num">{qIndex + 1}</span>
-                  <span className="test-question-type-badge test-type-{q.questionType}">
-                    {TYPE_LABELS[q.questionType]}
-                  </span>
-                  {ans && (
-                    <span className={`test-question-answered-badge ${
-                      q.questionType === "written"
-                        ? writtenFb === true ? "badge--correct" : writtenFb === false ? "badge--wrong" : "badge--pending"
-                        : q.questionType === "trueFalse"
-                          ? ans._tfCorrect ? "badge--correct" : "badge--wrong"
-                          : ans.answer === q.correctAnswer ? "badge--correct" : "badge--pending"
-                    }`}>
-                      {q.questionType === "written"
-                        ? writtenFb === true ? "✓" : writtenFb === false ? "✗" : "✎"
-                        : "✓"}
-                    </span>
-                  )}
+                  <span>{settings.askTerm ? "Thuật ngữ" : "Định nghĩa"}</span>
+                  <span className="test-question-position">{qIndex + 1}/{questions.length}</span>
                 </div>
                 <p className="test-term">{q.questionText}</p>
 
+                <p className="test-answer-instruction">{q.questionType === "multipleChoice" ? "Chọn đáp án đúng" : TYPE_LABELS[q.questionType]}</p>
                 {q.questionType === "multipleChoice" && (
                   <MultipleChoiceQuestion
                     choices={q.choices}

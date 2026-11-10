@@ -11,40 +11,30 @@ export function useQuizGeneration(studySetId: number, mode: LearningMode, limit?
   const { token } = useAuth();
   const [seed, setSeed] = React.useState(() => randomSeed());
   const [state, setState] = React.useState<QuizGenerationState>({ state: "loading" });
-  // Track the limit as a ref so regenerate always uses the latest value
   const limitRef = React.useRef(limit);
   limitRef.current = limit;
+  const activeRequest = React.useRef<AbortController>();
 
-  const generateWithLimit = React.useCallback((nextSeed: number, overrideLimit?: number) => {
+  const generate = React.useCallback(() => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const nextSeed = randomSeed();
     setSeed(nextSeed);
     setState({ state: "loading" });
-    const controller = new AbortController();
-    const useLimit = overrideLimit ?? limitRef.current;
-    quizApi.generate(token, studySetId, { mode, seed: nextSeed, limit: useLimit }, controller.signal)
-      .then((data) => setState({ state: "ready", data }))
+    quizApi.generate(token, studySetId, { mode, seed: nextSeed, limit: limitRef.current }, controller.signal)
+      .then(data => { if (!controller.signal.aborted) setState({ state: "ready", data }); })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setState({ state: "error", error: error instanceof Error ? error : new Error("Không thể tạo bài học") });
+        if (!controller.signal.aborted) setState({ state: "error", error: error instanceof Error ? error : new Error("Không thể tạo bài học") });
       });
-    return () => controller.abort();
   }, [token, studySetId, mode]);
 
-  // Re-trigger when limit changes (for MatchMode dynamic pair count)
-  const prevLimitRef = React.useRef(limit);
   React.useEffect(() => {
-    if (prevLimitRef.current !== limit) {
-      prevLimitRef.current = limit;
-      generateWithLimit(randomSeed(), limit);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [limit]);
+    generate();
+    return () => activeRequest.current?.abort();
+  }, [generate, limit]);
 
-  React.useEffect(() => {
-    return generateWithLimit(seed);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generateWithLimit]);
-
-  return { state, seed, regenerate: () => generateWithLimit(randomSeed()) };
+  return { state, seed, regenerate: generate };
 }
 
 function randomSeed(): number {

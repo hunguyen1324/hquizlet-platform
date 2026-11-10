@@ -149,6 +149,11 @@ func openDatabase(url string) *sql.DB {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Budget connections per replica so the services cannot exhaust PostgreSQL.
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(3)
+	db.SetConnMaxIdleTime(5 * time.Minute)
+	db.SetConnMaxLifetime(30 * time.Minute)
 	ctx := context.Background()
 	for attempt := 1; attempt <= 20; attempt++ {
 		if err := db.PingContext(ctx); err == nil {

@@ -23,9 +23,10 @@ type Props = {
   cards: Flashcard[];
   /** Tổng thẻ thật từ server (để progress bar tính đúng) */
   totalCount: number;
+  onExit?: () => void;
 };
 
-export function LearningContainer({ set, mode, cards, totalCount }: Props) {
+export function LearningContainer({ set, mode, cards, totalCount, onExit }: Props) {
   if (cards.length === 0) {
     return (
       <LearningEmptyState
@@ -41,9 +42,9 @@ export function LearningContainer({ set, mode, cards, totalCount }: Props) {
     case "learn":
       return <LearnMode cards={cards} studySetId={set.id} />;
     case "test":
-      return <TestMode cards={cards} studySetId={set.id} />;
+      return <TestMode cards={cards} studySetId={set.id} title={set.title} />;
     case "match":
-      return <MatchMode cards={cards} studySetId={set.id} />;
+      return <MatchMode cards={cards} studySetId={set.id} title={set.title} totalCount={totalCount} onExit={onExit} />;
     default:
       return null;
   }

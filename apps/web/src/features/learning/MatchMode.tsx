@@ -11,9 +11,9 @@ import { MatchEndScreen } from "./MatchEndScreen";
 import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
 
-type Props = { cards: Flashcard[]; studySetId: number };
+type Props = { cards: Flashcard[]; studySetId: number; title?: string; totalCount?: number; onExit?: () => void };
 type MatchTile = { id: string; cardId: number; text: string; type: "term" | "definition"; pairId: string };
-type Phase = "start" | "playing" | "done";
+type Phase = "start" | "ready" | "playing" | "done";
 
 function formatTime(ms: number) {
   const secs = Math.floor(ms / 1000);
@@ -22,7 +22,7 @@ function formatTime(ms: number) {
   return `${m}:${s}`;
 }
 
-export function MatchMode({ cards, studySetId }: Props) {
+export function MatchMode({ cards, studySetId, title = "Học phần", totalCount, onExit }: Props) {
   const { token } = useAuth();
   const maxPairs = Math.min(cards.length, 20);
   const defaultPairs = Math.min(cards.length, 6);
@@ -82,7 +82,7 @@ export function MatchMode({ cards, studySetId }: Props) {
 
   /* ── Guard states ── */
   if (cards.length < 2) return <LearningEmptyState message="Cần ít nhất 2 thẻ để chơi ghép cặp." hint="Thêm thẻ trong phần 'Sửa thẻ'." />;
-  if (generation.state.state === "loading" && phase !== "start") return (
+  if (generation.state.state === "loading" && phase === "playing") return (
     <div className="learn-loading" role="status">
       <ViewerWatermark />
       Đang tạo bộ ghép cặp…
@@ -96,73 +96,35 @@ export function MatchMode({ cards, studySetId }: Props) {
   );
   if (tiles.length === 0 && phase === "playing") return <LearningEmptyState message="Backend không trả về cặp ghép hợp lệ." hint="Thử lại để tạo một bộ mới." />;
 
-  /* ── Start screen ── */
-  if (phase === "start") {
-    return (
-      <div className="ql-match-start-screen">
-        <ViewerWatermark />
-        <div className="ql-match-start-icon" aria-hidden="true">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-            <path d="M7 7l3 3M14 10l3-3M7 14l3-3M14 14l3 3" opacity=".4"/>
-          </svg>
-        </div>
-        <h2 className="ql-match-start-title">Ghép cặp</h2>
-        <p className="ql-match-start-desc">
-          Ghép thuật ngữ với định nghĩa tương ứng. Nhanh tay xem bạn mất bao lâu!
-        </p>
-
-        {/* Chọn số cặp — tối đa 20 */}
-        {maxPairs > 2 && (
-          <div className="ql-match-count-wrap">
-            <label className="ql-match-count-label" htmlFor="match-pair-count">
-              Số cặp: <strong>{pendingPairCount}</strong>
-              <span className="ql-match-count-hint"> (tối đa {maxPairs})</span>
-            </label>
-            <input
-              id="match-pair-count"
-              type="range"
-              min={2}
-              max={maxPairs}
-              value={pendingPairCount}
-              onChange={(e) => setPendingPairCount(Number(e.target.value))}
-              className="ql-match-count-slider"
-            />
-          </div>
-        )}
-
-        <ul className="ql-match-start-rules">
-          <li>Click một thẻ, rồi click thẻ khớp của nó</li>
-          <li>Ghép sai → thẻ rung và không bị xóa</li>
-          <li>Ghép hết tất cả cặp để hoàn thành</li>
-        </ul>
-        <button
-          id="match-start-btn"
-          type="button"
-          className="primary-button ql-match-start-btn"
+  if (phase === "start" || phase === "ready") {
+    const ready = phase === "ready";
+    return <div className={`match-intro${ready ? " match-intro--ready" : ""}`}>
+      <header className="match-mode-bar">
+        <button type="button" className="match-text-button" onClick={() => ready ? setPhase("start") : onExit?.()}>← {ready ? "Chọn học phần" : "Chọn một trò chơi khác"}</button>
+        {ready && <strong>{title}</strong>}
+      </header>
+      <div className="match-intro-body">
+        <span className={ready ? "match-ready-art" : "study-mode-art"} aria-hidden="true">{ready ? <><i>あ</i><i /><i /><i>訳</i></> : <><i /><i /></>}</span>
+        <h2>{ready ? "Bạn đã sẵn sàng?" : "Ghép thẻ"}</h2>
+        <p>{ready ? "Hãy ghép tất cả thuật ngữ với định nghĩa của chúng nhanh nhất có thể. Ghép sai sẽ được đánh dấu để bạn thử lại." : "Hãy ghép tất cả thuật ngữ với định nghĩa của chúng nhanh nhất có thể."}</p>
+        {!ready && <section className="match-set-selection">
+          <h3>Chọn một học phần</h3>
+          <div className="match-selected-set"><span className="match-set-icon" aria-hidden="true">▱</span><div><strong>{title}</strong><span>Học phần · {totalCount ?? cards.length} thuật ngữ</span></div></div>
+          <label className="match-pair-setting" htmlFor="match-pair-count"><span>Số cặp trong lượt chơi</span>
+            <select id="match-pair-count" value={pendingPairCount} onChange={event => setPendingPairCount(Number(event.target.value))}>
+              {Array.from({ length: maxPairs - 1 }, (_, index) => index + 2).map(count => <option key={count} value={count}>{count} cặp</option>)}
+            </select>
+          </label>
+        </section>}
+        <button id="match-start-btn" type="button" className="primary-button study-pill-button match-intro-cta"
           onClick={() => {
-            const newCount = pendingPairCount;
-            if (newCount !== pairCount) {
-              setPairCount(newCount);
-              window.setTimeout(() => {
-                setStartedAt(new Date());
-                setElapsed(0);
-                setPhase("playing");
-              }, 50);
-            } else {
-              generation.regenerate();
-              setStartedAt(new Date());
-              setElapsed(0);
-              setPhase("playing");
-            }
-          }}
-          autoFocus
-        >
-          Bắt đầu
+            if (!ready) { setPairCount(pendingPairCount); setPhase("ready"); return; }
+            setStartedAt(new Date()); setElapsed(0); setPhase("playing");
+          }}>
+          {ready ? "Bắt đầu chơi" : "Tiếp tục"}
         </button>
       </div>
-    );
+    </div>;
   }
 
   /* ── Done screen ── */
@@ -267,7 +229,8 @@ export function MatchMode({ cards, studySetId }: Props) {
   return (
     <div className="match-mode">
       <ViewerWatermark />
-      <div className="learn-header">
+      <header className="match-mode-bar match-playing-bar"><button type="button" className="match-text-button" onClick={newRound}>← Ghép thẻ</button><strong>{title}</strong><button type="button" className="ql-icon-btn" onClick={onExit ?? newRound} aria-label="Thoát ghép thẻ">×</button></header>
+      <div className="learn-header match-play-stats">
         <span className="flashcards-counter">{matched.size} / {totalPairs} cặp</span>
         <span className="match-timer-display">{formatTime(elapsed)}</span>
         {wrongCount > 0 && <span className="wrong-count">❌ {wrongCount} lần sai</span>}

@@ -13,30 +13,32 @@ const queryClient = new QueryClient({
 
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { AuthScreen } from "./features/auth/AuthScreen";
-import { StudySetEditor } from "./features/study-sets/StudySetEditor";
-import { StudyDetail } from "./features/study-sets/StudyDetail";
-import { CreateTypeSelector } from "./features/study-sets/CreateTypeSelector";
-import { QuizSetEditor } from "./features/study-sets/QuizSetEditor";
-import { GrammarSetEditor } from "./features/study-sets/GrammarSetEditor";
-import { Folders } from "./features/folders/Folders";
-import { LiveGame } from "./features/live/LiveGame";
-import { ClassList } from "./features/classes/ClassList";
-import { CreateClass } from "./features/classes/CreateClass";
-import { ClassDetail as ClassDetailView } from "./features/classes/ClassDetail";
-import { EditClass } from "./features/classes/EditClass";
-import { JoinClass } from "./features/classes/JoinClass";
-import { ActivityFeed } from "./features/activity/ActivityFeed";
-import { WalletPage } from "./features/wallet/WalletPage";
-import { DepositPage } from "./features/payment/DepositPage";
-import { AdminPayments } from "./features/admin/AdminPayments";
+const StudySetEditor = React.lazy(() => import("./features/study-sets/StudySetEditor").then(module => ({ default: module.StudySetEditor })));
+const StudyDetail = React.lazy(() => import("./features/study-sets/StudyDetail").then(module => ({ default: module.StudyDetail })));
+const CreateTypeSelector = React.lazy(() => import("./features/study-sets/CreateTypeSelector").then(module => ({ default: module.CreateTypeSelector })));
+const QuizSetEditor = React.lazy(() => import("./features/study-sets/QuizSetEditor").then(module => ({ default: module.QuizSetEditor })));
+const GrammarSetEditor = React.lazy(() => import("./features/study-sets/GrammarSetEditor").then(module => ({ default: module.GrammarSetEditor })));
+const Folders = React.lazy(() => import("./features/folders/Folders").then(module => ({ default: module.Folders })));
+const LiveGame = React.lazy(() => import("./features/live/LiveGame").then(module => ({ default: module.LiveGame })));
+const ClassList = React.lazy(() => import("./features/classes/ClassList").then(module => ({ default: module.ClassList })));
+const CreateClass = React.lazy(() => import("./features/classes/CreateClass").then(module => ({ default: module.CreateClass })));
+const ClassDetailView = React.lazy(() => import("./features/classes/ClassDetail").then(module => ({ default: module.ClassDetail })));
+const EditClass = React.lazy(() => import("./features/classes/EditClass").then(module => ({ default: module.EditClass })));
+const JoinClass = React.lazy(() => import("./features/classes/JoinClass").then(module => ({ default: module.JoinClass })));
+const ActivityFeed = React.lazy(() => import("./features/activity/ActivityFeed").then(module => ({ default: module.ActivityFeed })));
+const WalletPage = React.lazy(() => import("./features/wallet/WalletPage").then(module => ({ default: module.WalletPage })));
+const DepositPage = React.lazy(() => import("./features/payment/DepositPage").then(module => ({ default: module.DepositPage })));
+const AdminPayments = React.lazy(() => import("./features/admin/AdminPayments").then(module => ({ default: module.AdminPayments })));
 const AdminCatalog = React.lazy(() => import("./features/admin/AdminCatalog").then(m => ({default: m.AdminCatalog})));
-import { QuizSessionsPage } from "./features/learning/QuizSessionsPage";
-import { studySetApi, flashcardApi, fetchHealth, classApi } from "./lib/api";
-import type { StudySet, AppView, Flashcard, ServiceHealth, HealthStatus, ClassDetail as ClassDetailType } from "./types";
+const QuizSessionsPage = React.lazy(() => import("./features/learning/QuizSessionsPage").then(module => ({ default: module.QuizSessionsPage })));
+import { studySetApi, flashcardApi, classApi } from "./lib/api";
+import type { StudySet, AppView, Flashcard, ClassDetail as ClassDetailType } from "./types";
 
 import { AppShell } from "./components/layout/AppShell";
+import { AsyncPageBoundary } from "./components/layout/AsyncPageBoundary";
+import { useServiceHealth } from "./lib/useServiceHealth";
 import { HomePage } from "./components/home/HomePage";
-import { Dashboard } from "./features/dashboard/Dashboard";
+const Dashboard = React.lazy(() => import("./features/dashboard/Dashboard").then(module => ({ default: module.Dashboard })));
 import "./design-system.css";
 
 // Dashboard screens are code-split so recharts/date libs stay out of the initial bundle.
@@ -125,23 +127,7 @@ function RootApp() {
   const [selectedClass, setSelectedClass] = useState<ClassDetailType | null>(null);
   const [loadingSet, setLoadingSet] = useState(false);
   const [navigationError, setNavigationError] = useState("");
-  const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
-  const [services, setServices] = useState<ServiceHealth[]>([]);
-
-  useEffect(() => {
-    async function checkGateway() {
-      try {
-        const svcs = await fetchHealth();
-        setServices(svcs);
-        setHealthStatus(svcs.every((s) => s.status === "ok") ? "live" : "offline");
-      } catch {
-        setHealthStatus("offline");
-      }
-    }
-    void checkGateway();
-    const id = window.setInterval(checkGateway, 5000);
-    return () => window.clearInterval(id);
-  }, []);
+  const { healthStatus, services } = useServiceHealth();
 
   useEffect(() => {
     if (!user) return;
@@ -281,7 +267,7 @@ function RootApp() {
 
       {/* Legacy view switch — kept for the screens that are not on routes yet (UI-01). */}
       {!routeView && (
-      <>
+      <React.Suspense fallback={<div className="loading-overlay" role="status">Đang tải trang…</div>}>
       {loadingSet && (
         <div className="loading-overlay" aria-busy="true">
           <span>Đang tải học phần...</span>
@@ -451,7 +437,7 @@ function RootApp() {
       {!loadingSet && view === "admin-payments" && (
         <AdminPayments onBack={() => setView("dashboard")} />
       )}
-      </>
+      </React.Suspense>
       )}
     </AppShell>
   );
@@ -462,7 +448,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <RootApp />
+          <AsyncPageBoundary><RootApp /></AsyncPageBoundary>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

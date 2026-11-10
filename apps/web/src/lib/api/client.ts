@@ -210,7 +210,7 @@ function quizQuestionDefinition(question: QuizQuestionPayload): string {
 }
 
 export type ServiceHealth = { name: string; url: string; status: string };
-export async function fetchHealth(): Promise<ServiceHealth[]> { const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", ""); return data.services ?? []; }
+export async function fetchHealth(signal?: AbortSignal): Promise<ServiceHealth[]> { const data = await apiFetch<{ services: ServiceHealth[] }>("/healthz/services", "", { signal }); return data.services ?? []; }
 export const healthApi = { check: () => apiFetch<{ service: string; status: string }>("/healthz", ""), services: () => apiFetch<{ services: ServiceHealth[] }>("/healthz/services", "") };
 
 // --- Phase 7: Class & Activity API ---

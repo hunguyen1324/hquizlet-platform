@@ -14,6 +14,11 @@ func Open(dsn string) *sql.DB {
 	if err != nil {
 		log.Fatalf("[payment] db open: %v", err)
 	}
+	// Budget connections per replica so the services cannot exhaust PostgreSQL.
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(3)
+	db.SetConnMaxIdleTime(5 * time.Minute)
+	db.SetConnMaxLifetime(30 * time.Minute)
 	ctx := context.Background()
 	for i := 1; i <= 20; i++ {
 		if err := db.PingContext(ctx); err == nil {
