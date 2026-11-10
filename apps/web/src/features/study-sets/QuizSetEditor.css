@@ -1,0 +1,84 @@
+/* Quiz editing workspace: overview cards with explicit inline editing. */
+.qedit-page { max-width: 1440px; width: 100%; margin: 0 auto; padding: 12px 24px 64px; color: #27344c; gap: 20px; }
+.qedit-header { display: flex; align-items: center; gap: 14px; padding: 12px 0 24px; border-bottom: 1px solid #e2e7f0; position: static; }
+.qedit-back { width: 38px; height: 38px; display: grid; place-items: center; flex-shrink: 0; background: white; color: #536482; border: 1px solid #d5ddeb; border-radius: 8px; cursor: pointer; }
+.qedit-title { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: #7b879d; width: min(480px, 100%); min-width: 0; }
+.qedit-title input { width: 100%; padding: 10px 14px; border: 1px solid #d9dfeb; border-radius: 8px; background: white; color: #27344c; font-size: 14px; font-weight: 600; }
+.qedit-header-actions { display: flex; gap: 10px; align-items: center; margin-left: auto; flex-shrink: 0; }
+.qedit-page .primary-button { background: #c71893; border-color: #c71893; border-radius: 8px; }
+.qedit-page .primary-button:hover:not(:disabled) { background: #b11380; }
+.qedit-page .secondary-button { background: white; border: 1px solid #d4dcea; color: #435775; border-radius: 8px; }
+.qedit-settings { border: 1px solid #e1e6ef; border-radius: 10px; background: white; }
+.qedit-settings > summary { padding: 14px 18px; cursor: pointer; font-size: 13px; font-weight: 600; color: #596982; }
+.qedit-settings .create-meta { padding: 8px 18px 20px; border: 0; box-shadow: none; background: transparent; }
+.qedit-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
+.qedit-workspace .cards-editor { min-width: 0; gap: 24px; margin: 0; }
+.qedit-workspace .cards-editor-heading { margin: 0 0 2px; gap: 12px; flex-wrap: wrap; }
+.qedit-workspace .cards-editor-heading h2 { font-size: 15px; font-weight: 650; margin: 0; }
+.qedit-workspace .cards-editor-heading h2 > span { font-weight: 400; color: #7a869c; font-size: 13px; }
+.qedit-page .quiz-question-card { padding: 22px; background: white; border: 1px solid #dce2ed; border-radius: 10px; box-shadow: 0 2px 6px #27344c03; scroll-margin-top: 80px; min-width: 0; }
+.qedit-page .qedit-card--editing { border-color: #babdff; box-shadow: 0 0 0 3px #4c50ff07; }
+.qedit-card-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 26px; flex-wrap: wrap; }
+.qedit-question-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: #7b879c; text-transform: uppercase; }
+.qedit-question-meta strong { color: #364a68; font-weight: 600; }
+.qedit-question-actions { display: flex; align-items: center; gap: 8px; }
+.qedit-icon-button, .qedit-edit-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 6px; padding: 7px; background: transparent; color: #536482; cursor: pointer; font: inherit; font-size: 12px; }
+.qedit-edit-button { padding: 7px 9px; }
+.qedit-icon-button:hover, .qedit-edit-button:hover { background: #f0f2fa; color: #4c50ff; }
+.qedit-danger:hover { background: #fff0f1; color: #d22e46; }
+.qedit-question-preview { color: #27344c; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.qedit-prompt { font-weight: 650; margin: 0 0 24px; color: #17263e; }
+.qedit-preview-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 30px; margin-bottom: 24px; }
+.qedit-preview-option { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.qedit-option-indicator { display: inline-flex; justify-content: center; align-items: center; border: 1.7px solid #9aa5b5; border-radius: 50%; width: 16px; height: 16px; flex-shrink: 0; align-self: center; }
+.qedit-preview-option--correct .qedit-option-indicator { background: #008b59; border-color: #008b59; color: white; font-size: 11px; }
+.qedit-explanation { margin-top: 20px; }
+.qedit-explanation > span, .qedit-answer > span { display: block; margin-bottom: 10px; color: #71809a; font-size: 12px; }
+.qedit-passage { padding: 16px; border-radius: 8px; background: #f7f8fc; margin-bottom: 20px; }
+.qedit-question-image { max-width: 100%; max-height: 260px; object-fit: contain; margin-bottom: 20px; }
+.qedit-media-badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #eff1fb; font-size: 11px; color: #66759a; margin-top: 14px; }
+.qedit-page .quiz-question-body[hidden] { display: none; }
+.qedit-page .quiz-question-body { border-top: 1px solid #edf0f6; padding-top: 20px; }
+.qedit-page .quiz-question-body label { display: grid; gap: 8px; color: #667590; font-size: 12px; }
+.qedit-page .quiz-question-body :is(textarea, input:not([type=radio]):not([type=file]), select) { background: #f8f9fc; border: 1px solid #dfe5ef; border-radius: 8px; color: #27344c; padding: 12px; font-size: 14px; min-width: 0; width: 100%; }
+.qedit-page .quiz-question-body textarea { resize: vertical; line-height: 1.7; }
+.qedit-page .quiz-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.qedit-page .quiz-options > .quiz-options-label, .qedit-page .quiz-options > button { grid-column: 1 / -1; }
+.qedit-page .quiz-option-row { min-width: 0; padding: 8px; border: 1px solid #e4e8f0; border-radius: 8px; }
+.qedit-page .quiz-option-row:has(input[type=radio]:checked) { border-color: #65c69f; background: #f1fbf6; }
+.qedit-page .quiz-option-row input[type=radio] { accent-color: #008b59; flex-shrink: 0; }
+.qedit-page .quiz-option-row .quiz-option-input { border: 0; background: transparent; padding: 6px; }
+.qedit-question-finder { border: 1px solid #e0e5ef; border-radius: 10px; background: #f9fafc; padding: 20px; }
+.qedit-question-finder h2 { font-size: 14px; font-weight: 650; margin: 0 0 18px; }
+.qedit-search { display: flex; align-items: center; gap: 8px; background: white; padding: 10px 12px; border: 1px solid #dce2ed; border-radius: 999px; color: #6e7c96; }
+.qedit-search svg { flex-shrink: 0; }
+.qedit-search input { color: #435775; min-width: 0; width: 100%; padding: 0; border: 0; background: transparent; outline: 0; font-size: 12px; }
+.qedit-search:focus-within { outline: 2px solid #b2b8ff; }
+.qedit-question-finder > p { color: #8a95a9; font-size: 12px; margin: 18px 0 12px; }
+.qedit-question-finder nav { display: grid; gap: 8px; max-height: 600px; overflow-y: auto; }
+.qedit-question-finder nav button { border: 1px solid transparent; background: white; border-radius: 8px; display: flex; align-items: baseline; gap: 10px; padding: 12px; text-align: left; cursor: pointer; color: #52627e; font-size: 12px; }
+.qedit-question-finder nav button:hover { border-color: #c6ccff; background: #f0f2ff; }
+.qedit-question-finder nav button > span { flex-shrink: 0; color: #8b96aa; }
+.qedit-question-finder nav button > div { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.qedit-page button:disabled { opacity: .5; cursor: not-allowed; }
+.qedit-page :is(button, textarea, select, input):focus-visible { outline: 2px solid #a8afff; outline-offset: 3px; }
+@media (max-width: 1000px) { .qedit-workspace { grid-template-columns: minmax(0, 1fr); } .qedit-question-finder { grid-row: 1; } .qedit-question-finder nav { max-height: 180px; } }
+@media (max-width: 640px) {
+  .qedit-page { padding: 8px 8px 48px; }
+  .qedit-header { flex-wrap: wrap; }
+  .qedit-title { flex: 1; }
+  .qedit-header-actions { width: 100%; justify-content: flex-end; }
+  .qedit-workspace .cards-editor-heading { align-items: flex-start; }
+  .qedit-page .quiz-question-card { padding: 16px; }
+  .qedit-preview-options, .qedit-page .quiz-options { grid-template-columns: minmax(0, 1fr); }
+  .qedit-card-head { gap: 12px; }
+  .qedit-question-finder { padding: 16px; }
+  .qedit-settings .create-meta > div[style] { flex-direction: column; }
+}
+
+.qedit-page .ghost-button { color: #596982; background: white; border: 1px solid #dce2ed; border-radius: 8px; }
+.qedit-page .create-meta label { color: #667590; }
+.qedit-page .create-meta :is(input, textarea, select) { color: #27344c; background: #f8f9fc; border: 1px solid #dfe5ef; }
+.qedit-import { padding: 16px; border: 1px solid #dfe5ef; border-radius: 10px; background: white; color: #435775; }
+.qedit-import input { color: #435775; }
+.qedit-search input::placeholder { color: #8a96ac; opacity: 1; }

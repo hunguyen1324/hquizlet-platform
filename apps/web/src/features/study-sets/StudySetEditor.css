@@ -11,8 +11,8 @@
 
 /* ── Sticky top bar ──────────────────────────────────────────── */
 .qe-topbar {
-  position: sticky;
-  top: 0;
+  position: static;
+  top: auto;
   z-index: 50;
   background: var(--background, #fff);
   border-bottom: 2px solid #e8e8fb;
@@ -554,10 +554,10 @@
 
 /* Spacious editor with a compact metadata section and expandable card details. */
 .qe-page--modern { max-width: 1120px; padding: 16px 24px 80px; gap: 0; }
-.qe-page--modern .qe-topbar { top: 64px; padding: 18px 0; margin-bottom: 28px; border-bottom: 1px solid #e6e9f2; background: #f7f8fc; gap: 20px; }
+.qe-page--modern .qe-topbar { position: static; top: auto; padding: 18px 0; margin-bottom: 28px; border-bottom: 1px solid #e6e9f2; background: #f7f8fc; gap: 20px; }
 .qe-topbar-copy { display: flex; flex-direction: column; gap: 7px; }
 .qe-back-link { padding: 0; background: transparent; border: 0; color: #4c50ff; font: inherit; font-size: .85rem; font-weight: 600; text-align: left; cursor: pointer; }
-.qe-page--modern .qe-topbar-title { font-size: 1.35rem; }
+.qe-page--modern .qe-topbar-title { display: block; font-size: 1.35rem; }
 .qe-page--modern .qe-btn--primary { border-radius: 999px; padding: 12px 24px; box-shadow: none; background: #4c50ff; }
 .qe-page--modern .qe-meta { padding: 0; border: 0; box-shadow: none; border-radius: 0; background: transparent; margin-bottom: 28px; }
 .qe-page--modern .qe-field { min-width: 0; }
@@ -595,8 +595,8 @@
 .qe-page--modern :is(button, textarea, input, select):focus-visible { outline: 2px solid #9299ff; outline-offset: 3px; }
 @media (max-width: 640px) {
   .qe-page--modern { padding: 8px 8px 48px; }
-  .qe-page--modern .qe-topbar { top: 64px; gap: 12px; flex-wrap: wrap; }
-  .qe-page--modern .qe-topbar-title { font-size: 1.1rem; }
+  .qe-page--modern .qe-topbar { position: static; top: auto; gap: 12px; flex-wrap: wrap; }
+  .qe-page--modern .qe-topbar-title { display: block; font-size: 1.1rem; }
   .qe-page--modern .qe-btn { padding: 10px 14px; }
   .qe-page--modern .qe-meta-row--2col { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .qe-page--modern .qe-card-header { padding: 14px 16px 0; }

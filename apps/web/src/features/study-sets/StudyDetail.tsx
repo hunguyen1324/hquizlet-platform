@@ -15,6 +15,7 @@ import { FlashcardSearchBar } from "./FlashcardSearchBar";
 import { InlineFlashcardEditor } from "./InlineFlashcardEditor";
 import { QuizDetailOverview } from "./QuizDetailOverview";
 import "./StudyDetail.css";
+import { StudyActionIcon } from "./StudyActionIcon";
 
 type Props = {
   set: StudySet;
@@ -275,7 +276,8 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
               type="button"
               className="sd-more-btn"
               onClick={() => setMenuOpen((v) => !v)}
-              aria-label="Xem thêm"
+              aria-expanded={menuOpen}
+              aria-label="Tùy chọn học phần"
               title="Xem thêm"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -290,17 +292,17 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
                   className="sd-dropdown-item"
                   onClick={() => { setMenuOpen(false); onEdit(); }}
                 >
-                  Sửa
+                  <StudyActionIcon name="edit" /><span>Sửa</span>
                 </button>
-                <button type="button" className="sd-dropdown-item" onClick={() => void openFolderDialog()}>Thêm vào thư mục</button>
-                <button type="button" className="sd-dropdown-item" onClick={() => void toggleVisibility()}>{visibility === "public" ? "Chuyển sang riêng tư" : "Chuyển sang công khai"}</button>
+                <button type="button" className="sd-dropdown-item" onClick={() => void openFolderDialog()}><StudyActionIcon name="folder" /><span>Thêm vào thư mục</span></button>
+                <button type="button" className="sd-dropdown-item" onClick={() => void toggleVisibility()}><StudyActionIcon name={visibility === "public" ? "lock" : "globe"} /><span>{visibility === "public" ? "Chuyển sang riêng tư" : "Chuyển sang công khai"}</span></button>
                 <div className="sd-dropdown-divider" />
                 <button
                   type="button"
                   className="sd-dropdown-item sd-dropdown-item--danger"
                   onClick={() => { setMenuOpen(false); onDelete(); }}
                 >
-                  Xóa
+                  <StudyActionIcon name="trash" /><span>Xóa</span>
                 </button>
               </div>
             )}
@@ -386,7 +388,7 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
                           Hủy
                         </button>
                         <button type="button" className="danger-button" onClick={() => void handleDelete(card)}>
-                          Xóa
+                          <StudyActionIcon name="trash" /><span>Xóa</span>
                         </button>
                       </div>
                     </div>

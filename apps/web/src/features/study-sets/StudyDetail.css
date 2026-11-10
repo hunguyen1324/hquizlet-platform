@@ -1801,3 +1801,9 @@
   .qd-preview-head { flex-wrap: wrap; }
   .qd-options { grid-template-columns: minmax(0, 1fr); }
 }
+
+.sd-dropdown { min-width: 240px; padding: 8px; border-radius: 16px; }
+.sd-dropdown-item { gap: 14px; padding: 12px 14px; font-weight: 600; font-size: .875rem; line-height: 1.5; }
+.sd-dropdown-item > svg { flex-shrink: 0; color: #657394; }
+.sd-dropdown-item--danger > svg { color: currentColor; }
+.sd-dropdown-item > span { min-width: 0; }
