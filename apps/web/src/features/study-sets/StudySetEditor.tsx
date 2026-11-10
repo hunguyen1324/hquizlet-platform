@@ -82,6 +82,7 @@ function LangLabel({ code }: { code: string }) {
 export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   const { token } = useAuth();
   const isEditing = Boolean(existingSet);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [title, setTitle] = useState(existingSet?.title ?? "");
   const [description, setDescription] = useState(existingSet?.description ?? "");
   const [draftCards, setDraftCards] = useState<DraftCard[]>(() =>
@@ -199,7 +200,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   }
 
   return (
-    <form className="qe-page" onSubmit={handleSubmit}>
+    <form className="qe-page qe-page--modern" onSubmit={handleSubmit}>
       {/* ── Import loading overlay ───────────────────────── */}
       {loading && importFile && (
         <div style={{
@@ -251,15 +252,13 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       {/* ── Top bar ─────────────────────────────────────── */}
       <div className="qe-topbar">
-        <span className="qe-topbar-title">
-          {isEditing ? "Chỉnh sửa học phần" : "Tạo học phần mới"}
-        </span>
+        <div className="qe-topbar-copy"><button type="button" className="qe-back-link" onClick={onCancel}>← Trở về học phần</button><span className="qe-topbar-title">{isEditing ? "Chỉnh sửa học phần" : "Tạo học phần mới"}</span></div>
         <div className="qe-topbar-actions">
           <button className="qe-btn qe-btn--ghost" type="button" onClick={onCancel}>
             Hủy
           </button>
           <button className="qe-btn qe-btn--primary" disabled={loading} type="submit">
-            {loading ? "Đang lưu…" : importFile && !isEditing ? "Tạo từ Excel" : isEditing ? "Lưu thay đổi" : "Tạo học phần"}
+            {loading ? "Đang lưu…" : importFile && !isEditing ? "Tạo từ Excel" : isEditing ? "Hoàn tất" : "Tạo học phần"}
           </button>
         </div>
       </div>
@@ -273,7 +272,6 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
             <input
               id="qe-title"
               className="qe-title-input"
-              autoFocus
               placeholder="Ví dụ: English Vocabulary Unit 1"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -436,16 +434,6 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
           </button>
         </div>
 
-        {/* Column labels */}
-        <div className="qe-lang-bar">
-          <div className="qe-lang-bar-label">
-            📝 Thuật ngữ · <LangLabel code={termLanguage} />
-          </div>
-          <div className="qe-lang-bar-label">
-            💡 Định nghĩa · <LangLabel code={definitionLanguage} />
-          </div>
-        </div>
-
         {/* Card list */}
         {draftCards.map((card, index) => (
           <div className="qe-card" key={card.key}>
@@ -459,7 +447,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   title="Phát âm thuật ngữ"
                   onClick={() => playTTS(token, card.term, termLanguage)}
                 >
-                  🔊 Term
+                  ♫ Thuật ngữ
                 </button>
                 <button
                   type="button"
@@ -467,7 +455,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   title="Phát âm định nghĩa"
                   onClick={() => playTTS(token, card.definition, definitionLanguage)}
                 >
-                  🔊 Def
+                  ♫ Định nghĩa
                 </button>
                 <button
                   className="qe-btn qe-btn--danger"
@@ -482,9 +470,13 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
 
             {/* Main term / definition */}
             <div className="qe-card-body">
+              <button type="button" className="qe-image-slot" aria-label={`Hình ảnh thẻ ${index + 1}`} aria-expanded={Boolean(expandedCards[card.key])}
+                onClick={() => setExpandedCards(previous => ({ ...previous, [card.key]: !previous[card.key] }))}>
+                {card.imageUrl ? <img src={card.imageUrl} alt={`Minh họa: ${card.term || `thẻ ${index + 1}`}`} loading="lazy" /> : <><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 3-3 6 6"/></svg><span>Hình ảnh</span></>}
+              </button>
               <div className="qe-card-col">
-                <span className="qe-card-col-label">Thuật ngữ</span>
-                <input
+                <label className="qe-card-col-label" htmlFor={`term-${card.key}`}>Thuật ngữ · <LangLabel code={termLanguage} /></label>
+                <textarea id={`term-${card.key}`} rows={2}
                   className="qe-card-input"
                   placeholder="Nhập thuật ngữ…"
                   value={card.term}
@@ -492,8 +484,8 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                 />
               </div>
               <div className="qe-card-col">
-                <span className="qe-card-col-label">Định nghĩa</span>
-                <input
+                <label className="qe-card-col-label" htmlFor={`definition-${card.key}`}>Định nghĩa · <LangLabel code={definitionLanguage} /></label>
+                <textarea id={`definition-${card.key}`} rows={2}
                   className="qe-card-input"
                   placeholder="Nhập định nghĩa…"
                   value={card.definition}
@@ -502,7 +494,12 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
               </div>
             </div>
 
-            {/* Extra fields */}
+            <button type="button" className="qe-card-details-toggle" aria-expanded={Boolean(expandedCards[card.key])} aria-controls={`extras-${card.key}`}
+              onClick={() => setExpandedCards(previous => ({ ...previous, [card.key]: !previous[card.key] }))}>
+              <span>{expandedCards[card.key] ? "−" : "+"} Hình ảnh, ví dụ và gợi ý</span><span>{expandedCards[card.key] ? "Thu gọn ↑" : "Mở rộng ↓"}</span>
+            </button>
+            <div id={`extras-${card.key}`} hidden={!expandedCards[card.key]}>
+            <label className="qe-image-url">Liên kết hình ảnh<input type="text" inputMode="url" placeholder="https://… hoặc /files/…" value={card.imageUrl ?? ""} onChange={event => updateCard(card.key, "imageUrl", event.target.value)} /></label>
             <div className="qe-card-extras">
               <div className="qe-card-extra-col">
                 <span className="qe-card-extra-label">Ví dụ</span>
@@ -534,6 +531,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
                   onChange={(e) => updateCard(card.key, "synonyms", e.target.value)}
                 />
               </div>
+            </div>
             </div>
           </div>
         ))}

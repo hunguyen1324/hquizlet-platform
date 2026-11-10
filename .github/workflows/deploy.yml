@@ -53,6 +53,7 @@ jobs:
     needs: test
     runs-on: [self-hosted]
     strategy:
+      max-parallel: 2
       matrix:
         service: [gateway, auth, study, quiz, class, payment, file]
     steps:

@@ -11,7 +11,7 @@ type Props = {
 export function FlashcardListCard({ card, onToggleStar, onEdit, onDelete }: Props) {
   const [expanded, setExpanded] = React.useState(false);
   const hasExtra = Boolean(
-    card.exampleSentence || card.hintExplanation,
+    card.imageUrl || card.exampleSentence || card.hintExplanation,
   );
 
   return (
@@ -67,6 +67,14 @@ export function FlashcardListCard({ card, onToggleStar, onEdit, onDelete }: Prop
 
         {expanded && (
           <div className="sd-fc-row-expanded">
+            {card.imageUrl && (
+              <img
+                src={card.imageUrl}
+                alt={`Hình minh họa: ${card.term}`}
+                className="sd-fc-row-expanded-img"
+                loading="lazy"
+              />
+            )}
             {card.exampleSentence && (
               <div className="sd-fc-extra-block">
                 <div className="sd-fc-extra-label">Example</div>
@@ -89,6 +97,7 @@ export function FlashcardListCard({ card, onToggleStar, onEdit, onDelete }: Prop
           className="sd-fc-expand-btn"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
+          aria-label={expanded ? "Thu gọn chi tiết thẻ" : "Xem chi tiết thẻ"}
           title={expanded ? "Thu gọn" : "Xem thêm"}
         >
           <svg

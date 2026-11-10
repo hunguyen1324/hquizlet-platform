@@ -3,3 +3,18 @@ apps/web/dist
 **/.git
 **/.DS_Store
 **/tmp
+
+# Local dependencies, generated binaries and developer state are not build inputs.
+**/node_modules
+**/dist
+**/*.exe
+**/*.test
+**/*.log
+target
+web-dist
+.tmp
+.tmp-*
+.codegraph
+.freebuff
+.env
+.env.*
