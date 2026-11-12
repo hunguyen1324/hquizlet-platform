@@ -104,8 +104,16 @@ services:
       dockerfile: infra/docker/go-service.Dockerfile
       args:
         SERVICE: study
+    extra_hosts:
+      - "stt-app-host:host-gateway"
     environment:
       NATS_URL: nats://nats:4222
+      STT_API_URL: "${STT_DOCKER_API_URL:-http://stt-app-host:8091}"
+      STT_API_TOKEN: "${STT_API_TOKEN:-}"
+      NEO4J_URI: "${NEO4J_URI:-}"
+      NEO4J_USERNAME: "${NEO4J_USERNAME:-}"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD:-}"
+      NEO4J_DATABASE: "${NEO4J_DATABASE:-neo4j}"
       PORT: "8082"
       PAYMENT_SERVICE_URL: "http://payment:8085"
       QUIZ_AUDIO_ALLOWED_HOSTS: "${QUIZ_AUDIO_ALLOWED_HOSTS:-}"

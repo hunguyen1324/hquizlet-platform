@@ -1807,3 +1807,25 @@
 .sd-dropdown-item > svg { flex-shrink: 0; color: #657394; }
 .sd-dropdown-item--danger > svg { color: currentColor; }
 .sd-dropdown-item > span { min-width: 0; }
+
+/* Flashcard study surface, matching the compact reference layout. */
+.sd-repetition { margin: 24px 0; }
+.sr-panel { box-shadow: 0 1px 2px #00000015; border-radius: 12px; padding: 22px 18px 18px; }
+.sr-stat { border: 1px solid transparent; }
+.sr-stat--new { border-color: #c7d9ff; }
+.sr-stat--learning { border-color: #f6da76; }
+.sr-stat--almost { border-color: #cfd0ff; }
+.sr-stat--mastered { border-color: #acf4c5; }
+.sr-panel__reset { border: 1px solid #e2e3e8; border-radius: 5px; font-size: 11px; font-weight: 500; }
+.sr-due { margin: 8px 4px 0; font-size: 12px; color: var(--text-secondary, #64748b); }
+.sr-reset-confirm { padding: 12px; border: 1px solid #c7d2fe; border-radius: 8px; margin-top: 10px; }
+.sr-reset-confirm button { margin: 4px; padding: 7px 12px; }
+.sd-page:not(.sd-page--quiz) .sd-mode-hub-head { display: none; }
+.sd-page:not(.sd-page--quiz) .sd-mode-grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.sd-page:not(.sd-page--quiz) .sd-mode-card { min-height: 48px; padding: 12px; flex-direction: row; gap: 8px; align-items: center; border-radius: 10px; }
+.sd-page:not(.sd-page--quiz) .sd-mode-card-hint,
+.sd-page:not(.sd-page--quiz) .sd-mode-card-meta,
+.sd-page:not(.sd-page--quiz) .sd-mode-card-meter { display: none; }
+.sd-page:not(.sd-page--quiz) .sd-mode-card-icon { width: 20px; height: 20px; padding: 0; background: transparent; }
+.sd-page:not(.sd-page--quiz) .sd-mode-card-label { font-size: 13px; }
+@media(max-width:480px) { .sd-page:not(.sd-page--quiz) .sd-mode-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .sr-panel { padding: 14px; } }

@@ -23,7 +23,7 @@ func (r *QuizQuestionRepository) ListByStudySet(ctx context.Context, studySetID 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, study_set_id, position, question_text, question_type,
 		       correct_answer, time_in_seconds, audio_url, answer_explanation,
-		       paragraph_text, sub_questions, image_url, COALESCE(array_to_json(tags), '[]'::json)
+		       paragraph_text, sub_questions, image_url, COALESCE(array_to_json(tags), '[]'::json), srt_text
 		FROM quiz_question
 		WHERE study_set_id = $1
 		ORDER BY position ASC
@@ -39,7 +39,7 @@ func (r *QuizQuestionRepository) ListByStudySet(ctx context.Context, studySetID 
 		var subQ, tagsJSON []byte
 		if err := rows.Scan(&q.ID, &q.StudySetID, &q.Position, &q.QuestionText, &q.QuestionType,
 			&q.CorrectAnswer, &q.TimeInSeconds, &q.AudioURL, &q.AnswerExplanation,
-			&q.ParagraphText, &subQ, &q.ImageURL, &tagsJSON); err != nil {
+			&q.ParagraphText, &subQ, &q.ImageURL, &tagsJSON, &q.SRTText); err != nil {
 			return nil, err
 		}
 		if subQ != nil {
@@ -145,12 +145,12 @@ func (r *QuizQuestionRepository) BulkSave(ctx context.Context, studySetID int64,
 		err = tx.QueryRowContext(ctx, `
 			INSERT INTO quiz_question (study_set_id, position, question_text, question_type,
 			    correct_answer, time_in_seconds, audio_url, answer_explanation,
-			    paragraph_text, sub_questions, tags, image_url)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			    paragraph_text, sub_questions, tags, image_url, srt_text)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			RETURNING id
 		`, studySetID, position, qIn.QuestionText, qIn.QuestionType,
 			qIn.CorrectAnswer, qIn.TimeInSeconds, qIn.AudioURL, qIn.AnswerExplanation,
-			qIn.ParagraphText, subQJSON, tags, qIn.ImageURL).Scan(&qID)
+			qIn.ParagraphText, subQJSON, tags, qIn.ImageURL, qIn.SRTText).Scan(&qID)
 		if err != nil {
 			return err
 		}

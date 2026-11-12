@@ -1,0 +1,25 @@
+[Unit]
+Description=HQuizlet Whisper STT Worker
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=hqstt
+Group=hqstt
+EnvironmentFile=/etc/hquizlet-stt/service.env
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=OMP_NUM_THREADS=1
+ExecStart=/opt/hquizlet-stt/stt
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillMode=control-group
+MemoryMax=700M
+CPUQuota=100%
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hquizlet-stt /opt/whisper/input /opt/whisper/transcribe.lock
+[Install]
+WantedBy=multi-user.target

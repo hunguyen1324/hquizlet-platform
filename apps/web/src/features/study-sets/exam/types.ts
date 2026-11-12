@@ -14,6 +14,7 @@ export type QuizQuestionLike = {
   imageUrl?: string | null;
   audioUrl?: string | null;
   srtUrl?: string | null;
+  srtText?: string;
 };
 
 export type ExamItem = {
@@ -47,5 +48,6 @@ export function quizQuestionToLike(q: QuizQuestion): QuizQuestionLike {
     imageUrl: q.imageUrl,
     audioUrl: q.audioUrl,
     srtUrl: q.srtUrl,
+    srtText: q.srtText,
   };
 }

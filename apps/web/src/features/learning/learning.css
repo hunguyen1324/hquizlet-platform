@@ -2417,3 +2417,15 @@
   .match-mode .match-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .match-mode .match-item { min-height: 110px; padding: 12px; }
 }
+
+.ql-face--front .ql-img-wrap { max-width: 360px; height: 156px; aspect-ratio: auto; border: 1px solid #e2e3e8; border-radius: 5px; background: transparent; }
+.ql-face--front .ql-img { object-fit: contain; }
+.ql-review-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; }
+.ql-ratings { display: flex; flex-wrap: wrap; gap: 6px; }
+.ql-rating, .ql-related-toggle { border: 1px solid #dfe3ed; border-radius: 7px; padding: 8px 12px; background: var(--ql-surface, #fff); color: inherit; cursor: pointer; }
+.ql-rating--again { color: #dc2626; border-color: #fecaca; }
+.ql-rating--hard { color: #b45309; border-color: #fde68a; }
+.ql-rating--good { color: #4f46e5; border-color: #c7d2fe; }
+.ql-rating--easy { color: #15803d; border-color: #bbf7d0; }
+.ql-rating:disabled { opacity: .5; cursor: wait; }
+.ql-related { padding: 14px; border: 1px solid #c7d2fe; border-radius: 10px; margin-bottom: 10px; }

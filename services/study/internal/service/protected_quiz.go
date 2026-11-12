@@ -524,6 +524,7 @@ func quizPageItem(it model.SessionItem, i int, answered, revealed, sanitize bool
 	q.AudioURL = nil
 	q.Options = append([]model.QuizQuestionOption{}, q.Options...)
 	if !revealed {
+		q.SRTText = ""
 		q.CorrectAnswer = nil
 		q.AnswerExplanation = nil
 		for n := range q.Options {
@@ -625,6 +626,9 @@ func sessionItems(questions []model.QuizQuestion, sanitize bool) ([]model.Sessio
 			}
 			if child.AudioURL == nil || *child.AudioURL == "" {
 				child.AudioURL = q.AudioURL
+			}
+			if child.SRTText == "" {
+				child.SRTText = q.SRTText
 			}
 			if q.QuestionType == "paragraph" {
 				child.ParagraphText = q.ParagraphText

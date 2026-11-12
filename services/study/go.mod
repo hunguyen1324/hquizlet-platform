@@ -3,13 +3,14 @@ module github.com/hunguyen1324/hquizlet-platform/services/study
 go 1.25.0
 
 require (
- github.com/hunguyen1324/hquizlet-platform/packages/authz v0.0.0
- github.com/nats-io/nats.go v1.37.0
 	github.com/aws/aws-sdk-go-v2 v1.30.1
 	github.com/aws/aws-sdk-go-v2/config v1.27.0
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.58.0
+	github.com/hunguyen1324/hquizlet-platform/packages/authz v0.0.0
 	github.com/jackc/pgx/v5 v5.7.2
+	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
+	github.com/nats-io/nats.go v1.37.0
 	github.com/xuri/excelize/v2 v2.11.0
 )
 

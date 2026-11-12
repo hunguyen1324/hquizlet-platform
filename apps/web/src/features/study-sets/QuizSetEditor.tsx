@@ -1,4 +1,5 @@
-import { protectedQuizApi } from "../../lib/api/protectedQuiz";
+import { ListeningMediaEditor } from "./ListeningMediaEditor";
+import { normalizeSubtitleText } from "../../lib/subtitles";
 // QuizSetEditor — tạo/sửa quiz set (multiple choice, true/false, written)
 // Tham chiếu: hquizlet/apps/nextjs/src/components/study-set/quiz-set-form.tsx
 
@@ -37,6 +38,7 @@ interface QuizQuestion {
   paragraphText: string;
   imageUrl: string;
   audioUrl: string;
+  srtText: string;
   options: QuizOption[];
   position: number;
   subQuestions?: unknown;
@@ -60,6 +62,7 @@ function newQuestion(position: number): QuizQuestion {
     paragraphText: "",
     imageUrl: "",
     audioUrl: "",
+    srtText: "",
     options: [
       { text: "", position: 0 },
       { text: "", position: 1 },
@@ -78,8 +81,12 @@ function QuestionCard({
   onDuplicate,
   disabled,
   studySetId,
+  ensureStudySet,
+  onBusyChange,
 }: {
   studySetId?: number;
+  ensureStudySet: () => Promise<number>;
+  onBusyChange: (key: string, busy: boolean) => void;
   question: QuizQuestion;
   index: number;
   onChange: (q: QuizQuestion) => void;
@@ -87,19 +94,12 @@ function QuestionCard({
   onDuplicate: () => void;
   disabled: boolean;
 }) {
-  const { token } = useAuth();
+  const latestQuestion = React.useRef(question);
+  latestQuestion.current = question;
+  const mediaBusy = React.useCallback((busy: boolean) => onBusyChange(question.key, busy), [onBusyChange, question.key]);
   const [editing, setEditing] = React.useState(!question.questionText.trim());
   const typeLabel = { multiple_choice: "Nhiều lựa chọn", true_false: "Đúng / Sai", written: "Tự luận", paragraph: "Đọc hiểu", sorting: "Sắp xếp" }[question.questionType];
   const correctOption = (text: string, index: number) => Boolean(question.correctAnswer) && (question.correctAnswer === text || question.correctAnswer.toUpperCase() === String.fromCharCode(65 + index));
-  const [audioUploading, setAudioUploading] = React.useState(false);
-  const [audioError, setAudioError] = React.useState("");
-  async function uploadAudio(file?: File) {
-    if (!file || !studySetId) return;
-    setAudioUploading(true); setAudioError("");
-    try { const result = await protectedQuizApi.uploadAudio(token, studySetId, file); setField("audioUrl", result.audioUrl); }
-    catch (error) { setAudioError(error instanceof Error ? error.message : "Không tải được file nghe."); }
-    finally { setAudioUploading(false); }
-  }
   function setField<K extends keyof QuizQuestion>(key: K, value: QuizQuestion[K]) {
     onChange({ ...question, [key]: value });
   }
@@ -332,24 +332,12 @@ function QuestionCard({
           </>
         )}
 
-        <label>Tải file nghe vào kho riêng (tối đa 30 MB)
-          <input type="file" accept="audio/*" disabled={disabled || audioUploading || !studySetId} onChange={(e) => void uploadAudio(e.target.files?.[0])} />
-          {!studySetId && <small>Lưu bài trước, sau đó mở chỉnh sửa để tải file nghe.</small>}
-          {audioUploading && <small>Đang tải file nghe…</small>}
-          {audioError && <small role="alert">{audioError}</small>}
-        </label>
-        <label>Link / đường dẫn ảnh<input value={question.imageUrl} onChange={(e) => setField("imageUrl", e.target.value)} placeholder="https://... hoặc /images/question.png" /></label>
-        {/* Audio URL */}
-        <label>
-          Nguồn âm thanh (mã kho riêng hoặc URL được phép)
-          <input
-            type="text"
-            placeholder="https://...mp3"
-            value={question.audioUrl}
-            onChange={(e) => setField("audioUrl", e.target.value)}
-            disabled={disabled}
-          />
-        </label>
+        <ListeningMediaEditor
+          audioUrl={question.audioUrl} srtText={question.srtText} studySetId={studySetId}
+          ensureStudySet={ensureStudySet} onBusyChange={mediaBusy} disabled={disabled}
+          onChange={patch => onChange({ ...latestQuestion.current, ...patch })}
+        />
+        <label>Link / đường dẫn ảnh<input value={question.imageUrl} onChange={(e) => setField("imageUrl", e.target.value)} placeholder="https://... hoặc /images/question.png" disabled={disabled} /></label>
 
         {/* Explanation */}
         <label>
@@ -369,6 +357,11 @@ function QuestionCard({
 
 export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   const { token } = useAuth();
+  const [draftSetId, setDraftSetId] = useState(existingSetId);
+  const draftRequest = React.useRef<Promise<number> | null>(null);
+  const [busyQuestions, setBusyQuestions] = useState<Record<string, boolean>>({});
+  const mediaBusy = Object.values(busyQuestions).some(Boolean);
+  const changeMediaBusy = React.useCallback((key: string, busy: boolean) => setBusyQuestions(previous => previous[key] === busy ? previous : { ...previous, [key]: busy }), []);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<QuizQuestion[]>([newQuestion(0)]);
@@ -383,6 +376,21 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: Array<{ row: number; field: string; reason: string }> } | null>(null);
 
+  useEffect(() => { setDraftSetId(existingSetId); draftRequest.current = null; }, [existingSetId]);
+  async function ensureStudySet() {
+    if (draftSetId) return draftSetId;
+    if (draftRequest.current) return draftRequest.current;
+    draftRequest.current = studySetApi.create(token, { title: title.trim() || "Bài nghe chưa đặt tên", description, contentType: "quiz", termLanguage, definitionLanguage, visibility: "private" }).then(set => { setDraftSetId(set.id); return set.id; });
+    try { return await draftRequest.current; } finally { draftRequest.current = null; }
+  }
+  async function cancelEditor() {
+    if (mediaBusy || loading) return;
+    if (draftSetId && !existingSetId) {
+      setLoading(true);
+      try { await studySetApi.delete(token, draftSetId); } catch (value) { setError(value instanceof Error ? value.message : "Không xóa được bản nháp."); setLoading(false); return; }
+    }
+    onCancel();
+  }
   useEffect(() => {
     if (!existingSetId) return;
     let cancelled = false;
@@ -394,7 +402,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
         setQuestions(loadedQuestions.map((q, index) => ({
           key: String(q.id ?? crypto.randomUUID()), questionText: q.questionText, questionType: q.questionType,
           correctAnswer: q.correctAnswer || q.options?.find(option => option.isCorrect)?.text || "", answerExplanation: q.answerExplanation ?? "", paragraphText: q.paragraphText ?? "",
-          imageUrl: q.imageUrl ?? "", audioUrl: q.audioUrl ?? "", options: (q.options ?? []).map((o, optionIndex) => ({ text: o.text, position: optionIndex })),
+          imageUrl: q.imageUrl ?? "", audioUrl: q.audioUrl ?? "", srtText: q.srtText ?? "", options: (q.options ?? []).map((o, optionIndex) => ({ text: o.text, position: optionIndex })),
           position: q.position ?? index, subQuestions: q.subQuestions, tags: q.tags, timeInSeconds: q.timeInSeconds,
         })));
       })
@@ -428,6 +436,9 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (mediaBusy) { setError("Chờ tải dữ liệu file nghe xong trước khi lưu."); return; }
+    try { questions.forEach(q => normalizeSubtitleText(q.srtText)); }
+    catch (value) { setError(value instanceof Error ? value.message : "Kiểm tra định dạng SRT."); return; }
 
     if (!title.trim()) {
       setError("Vui lòng nhập tiêu đề quiz.");
@@ -456,6 +467,10 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
           : questions.map((q, i) => ({
               questionText: q.questionText.trim(),
               questionType: q.questionType,
+              imageUrl: q.imageUrl.trim() || undefined,
+              audioUrl: q.audioUrl || undefined,
+              srtText: normalizeSubtitleText(q.srtText),
+              subQuestions: q.subQuestions, tags: q.tags, timeInSeconds: q.timeInSeconds,
               correctAnswer: q.correctAnswer,
               answerExplanation: q.answerExplanation.trim() || undefined,
               paragraphText: q.paragraphText?.trim() || undefined,
@@ -468,15 +483,15 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
                   : [],
             })),
       };
-      if (existingSetId) {
-        await studySetApi.update(token, existingSetId, { title: payload.title, description: payload.description, termLanguage, definitionLanguage, visibility });
-        if (!importFile) await quizQuestionApi.bulkSave(token, existingSetId, questions.map((q, i) => ({
+      if (draftSetId) {
+        await studySetApi.update(token, draftSetId, { title: payload.title, description: payload.description, termLanguage, definitionLanguage, visibility });
+        if (!importFile) await quizQuestionApi.bulkSave(token, draftSetId, questions.map((q, i) => ({
           questionText: q.questionText.trim(), questionType: q.questionType, correctAnswer: q.correctAnswer || undefined,
           answerExplanation: q.answerExplanation.trim() || undefined, paragraphText: q.paragraphText?.trim() || undefined,
-          imageUrl: q.imageUrl.trim() || undefined, audioUrl: q.audioUrl || undefined, timeInSeconds: q.timeInSeconds, subQuestions: q.subQuestions, tags: q.tags, position: i,
+          imageUrl: q.imageUrl.trim() || undefined, audioUrl: q.audioUrl || undefined, srtText: normalizeSubtitleText(q.srtText), timeInSeconds: q.timeInSeconds, subQuestions: q.subQuestions, tags: q.tags, position: i,
           options: q.options.filter((o) => o.text.trim()).map((o, idx) => ({ text: o.text.trim(), position: idx, isCorrect: q.correctAnswer.toUpperCase() === String.fromCharCode(65 + idx) || q.correctAnswer === o.text })),
         })));
-        if (importFile) { const result = await importQuizIntoSet(existingSetId, importFile); if (result.errors.length > 0) return; }
+        if (importFile) { const result = await importQuizIntoSet(draftSetId, importFile); if (result.errors.length > 0) return; }
         onSave(); return;
       }
       const saved = await quizApi.create(token, payload);
@@ -495,9 +510,9 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   return (
     <form className="create-page qedit-page" onSubmit={handleSubmit}>
       <header className="qedit-header">
-        <button type="button" className="qedit-back" onClick={onCancel} disabled={loading} aria-label="Trở về học phần"><StudyActionIcon name="back" /></button>
+        <button type="button" className="qedit-back" onClick={() => void cancelEditor()} disabled={loading || mediaBusy} aria-label="Trở về học phần"><StudyActionIcon name="back" /></button>
         <label className="qedit-title">Tiêu đề<input placeholder="Nhập tiêu đề quiz" value={title} onChange={event => setTitle(event.target.value)} disabled={loading} /></label>
-        <div className="qedit-header-actions"><button className="ghost-button" type="button" onClick={onCancel} disabled={loading}>Hủy</button><button className="primary-button" type="submit" disabled={loading}>{loading ? "Đang lưu…" : existingSetId ? "Lưu thay đổi" : "Tạo Quiz"}</button></div>
+        <div className="qedit-header-actions"><button className="ghost-button" type="button" onClick={() => void cancelEditor()} disabled={loading || mediaBusy}>Hủy</button><button className="primary-button" type="submit" disabled={loading || mediaBusy}>{loading ? "Đang lưu…" : existingSetId ? "Lưu thay đổi" : "Tạo Quiz"}</button></div>
       </header>
       <details className="qedit-settings"><summary>Cài đặt quiz</summary><section className="create-meta">
         <label>
@@ -618,7 +633,9 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
 
         {questions.map((q, idx) => (
           <QuestionCard
-            studySetId={existingSetId}
+            studySetId={draftSetId}
+            ensureStudySet={ensureStudySet}
+            onBusyChange={changeMediaBusy}
             key={q.key}
             question={q}
             index={idx}
@@ -629,7 +646,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
               next.splice(idx + 1, 0, { ...structuredClone(q), key: crypto.randomUUID() });
               return next.map((question, position) => ({ ...question, position }));
             })}
-            disabled={loading}
+            disabled={loading || mediaBusy}
           />
         ))}
 

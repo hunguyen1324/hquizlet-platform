@@ -29,7 +29,7 @@ func StudyWritePolicy(db *sql.DB) func(http.Handler) http.Handler {
 					prefix = "/v1/flashcards/"
 				}
 				parts := strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/")
-				if len(parts) > 1 && (parts[1] == "progress" || parts[1] == "play") && !(len(parts) == 3 && parts[2] == "audio") {
+				if len(parts) > 1 && (parts[1] == "progress" || parts[1] == "spaced-repetition" || parts[1] == "play") && !(len(parts) == 3 && parts[2] == "audio") {
 					next.ServeHTTP(w, r)
 					return
 				}

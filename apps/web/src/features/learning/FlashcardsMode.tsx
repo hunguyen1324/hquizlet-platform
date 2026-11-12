@@ -2,6 +2,8 @@
 // Unified design system: ql-* classes, full Quizlet parity
 
 import React from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { repetitionApi, repetitionKey, type Rating } from "./spacedRepetitionApi";
 import { useAuth } from "../auth/AuthContext";
 import type { Flashcard } from "./types";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
@@ -30,7 +32,13 @@ type Props = {
 };
 
 export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const queryClient = useQueryClient();
+  const [showRelated, setShowRelated] = React.useState(false);
+  const review = useMutation({
+    mutationFn: ({ cardId, rating }: { cardId: number; rating: Rating }) => repetitionApi.review(token, studySetId, cardId, rating),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: repetitionKey(String(user?.id ?? ""), studySetId) }); handleNext(); },
+  });
 
   // Load toàn bộ thẻ ngay từ đầu — limit = totalCount (hoặc cards.length nếu chưa có)
   const limit = totalCount ?? cards.length;
@@ -90,6 +98,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   const current = deck[index];
   const total = deck.length;
+  const related = useQuery({ queryKey: ["related-kanji", user?.id, studySetId, current?.term], queryFn: () => repetitionApi.related(token, studySetId, current!.term), enabled: showRelated && !!current && !!token, retry: false });
+  React.useEffect(() => { setShowRelated(false); review.reset(); }, [current?.id, studySetId]);
   // Tổng thẻ để hiển thị: dùng total từ API nếu có, fallback về totalCount prop
   const displayTotal = generation.state.state === "ready"
     ? generation.state.data.total
@@ -352,12 +362,12 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
             <div className="ql-face ql-face--front">
               <span className="ql-face-label">{frontLabel}</span>
               <div className="ql-face-main">
+                <p className="ql-card-text">{frontText}</p>
                 {current.imageUrl && (
                   <div className="ql-img-wrap">
                     <img src={current.imageUrl} alt={frontText} className="ql-img" />
                   </div>
                 )}
-                <p className="ql-card-text">{frontText}</p>
               </div>
               {current.exampleSentence && !fcSettings.startFromDefinition && (
                 <div className="ql-face-extra">
@@ -394,6 +404,16 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         </div>
       )}
 
+      <div className="ql-review-tools">
+        <button type="button" className="ql-related-toggle" aria-expanded={showRelated} onClick={() => setShowRelated(v => !v)}>♧ Kanji liên quan</button>
+        {(flipped || showBothSides) && token && <div className="ql-ratings" aria-label="Tự đánh giá mức nhớ">
+          {([["again", "Chưa nhớ"], ["hard", "Khó"], ["good", "Đã nhớ"], ["easy", "Dễ"]] as const).map(([rating, label]) => <button key={rating} className={`ql-rating ql-rating--${rating}`} disabled={review.isPending} onClick={() => review.mutate({ cardId: current.id, rating })}>{label}</button>)}
+        </div>}
+      </div>
+      {review.isError && <p role="alert">Không lưu được đánh giá. Vui lòng thử lại.</p>}
+      {showRelated && <div className="ql-related" role="status">
+        {related.isPending ? "Đang tìm Kanji liên quan…" : related.isError ? "Không tải được dữ liệu Neo4j. Hãy thử lại sau." : related.data?.characters.length ? related.data.characters.join(" · ") : "Chưa có Kanji liên quan."}
+      </div>}
       {/* ── Navigation ── */}
       <div className="ql-nav">
         <button className="ql-nav-btn" onClick={handlePrev} disabled={total <= 1} aria-label="Thẻ trước">

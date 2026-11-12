@@ -353,6 +353,7 @@ export type QuizQuestionPayload = {
   correctAnswer?: string;
   timeInSeconds?: number;
   audioUrl?: string;
+  srtText?: string;
   answerExplanation?: string;
   paragraphText?: string;
   subQuestions?: unknown;

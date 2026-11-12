@@ -131,6 +131,7 @@ type QuizQuestion struct {
 	TimeInSeconds     *int                 `json:"timeInSeconds,omitempty"`
 	ImageURL          *string              `json:"imageUrl,omitempty"`
 	AudioURL          *string              `json:"audioUrl,omitempty"`
+	SRTText           string               `json:"srtText,omitempty"`
 	AnswerExplanation *string              `json:"answerExplanation,omitempty"`
 	ParagraphText     *string              `json:"paragraphText,omitempty"`
 	SubQuestions      json.RawMessage      `json:"subQuestions,omitempty"`
@@ -156,6 +157,7 @@ type CreateQuizQuestionInput struct {
 	TimeInSeconds     *int                `json:"timeInSeconds,omitempty"`
 	ImageURL          *string             `json:"imageUrl,omitempty"`
 	AudioURL          *string             `json:"audioUrl,omitempty"`
+	SRTText           string              `json:"srtText,omitempty"`
 	AnswerExplanation *string             `json:"answerExplanation,omitempty"`
 	ParagraphText     *string             `json:"paragraphText,omitempty"`
 	SubQuestions      json.RawMessage     `json:"subQuestions,omitempty"`

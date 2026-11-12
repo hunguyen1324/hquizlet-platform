@@ -1,33 +1,9 @@
+import { parseSubtitleText } from "../../../lib/subtitles";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { RichTextContent } from "./RichTextContent";
 import { PART_DIRECTIONS, isAnswerCorrect } from "./toeic";
 import type { ExamItem, QuizQuestionLike } from "./types";
-
-function parseSrt(content: string) {
-  const blocks = content.trim().split(/\n\n+/);
-  return blocks.flatMap((block) => {
-    const lines = block.split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) return [];
-    const timeLine = lines[1] ?? "";
-    const m = /(\d+):(\d+):(\d+)[.,](\d+)\s*-->\s*(\d+):(\d+):(\d+)[.,](\d+)/.exec(timeLine);
-    if (!m) return [];
-    const toSec = (h: string, min: string, s: string, ms: string) =>
-      +h * 3600 + +min * 60 + +s + +ms / 1000;
-    const g = (i: number) => m[i] ?? "";
-    return [
-      {
-        start: toSec(g(1), g(2), g(3), g(4)),
-        end: toSec(g(5), g(6), g(7), g(8)),
-        text: lines
-          .slice(2)
-          .join(" ")
-          .replace(/<[^>]+>/g, "")
-          .trim(),
-      },
-    ];
-  });
-}
 
 function formatTime(sec: number) {
   return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -36,10 +12,12 @@ function formatTime(sec: number) {
 export function CustomAudioPlayer({
   src,
   srtUrl,
+  srtText,
   muted,
 }: {
   src: string;
   srtUrl?: string | null;
+  srtText?: string;
   muted: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -60,14 +38,20 @@ export function CustomAudioPlayer({
     setIsPlaying(false);
     setCurrent(0);
     setDuration(0);
+  }, [src]);
+
+  useEffect(() => {
     setCues([]);
     setActiveCue(-1);
+    if (srtText) { try { setCues(parseSubtitleText(srtText)); } catch { setCues([]); } return; }
     if (!srtUrl) return;
-    fetch(srtUrl)
-      .then((r) => r.text())
-      .then((t) => setCues(parseSrt(t)))
-      .catch(() => setCues([]));
-  }, [src, srtUrl]);
+    const controller = new AbortController();
+    fetch(srtUrl, { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error("subtitle unavailable"); return r.text(); })
+      .then(text => setCues(parseSubtitleText(text)))
+      .catch(() => { if (!controller.signal.aborted) setCues([]); });
+    return () => controller.abort();
+  }, [src, srtUrl, srtText]);
 
   useEffect(() => {
     if (!cues.length) return;
@@ -325,6 +309,7 @@ export function ExamQuestionLayout({
   const imageUrl = parent?.imageUrl ?? firstQuestion?.imageUrl;
   const audioUrl = parent?.audioUrl ?? firstQuestion?.audioUrl;
   const srtUrl = parent?.srtUrl ?? firstQuestion?.srtUrl;
+  const srtText = parent?.srtText ?? firstQuestion?.srtText;
   const groupKey = group[0]?.groupKey;
 
   const [audioBlocked, setAudioBlocked] = useState(false);
@@ -375,7 +360,7 @@ export function ExamQuestionLayout({
             />
             </>
           ) : (
-            <CustomAudioPlayer src={audioUrl} srtUrl={srtUrl} muted={muted} />
+            <CustomAudioPlayer src={audioUrl} srtUrl={srtUrl} srtText={srtText} muted={muted} />
           ))}
       </div>
       <div className="w-1/2 min-w-0 overflow-y-auto p-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300">

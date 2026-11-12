@@ -9,6 +9,7 @@ import { LearningContainer, fetchLatestProgress } from "../learning";
 import { useAuth } from "../auth/AuthContext";
 import { flashcardApi, folderApi, studySetApi } from "../../lib/api";
 import type { FolderSummary } from "../../lib/api";
+import { SpacedRepetitionProgress } from "../learning/SpacedRepetitionProgress";
 import { StudyModes } from "./StudyModes";
 import { FlashcardListCard } from "./FlashcardListCard";
 import { FlashcardSearchBar } from "./FlashcardSearchBar";
@@ -310,12 +311,15 @@ export function StudyDetail({ set, onEdit, onDelete, onBack, onToggleStar, onMan
         </div>
 
         {isFlashcardSet && (
+          <>
+          <SpacedRepetitionProgress key={set.id} studySetId={set.id} />
           <StudyModes
             activeMode={studyMode}
             onSelectMode={setStudyMode}
             progress={modeProgress}
             onContinue={handleContinueLearning}
           />
+          </>
         )}
       </div>
 

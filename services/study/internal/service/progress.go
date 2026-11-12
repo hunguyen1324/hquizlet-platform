@@ -242,3 +242,18 @@ func (s *ProgressService) allowLearner(ctx context.Context, setID, uid int64) er
 	}
 	return s.learnerAccess(ctx, setID, uid)
 }
+
+// Authorize checks learner access without loading session history.
+func (s *ProgressService) Authorize(ctx context.Context, userID, setID int64) error {
+	if userID == 0 {
+		return ErrUnauthorized
+	}
+	owned, err := s.sets.IsOwner(ctx, setID, userID)
+	if err != nil {
+		return err
+	}
+	if owned {
+		return nil
+	}
+	return s.allowLearner(ctx, setID, userID)
+}

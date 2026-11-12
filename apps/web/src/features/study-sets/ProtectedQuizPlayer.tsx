@@ -591,7 +591,7 @@ export function ProtectedQuizPlayer({
     ...manifest[item.index]!,
     question: { ...item.question, subQuestions: undefined, audioUrl: item.index === audioItem?.index ? audioUrl : undefined },
     parent: item.question.paragraphText
-      ? { questionType: "paragraph", questionText: "", paragraphText: item.question.paragraphText, audioUrl }
+      ? { questionType: "paragraph", questionText: "", paragraphText: item.question.paragraphText, srtText: item.question.srtText, audioUrl }
       : undefined,
   }));
   const answeredCount = view.answered ?? Object.keys(view.answers).length;
@@ -707,7 +707,7 @@ export function ProtectedQuizPlayer({
 
       <div className="qz-body">
         {audioNotice}
-        {audioUrl && view.layout === "default" && <CustomAudioPlayer key={audioUrl} src={audioUrl} muted={false} />}
+        {audioUrl && view.layout === "default" && <CustomAudioPlayer key={audioUrl} src={audioUrl} srtText={audioItem?.question.srtText} muted={false} />}
         {audioUrl && view.layout === "default" && (
           <button
             type="button"

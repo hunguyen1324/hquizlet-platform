@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/subtitles"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
@@ -36,7 +37,13 @@ func (s *QuizQuestionService) BulkSave(ctx context.Context, studySetID, userID i
 		return err
 	}
 	// Validate each question
-	for _, q := range in.Questions {
+	for i := range in.Questions {
+		q := &in.Questions[i]
+		text, err := subtitles.Normalize(q.SRTText)
+		if err != nil {
+			return ErrValidation
+		}
+		q.SRTText = text
 		switch q.QuestionType {
 		case "multiple_choice", "true_false", "written", "paragraph", "sorting":
 			// valid

@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/graph"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +28,13 @@ import (
 
 func main() {
 	cfg := config.Load()
+	graphClient, err := graph.Open(os.Getenv("NEO4J_URI"), os.Getenv("NEO4J_USERNAME"), os.Getenv("NEO4J_PASSWORD"), envNeo4jDatabase())
+	if err != nil {
+		log.Fatal("invalid Neo4j configuration")
+	}
+	if graphClient != nil {
+		defer graphClient.Driver.Close(context.Background())
+	}
 
 	db := openDatabase(cfg.DatabaseURL)
 	defer db.Close()
@@ -122,7 +130,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithCache(redisCache).WithStats(statsSvc).WithAdmin(service.NewAdminService(repository.NewAdminRepository(db))).WithProtectedQuiz(
+	studyhttp.New(setSvc, cardSvc, folderSvc, progressSvc, quizSvc, importSvc, importJobSvc, db).WithSTT(os.Getenv("STT_API_URL"), os.Getenv("STT_API_TOKEN")).WithGraph(graphClient).WithCache(redisCache).WithStats(statsSvc).WithAdmin(service.NewAdminService(repository.NewAdminRepository(db))).WithProtectedQuiz(
 		quizSvcProtected,
 		quizAudio,
 	).WithViewerMarkSecret(os.Getenv("WATERMARK_SECRET")).Register(mux)
@@ -179,4 +187,11 @@ func openImportBlobStorage(cfg config.Config) (storage.ImportBlobStorage, error)
 	}
 	log.Printf("[study] import blob storage: local spool %s", cfg.MinIO.LocalSpoolDir)
 	return storage.NewLocalSpoolStorage(cfg.MinIO.LocalSpoolDir)
+}
+
+func envNeo4jDatabase() string {
+	if v := os.Getenv("NEO4J_DATABASE"); v != "" {
+		return v
+	}
+	return "neo4j"
 }

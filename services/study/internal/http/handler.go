@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/hunguyen1324/hquizlet-platform/packages/authz"
+	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/graph"
 	"io"
 	"net/http"
 	"strconv"
@@ -21,6 +22,8 @@ import (
 )
 
 type Handler struct {
+	stt           *transcriptionClient
+	graph         *graph.Client
 	protectedQuiz *service.ProtectedQuizService
 	quizAudio     *storage.QuizAudio
 	sets          *service.StudySetService
@@ -216,6 +219,18 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) >= 2 && parts[1] == "listening" {
+		h.listeningRouter(w, r, setID, parts[2:])
+		return
+	}
+	if len(parts) == 2 && parts[1] == "spaced-repetition" {
+		h.spacedRepetition(w, r, setID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "related-kanji" {
+		h.relatedKanji(w, r, setID)
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "play" {
 		h.protectedQuizRouter(w, r, setID, parts[2:])
 		return
@@ -643,7 +658,7 @@ func (h *Handler) listQuizQuestions(w http.ResponseWriter, r *http.Request, stud
 
 func (h *Handler) bulkSaveQuizQuestions(w http.ResponseWriter, r *http.Request, studySetID int64) {
 	var in model.BulkSaveQuizQuestionsInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<20)).Decode(&in); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -946,3 +961,5 @@ func intQueryParam(s string, def int) int {
 	}
 	return n
 }
+
+func (h *Handler) WithGraph(g *graph.Client) *Handler { h.graph = g; return h }

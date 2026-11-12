@@ -171,6 +171,7 @@ export type QuizQuestion = {
   timeInSeconds?: number;
   audioUrl?: string;
   srtUrl?: string;
+  srtText?: string;
   imageUrl?: string | null;
   answerExplanation?: string;
   paragraphText?: string;
