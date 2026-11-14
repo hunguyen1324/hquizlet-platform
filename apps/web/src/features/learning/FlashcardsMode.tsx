@@ -35,6 +35,9 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
   const [showRelated, setShowRelated] = React.useState(false);
+  const [showSearch, setShowSearch] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const searchInput = React.useRef<HTMLInputElement>(null);
   const review = useMutation({
     mutationFn: ({ cardId, rating }: { cardId: number; rating: Rating }) => repetitionApi.review(token, studySetId, cardId, rating),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: repetitionKey(String(user?.id ?? ""), studySetId) }); handleNext(); },
@@ -98,6 +101,13 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   const current = deck[index];
   const total = deck.length;
+  const searchResults = React.useMemo(() => {
+    const query = search.trim().normalize("NFKC").toLocaleLowerCase();
+    return query ? deck.flatMap((card, position) =>
+      `${card.term}\n${card.definition}`.normalize("NFKC").toLocaleLowerCase().includes(query)
+        ? [{ card, position }] : []) : [];
+  }, [deck, search]);
+  React.useEffect(() => { if (showSearch) searchInput.current?.focus(); }, [showSearch]);
   const related = useQuery({ queryKey: ["related-kanji", user?.id, studySetId, current?.term], queryFn: () => repetitionApi.related(token, studySetId, current!.term), enabled: showRelated && !!current && !!token, retry: false });
   React.useEffect(() => { setShowRelated(false); review.reset(); }, [current?.id, studySetId]);
   // Tổng thẻ để hiển thị: dùng total từ API nếu có, fallback về totalCount prop
@@ -170,7 +180,8 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLElement && (e.target.closest("input, textarea, select, button, [contenteditable=true]") || e.target.isContentEditable)) return;
+      if (e.key === "/") { e.preventDefault(); setShowSearch(true); searchInput.current?.focus(); }
       if (e.key === " ") { e.preventDefault(); setFlipped((f) => !f); }
       if (e.key === "ArrowLeft") { e.preventDefault(); handlePrev(); }
       if (e.key === "ArrowRight") { e.preventDefault(); handleNext(); }
@@ -412,7 +423,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       </div>
       {review.isError && <p role="alert">Không lưu được đánh giá. Vui lòng thử lại.</p>}
       {showRelated && <div className="ql-related" role="status">
-        {related.isPending ? "Đang tìm Kanji liên quan…" : related.isError ? "Không tải được dữ liệu Neo4j. Hãy thử lại sau." : related.data?.characters.length ? related.data.characters.join(" · ") : "Chưa có Kanji liên quan."}
+        {!token ? "Đăng nhập để xem Kanji liên quan." : related.isPending ? "Đang tìm Kanji liên quan…" : related.isError ? <><span>{related.error.message}</span> <button type="button" className="ql-related-toggle" onClick={() => void related.refetch()}>Thử lại</button></> : related.data?.characters.length ? related.data.characters.join(" · ") : "Chưa có Kanji liên quan."}
       </div>}
       {/* ── Navigation ── */}
       <div className="ql-nav">
@@ -441,6 +452,24 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
           </svg>
         </button>
       </div>
+
+      <div className="ql-search-tools">
+        <button type="button" className="ql-icon-btn" aria-label="Tìm thẻ" title="Tìm thẻ (/)" aria-expanded={showSearch} aria-controls="ql-card-search" onClick={() => setShowSearch(value => !value)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+        </button>
+      </div>
+      {showSearch && <section id="ql-card-search" className="ql-card-search" aria-label="Tìm trong bộ thẻ">
+        <label htmlFor="ql-card-search-input">Tìm thuật ngữ hoặc định nghĩa</label>
+        <div className="ql-card-search-field">
+          <input ref={searchInput} id="ql-card-search-input" type="search" value={search} placeholder="Nhập từ cần tìm…" autoComplete="off" onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === "Escape") { setShowSearch(false); setSearch(""); } }} />
+          <button type="button" className="ql-related-toggle" onClick={() => { setShowSearch(false); setSearch(""); }}>Đóng</button>
+        </div>
+        <p role="status">{search.trim() ? `${searchResults.length} kết quả trong ${total} thẻ` : "Tìm thẻ rồi chọn kết quả để chuyển đến thẻ đó."}</p>
+        <ul className="ql-card-search-results">
+          {searchResults.slice(0, 50).map(({ card, position }) => <li key={card.id}><button type="button" onClick={() => { setFlipped(false); setIndex(position); setShowSearch(false); setSearch(""); }}><span className="ql-search-position">{position + 1}</span><span><strong>{card.term}</strong><span className="ql-search-definition">{card.definition}</span></span></button></li>)}
+        </ul>
+        {searchResults.length > 50 && <p>Hiển thị 50 kết quả đầu tiên. Nhập thêm để thu hẹp tìm kiếm.</p>}
+      </section>}
 
       {/* ── Completion ── */}
       {allSeen && (

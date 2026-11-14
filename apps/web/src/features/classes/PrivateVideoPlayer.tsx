@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import Hls from "hls.js";
 import { classVideoApi } from "../../lib/api";
+import { videoPlaybackError } from "./videoPlaybackError";
 
 export function PrivateVideoPlayer({ url, token, classId, videoId, title, onError }: {
   url: string; token: string; classId: number; videoId: number; title: string; onError: (message: string) => void;
@@ -27,7 +28,9 @@ export function PrivateVideoPlayer({ url, token, classId, videoId, title, onErro
       xhr.open("GET", target.toString(), true);
       xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     } });
-    hls.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal && active) errorRef.current("Không phát được video hoặc quyền xem đã hết hạn. Hãy đóng và mở lại video."); });
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal && active) errorRef.current(videoPlaybackError(data.response?.code, data.type));
+    });
     hls.attachMedia(video); hls.loadSource(url);
     return () => { active = false; hls.destroy(); video.removeAttribute("src"); video.load(); };
   }, [url, token, classId, videoId]);

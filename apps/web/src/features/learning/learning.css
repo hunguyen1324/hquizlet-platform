@@ -2429,3 +2429,15 @@
 .ql-rating--easy { color: #15803d; border-color: #bbf7d0; }
 .ql-rating:disabled { opacity: .5; cursor: wait; }
 .ql-related { padding: 14px; border: 1px solid #c7d2fe; border-radius: 10px; margin-bottom: 10px; }
+.ql-search-tools { display: flex; justify-content: flex-end; margin-top: -8px; }
+.ql-card-search { margin-top: 12px; padding: 18px; border: 1px solid #dfe3ed; border-radius: 12px; background: var(--ql-surface, #fff); }
+.ql-card-search label { display: block; font-weight: 600; margin-bottom: 10px; }
+.ql-card-search-field { display: flex; gap: 8px; }
+.ql-card-search-field input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid #dfe3ed; border-radius: 7px; font: inherit; color: inherit; background: transparent; }
+.ql-card-search-field input:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+.ql-card-search p { font-size: .85rem; color: #586380; }
+.ql-card-search-results { list-style: none; padding: 0; margin: 0; max-height: 320px; overflow-y: auto; }
+.ql-card-search-results button { display: flex; align-items: baseline; gap: 14px; width: 100%; padding: 12px 8px; text-align: left; border: 0; border-bottom: 1px solid #e9ecf4; background: transparent; color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.ql-card-search-results button:hover, .ql-card-search-results button:focus-visible { background: #eeefff; }
+.ql-search-position { color: #586380; min-width: 30px; font-size: .85rem; }
+.ql-search-definition { display: block; font-size: .9rem; margin-top: 4px; }
