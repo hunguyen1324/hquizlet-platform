@@ -32,7 +32,15 @@ export function KanjiGraph({
     setSelected("");
   }, [term]);
   useEffect(() => {
-    if (open) dialog.current?.showModal();
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog.current?.showModal();
+    return () => {
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
   }, [open]);
   const { token, user } = useAuth();
   const query = useQuery({
@@ -61,6 +69,18 @@ export function KanjiGraph({
             className="kanji-dialog"
             ref={dialog}
             onClose={() => setOpen(false)}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                const r = e.currentTarget.getBoundingClientRect();
+                if (
+                  e.clientX < r.left ||
+                  e.clientX > r.right ||
+                  e.clientY < r.top ||
+                  e.clientY > r.bottom
+                )
+                  e.currentTarget.close();
+              }
+            }}
             aria-label={`Kanji graph: ${term}`}
           >
             <header>

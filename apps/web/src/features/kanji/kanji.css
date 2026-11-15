@@ -1,22 +1,214 @@
-.kanji-tools, .kanji-tool-pair, .kanji-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.kanji-tools { margin: 12px 0; }
-.kanji-tools button, .kanji-dialog button, .kanji-dialog select { color: inherit; background: var(--background, #fff); border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
-.kanji-tools button:hover { border-color: #6366f1; }
-.kanji-tools button:focus-visible, .kanji-dialog :focus-visible { outline: 2px solid #6366f1; outline-offset: 3px; }
-.kanji-dialog { width: min(540px, calc(100vw - 32px)); max-height: 85dvh; overflow: auto; border: 1px solid #cbd5e1; border-radius: 16px; padding: 24px; background: var(--background, white); color: var(--foreground, #1e293b); }
-.kanji-dialog::backdrop { background: #0f172a99; }
-.kanji-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
-.kanji-dialog h2 { margin: 0; font-size: 19px; }
-.kanji-dialog footer { margin-top: 24px; font-size: 11px; color: #64748b; }
-.kanji-dialog a { color: #6366f1; }
-.kanji-canvas { display: block; margin: auto; width: min(280px, 100%); border: 1px solid #cbd5e1; border-radius: 10px; }
-.kanji-controls label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
-.kanji-dialog button:disabled { opacity: .4; cursor: default; }
-.kanji-tree ul { list-style: none; padding-left: 22px; border-left: 1px dashed #cbd5e1; }
-.kanji-tree li { margin: 12px 0; }
-.kanji-tree strong { font-size: 25px; }
-.kanji-tree summary { cursor: pointer; }
-.kanji-tree span, .kanji-tree small, .kanji-tree p { font-size: 12px; }
-.kanji-active-stroke { stroke-dasharray: 1; animation: kanji-write .7s linear both; }
-@keyframes kanji-write { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@media (prefers-reduced-motion: reduce) { .kanji-active-stroke { animation: none; } }
+.kanji-tools,
+.kanji-tool-pair,
+.kanji-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.kanji-tools {
+  margin: 12px 0;
+}
+.kanji-tools button,
+.kanji-dialog button,
+.kanji-dialog select {
+  color: inherit;
+  background: var(--background, #fff);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.kanji-tools button:hover {
+  border-color: #6366f1;
+}
+.kanji-tools button:focus-visible,
+.kanji-dialog :focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 3px;
+}
+dialog.kanji-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  box-sizing: border-box;
+  height: fit-content;
+  box-shadow: 0 24px 90px #17203b35;
+  width: min(540px, calc(100vw - 32px));
+  max-height: 85dvh;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 24px;
+  background: var(--background, white);
+  color: var(--foreground, #1e293b);
+}
+.kanji-dialog::backdrop {
+  background: #0f172a99;
+}
+.kanji-dialog header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kanji-dialog h2 {
+  margin: 0;
+  font-size: 19px;
+}
+.kanji-dialog footer {
+  margin-top: 24px;
+  font-size: 11px;
+  color: #64748b;
+}
+.kanji-dialog a {
+  color: #6366f1;
+}
+.kanji-canvas {
+  display: block;
+  margin: auto;
+  width: min(280px, 100%);
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+}
+.kanji-controls label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.kanji-dialog button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.kanji-tree ul {
+  list-style: none;
+  padding-left: 22px;
+  border-left: 1px dashed #cbd5e1;
+}
+.kanji-tree li {
+  margin: 12px 0;
+}
+.kanji-tree strong {
+  font-size: 25px;
+}
+.kanji-tree summary {
+  cursor: pointer;
+}
+.kanji-tree span,
+.kanji-tree small,
+.kanji-tree p {
+  font-size: 12px;
+}
+.kanji-active-stroke {
+  stroke-dasharray: 1;
+  animation: kanji-write 0.7s linear both;
+}
+@keyframes kanji-write {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kanji-active-stroke {
+    animation: none;
+  }
+}
+
+/* Native dialogs must be explicitly centered after the global reset. */
+dialog.kanji-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 48px);
+  padding: 26px;
+  border-color: var(--border, #e1e5ef);
+  background: var(--card, #fff);
+  overscroll-behavior: contain;
+}
+.kanji-dialog > header {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border, #e8ebf2);
+  margin-bottom: 18px;
+}
+.kanji-dialog > header h2 {
+  font-size: 20px;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+.kanji-dialog > header button {
+  border: 0;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  background: var(--background, #f5f6fa);
+  font-size: 18px;
+}
+.kanji-dialog > p {
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--muted-foreground, #7e879b);
+  margin: 0 0 18px;
+}
+.kanji-dialog .kanji-controls {
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.kanji-dialog .kanji-controls button[aria-pressed="true"] {
+  border-color: #b6b0ed;
+  background: #f0edff;
+  color: #6258be;
+}
+.kanji-dialog .kanji-word-graph {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.kanji-dialog .kanji-word-graph li {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 10px 0 0;
+  padding: 15px 18px;
+  border: 1px solid var(--border, #e6e9f1);
+  background: var(--background, #f9fafe);
+  border-radius: 12px;
+}
+.kanji-word-graph li > strong {
+  font-size: 30px;
+  color: #7165cb;
+}
+.kanji-word-graph li > span {
+  color: #a4a8b9;
+  font-size: 16px;
+}
+.kanji-word-graph li b {
+  font-size: 15px;
+}
+.kanji-word-graph li small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground, #8290a8);
+  margin-top: 5px;
+  line-height: 1.7;
+}
+.kanji-dialog::backdrop {
+  background: #11182d88;
+  backdrop-filter: blur(3px);
+}
+@media (max-width: 600px) {
+  dialog.kanji-dialog {
+    width: calc(100vw - 24px);
+    padding: 20px;
+    max-height: calc(100dvh - 24px);
+  }
+  .kanji-dialog > header h2 {
+    font-size: 18px;
+  }
+}

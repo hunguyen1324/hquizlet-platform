@@ -38,6 +38,7 @@ type mangaVolume struct {
 	CanEdit    bool   `json:"canEdit"`
 	CanDelete  bool   `json:"canDelete"`
 	ClassID    int64  `json:"classId"`
+	SeriesID   int64  `json:"seriesId"`
 }
 
 func (h *Handler) ConfigureManga(store videostorage.Store) { h.mangaStore = store }
@@ -83,7 +84,7 @@ func (h *Handler) mangaRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var v mangaVolume
-	e = h.db.QueryRowContext(r.Context(), `SELECT id,owner_user_id,source_uuid,title,volume,visibility,status,page_count,COALESCE(class_id,0) FROM manga_volumes WHERE id=$1`, id).Scan(&v.ID, &v.OwnerID, &v.SourceUUID, &v.Title, &v.Volume, &v.Visibility, &v.Status, &v.PageCount, &v.ClassID)
+	e = h.db.QueryRowContext(r.Context(), `SELECT id,owner_user_id,source_uuid,title,volume,visibility,status,page_count,COALESCE(class_id,0),COALESCE(series_id,0) FROM manga_volumes WHERE id=$1`, id).Scan(&v.ID, &v.OwnerID, &v.SourceUUID, &v.Title, &v.Volume, &v.Visibility, &v.Status, &v.PageCount, &v.ClassID, &v.SeriesID)
 	if e == sql.ErrNoRows {
 		WriteError(w, 404, "Không có truyện hoặc bạn không được xem")
 		return
@@ -130,9 +131,23 @@ func (h *Handler) mangaRouter(w http.ResponseWriter, r *http.Request) {
 		if !h.requireClassAction(w, r, in.ClassID, "class-manga:Create") {
 			return
 		}
-		_, e = h.db.ExecContext(r.Context(), `UPDATE manga_volumes SET class_id=$1,visibility='shared',updated_at=NOW() WHERE id=$2 AND owner_user_id=$3 AND class_id IS NULL`, in.ClassID, id, uid)
-		if e != nil {
-			writeServiceError(w, r, e)
+		tx, err := h.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			writeServiceError(w, r, err)
+			return
+		}
+		defer tx.Rollback()
+		seriesID, _, err := resolveMangaSeries(r.Context(), tx, uid, in.ClassID, 0, v.Title)
+		if err != nil {
+			writeServiceError(w, r, err)
+			return
+		}
+		_, err = tx.ExecContext(r.Context(), `UPDATE manga_volumes SET class_id=$1,visibility='shared',series_id=$4,updated_at=NOW() WHERE id=$2 AND owner_user_id=$3 AND class_id IS NULL`, in.ClassID, id, uid, seriesID)
+		if err == nil {
+			err = tx.Commit()
+		}
+		if err != nil {
+			writeServiceError(w, r, err)
 			return
 		}
 		w.WriteHeader(204)
@@ -175,14 +190,38 @@ func (h *Handler) mangaRouter(w http.ResponseWriter, r *http.Request) {
 				Title      string `json:"title"`
 				Volume     string `json:"volume"`
 				Visibility string `json:"visibility"`
+				SeriesID   int64  `json:"seriesId"`
 			}
 			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in) != nil || !validMangaName(in.Title, 200) || len([]rune(in.Volume)) > 200 || (in.Visibility != "private" && in.Visibility != "shared") {
 				WriteError(w, 422, "Tên truyện hoặc chế độ chia sẻ không hợp lệ")
 				return
 			}
-			_, e = h.db.ExecContext(r.Context(), `UPDATE manga_volumes SET title=$2,volume=$3,visibility=$4,updated_at=NOW() WHERE id=$1`, id, strings.TrimSpace(in.Title), strings.TrimSpace(in.Volume), in.Visibility)
-			if e != nil {
-				writeServiceError(w, r, e)
+			tx, err := h.db.BeginTx(r.Context(), nil)
+			if err != nil {
+				writeServiceError(w, r, err)
+				return
+			}
+			defer tx.Rollback()
+			// The uploader owns an automatically created series; classroom editors may use a visible existing series.
+			target := in.SeriesID
+			if target == 0 && strings.TrimSpace(in.Title) == v.Title {
+				target = v.SeriesID
+			}
+			seriesID, title, err := resolveMangaSeries(r.Context(), tx, uid, v.ClassID, target, strings.TrimSpace(in.Title))
+			if err == sql.ErrNoRows {
+				WriteError(w, 422, "Không được chuyển tập vào truyện này")
+				return
+			}
+			if err != nil {
+				writeServiceError(w, r, err)
+				return
+			}
+			_, err = tx.ExecContext(r.Context(), `UPDATE manga_volumes SET title=$2,volume=$3,visibility=$4,series_id=$5,updated_at=NOW() WHERE id=$1`, id, title, strings.TrimSpace(in.Volume), in.Visibility, seriesID)
+			if err == nil {
+				err = tx.Commit()
+			}
+			if err != nil {
+				writeServiceError(w, r, err)
 				return
 			}
 			w.WriteHeader(204)
@@ -314,7 +353,7 @@ func (h *Handler) mangaCollection(w http.ResponseWriter, r *http.Request, uid in
 	}
 
 	if r.Method == http.MethodGet {
-		rows, e := h.db.QueryContext(r.Context(), `SELECT v.id,v.owner_user_id,v.source_uuid,v.title,v.volume,v.visibility,v.status,v.page_count,(SELECT count(*) FROM manga_pages p WHERE p.volume_id=v.id) FROM manga_volumes v WHERE COALESCE(v.class_id,0)=$2 AND (v.owner_user_id=$1 OR (v.visibility='shared' AND v.status='ready')) ORDER BY v.updated_at DESC,v.id DESC LIMIT 200`, uid, classID)
+		rows, e := h.db.QueryContext(r.Context(), `SELECT v.id,v.owner_user_id,v.source_uuid,v.title,v.volume,v.visibility,v.status,v.page_count,COALESCE(v.series_id,0),(SELECT count(*) FROM manga_pages p WHERE p.volume_id=v.id) FROM manga_volumes v WHERE COALESCE(v.class_id,0)=$2 AND (v.owner_user_id=$1 OR (v.visibility='shared' AND v.status='ready')) ORDER BY v.updated_at DESC,v.id DESC LIMIT 200`, uid, classID)
 		if e != nil {
 			writeServiceError(w, r, e)
 			return
@@ -323,7 +362,7 @@ func (h *Handler) mangaCollection(w http.ResponseWriter, r *http.Request, uid in
 		volumes := []mangaVolume{}
 		for rows.Next() {
 			var v mangaVolume
-			if e = rows.Scan(&v.ID, &v.OwnerID, &v.SourceUUID, &v.Title, &v.Volume, &v.Visibility, &v.Status, &v.PageCount, &v.Uploaded); e != nil {
+			if e = rows.Scan(&v.ID, &v.OwnerID, &v.SourceUUID, &v.Title, &v.Volume, &v.Visibility, &v.Status, &v.PageCount, &v.SeriesID, &v.Uploaded); e != nil {
 				writeServiceError(w, r, e)
 				return
 			}
@@ -357,6 +396,7 @@ func (h *Handler) mangaCollection(w http.ResponseWriter, r *http.Request, uid in
 		PageCount  int    `json:"pageCount"`
 		HTMLSource string `json:"htmlSource"`
 		SourceName string `json:"sourceName"`
+		SeriesID   int64  `json:"seriesId"`
 	}
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20)).Decode(&in) != nil {
 		WriteError(w, 422, "Thông tin tập truyện không hợp lệ")
@@ -371,17 +411,33 @@ func (h *Handler) mangaCollection(w http.ResponseWriter, r *http.Request, uid in
 		in.SourceUUID = parsed.SourceUUID
 		in.PageCount = len(parsed.Pages)
 	}
-	if !validMangaName(in.Title, 200) || len([]rune(in.Volume)) > 200 || !validMangaName(in.SourceUUID, 100) || in.PageCount < 1 || in.PageCount > 1000 || len([]rune(in.SourceName)) > 255 || strings.ContainsAny(in.SourceName, "/\\\r\n\x00") {
+	if in.SeriesID < 0 || !validMangaName(in.Title, 200) || len([]rune(in.Volume)) > 200 || !validMangaName(in.SourceUUID, 100) || in.PageCount < 1 || in.PageCount > 1000 || len([]rune(in.SourceName)) > 255 || strings.ContainsAny(in.SourceName, "/\\\r\n\x00") {
 		WriteError(w, 422, "Thông tin tập truyện không hợp lệ")
 		return
 	}
+	tx, e := h.db.BeginTx(r.Context(), nil)
+	if e != nil {
+		writeServiceError(w, r, e)
+		return
+	}
+	defer tx.Rollback()
+	seriesID, title, e := resolveMangaSeries(r.Context(), tx, uid, classID, in.SeriesID, strings.TrimSpace(in.Title))
+	if e == sql.ErrNoRows {
+		WriteError(w, 422, "Truyện không tồn tại hoặc không thuộc không gian này")
+		return
+	}
+	if e != nil {
+		writeServiceError(w, r, e)
+		return
+	}
 	var id int64
-	e := h.db.QueryRowContext(r.Context(), `INSERT INTO manga_volumes(owner_user_id,source_uuid,title,volume,page_count,html_source,source_name,class_id,visibility) VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,0),'shared') ON CONFLICT DO NOTHING RETURNING id`, uid, in.SourceUUID, strings.TrimSpace(in.Title), strings.TrimSpace(in.Volume), in.PageCount, in.HTMLSource, in.SourceName, classID).Scan(&id)
+	e = tx.QueryRowContext(r.Context(), `INSERT INTO manga_volumes(owner_user_id,source_uuid,title,volume,page_count,html_source,source_name,class_id,visibility,series_id) VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,0),'shared',$9) ON CONFLICT DO NOTHING RETURNING id`, uid, in.SourceUUID, title, strings.TrimSpace(in.Volume), in.PageCount, in.HTMLSource, in.SourceName, classID, seriesID).Scan(&id)
 	if e == sql.ErrNoRows {
 		var status string
 		var count int
-		e = h.db.QueryRowContext(r.Context(), `SELECT id,status,page_count FROM manga_volumes WHERE owner_user_id=$1 AND source_uuid=$2 AND COALESCE(class_id,0)=$3`, uid, in.SourceUUID, classID).Scan(&id, &status, &count)
-		if e == nil && (status != "importing" || count != in.PageCount) {
+		var existingSeries int64
+		e = tx.QueryRowContext(r.Context(), `SELECT id,status,page_count,COALESCE(series_id,0) FROM manga_volumes WHERE owner_user_id=$1 AND source_uuid=$2 AND COALESCE(class_id,0)=$3`, uid, in.SourceUUID, classID).Scan(&id, &status, &count, &existingSeries)
+		if e == nil && (status != "importing" || count != in.PageCount || existingSeries != seriesID) {
 			WriteError(w, 409, "Tập truyện đã tồn tại; mở truyện để sửa OCR thay vì nhập đè")
 			return
 		}
@@ -390,7 +446,11 @@ func (h *Handler) mangaCollection(w http.ResponseWriter, r *http.Request, uid in
 		writeServiceError(w, r, e)
 		return
 	}
-	WriteJSON(w, 201, map[string]any{"id": id})
+	if e = tx.Commit(); e != nil {
+		writeServiceError(w, r, e)
+		return
+	}
+	WriteJSON(w, 201, map[string]any{"id": id, "seriesId": seriesID})
 }
 func (h *Handler) uploadMangaPage(w http.ResponseWriter, r *http.Request, v mangaVolume, n int) {
 	if h.mangaStore == nil {

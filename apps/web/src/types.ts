@@ -5,7 +5,7 @@ export type HealthStatus = "checking" | "live" | "offline";
 export type AuthMode = "login" | "register";
 export type AppView = "home" | "dashboard" | "editor" | "study" | "folders" | "live" | "classes" | "class-detail" | "class-create" | "class-edit" | "class-join" | "activity" | "wallet" | "deposit" | "admin-payments" | "create-type" | "quiz-editor" | "grammar-editor" | "quiz-sessions"
   // Phase 2-4: dashboard + admin console views
-  | "overview" | "class-dashboard" | "admin" | "manga" | "videos";
+  | "overview" | "class-dashboard" | "admin" | "manga" | "videos" | "posts";
 
 // ── Phase 2: dashboard statistics (GET /v1/me/study-stats) ─────────────
 

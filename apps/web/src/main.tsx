@@ -21,6 +21,7 @@ const GrammarSetEditor = React.lazy(() => import("./features/study-sets/GrammarS
 const Folders = React.lazy(() => import("./features/folders/Folders").then(module => ({ default: module.Folders })));
 const LiveGame = React.lazy(() => import("./features/live/LiveGame").then(module => ({ default: module.LiveGame })));
 const ClassList = React.lazy(() => import("./features/classes/ClassList").then(module => ({ default: module.ClassList })));
+const PostsFeed = React.lazy(() => import("./features/posts/PostsFeed").then(module => ({ default: module.PostsFeed })));
 const MediaLibrary = React.lazy(() => import("./features/media/MediaLibrary").then(module => ({ default: module.MediaLibrary })));
 const MangaLibrary = React.lazy(() => import("./features/manga/MangaLibrary").then(module => ({ default: module.MangaLibrary })));
 const CreateClass = React.lazy(() => import("./features/classes/CreateClass").then(module => ({ default: module.CreateClass })));
@@ -96,7 +97,7 @@ document.documentElement.classList.toggle("light", !initialDark);
 
 const VIEW_PATHS: Partial<Record<AppView, string>> = {
   home: "/", dashboard: "/library", folders: "/folders", live: "/live-quiz",
-  videos: "/videos", classes: "/classes", manga: "/manga", activity: "/notifications", wallet: "/wallet",
+  posts: "/posts", videos: "/videos", classes: "/classes", manga: "/manga", activity: "/notifications", wallet: "/wallet",
   deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
   "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar", "quiz-sessions": "/my/quiz-sessions",
   // Phase 2+: routes handled by react-router (not the legacy view switch)
@@ -278,6 +279,7 @@ function RootApp() {
       {navigationError && <div className="message message--error" role="alert">{navigationError}</div>}
 
       {view === "videos" && !loadingSet && <MediaLibrary />}
+      {view === "posts" && !loadingSet && <PostsFeed />}
       {view === "manga" && !loadingSet && <MangaLibrary />}
       {view === "home" && !loadingSet && (
         <HomePage

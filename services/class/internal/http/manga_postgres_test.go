@@ -32,7 +32,8 @@ func testMangaWorkspace(t *testing.T, h *Handler, classID int64) {
 	created := call("POST", "", `{"sourceUuid":"manga-qa","title":"QA manga","volume":"1","pageCount":1}`, "1")
 	status(created, 201)
 	var result struct {
-		ID int64 `json:"id"`
+		ID       int64 `json:"id"`
+		SeriesID int64 `json:"seriesId"`
 	}
 	if json.Unmarshal(created.Body.Bytes(), &result) != nil || result.ID < 1 {
 		t.Fatal(created.Body.String())
@@ -60,6 +61,27 @@ func testMangaWorkspace(t *testing.T, h *Handler, classID int64) {
 	status(w, 204)
 	status(call("POST", base+"/complete", "", "1"), 204)
 	status(call("GET", base+"/pages/0/image", "", "1"), 200)
+
+	// Append another volume to the same stable story, not a second library entry.
+	second := call("POST", "", fmt.Sprintf(`{"sourceUuid":"manga-qa-volume-2","title":"QA manga","volume":"2","pageCount":1,"seriesId":%d}`, result.SeriesID), "1")
+	status(second, 201)
+	var appended struct {
+		ID       int64 `json:"id"`
+		SeriesID int64 `json:"seriesId"`
+	}
+	if json.Unmarshal(second.Body.Bytes(), &appended) != nil || appended.ID == result.ID || appended.SeriesID < 1 || appended.SeriesID != result.SeriesID {
+		t.Fatal("volumes did not join the same story", second.Body.String())
+	}
+	secondBase := fmt.Sprintf("/%d", appended.ID)
+	secondUpload := httptest.NewRequest("POST", "/v1/manga"+secondBase+"/pages/0", bytes.NewReader(payload))
+	secondUpload.Header.Set("X-User-ID", "1")
+	secondUpload.Header.Set("Content-Type", form.FormDataContentType())
+	secondW := httptest.NewRecorder()
+	h.mangaRouter(secondW, secondUpload)
+	status(secondW, 204)
+	status(call("POST", secondBase+"/complete", "", "1"), 204)
+	// A community story ID cannot be used to publish its content in another space.
+	status(call("POST", fmt.Sprintf("?classId=%d", classID), fmt.Sprintf(`{"sourceUuid":"wrong-scope","title":"QA manga","volume":"3","pageCount":1,"seriesId":%d}`, result.SeriesID), "1"), 422)
 	// Community imports become visible to other users once complete, but remain owner-editable.
 	status(call("GET", base+"/pages/0", "", "2"), 200)
 	status(call("PUT", base+"/pages/0", `{"revision":1,"lines":[["OCR fixed"]]}`, "2"), 403)
@@ -101,6 +123,10 @@ func testMangaWorkspace(t *testing.T, h *Handler, classID int64) {
 		t.Fatal("missing durable image cleanup", queued, e)
 	}
 
+	// Deleting one volume must not remove the next volume, its image or its OCR.
+	status(call("GET", secondBase+"/pages/0", "", "2"), 200)
+	status(call("GET", secondBase+"/pages/0/image", "", "2"), 200)
+	status(call("DELETE", secondBase, "", "1"), 204)
 	// The same reader and importer must keep classroom content out of the community library.
 	scoped := call("POST", fmt.Sprintf("?classId=%d", classID), `{"sourceUuid":"manga-scoped-qa","title":"Group manga","volume":"1","pageCount":1}`, "1")
 	status(scoped, 201)

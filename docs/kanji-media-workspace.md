@@ -2,13 +2,14 @@
 
 ## Hành vi
 
-- Menu **Video & bài đăng** mở `/videos`. Nội dung mới ở không gian cộng đồng mặc định công khai cho tài khoản HQuizlet. Người tạo có thể đổi thành riêng tư hoặc chọn mã người dùng được xem; quyền được kiểm tra ở API và khi lấy byte video.
+- Menu **Video** mở `/videos`; **Bài đăng** mở `/posts` ở mục riêng, không nằm trong tab Video. Nội dung mới ở không gian cộng đồng mặc định công khai cho tài khoản HQuizlet. Người tạo có thể đổi thành riêng tư hoặc chọn mã người dùng được xem; quyền được kiểm tra ở API và khi lấy byte video.
 - Video có cả ở menu chung và tab **Video** trong nhóm học. Bộ chọn không gian trong mục Video cũng cho phép vào thư viện video lớp. Video đã có trong lớp vẫn giữ nguyên quyền; không tự công khai dữ liệu cũ khi đổi điều hướng.
 - **Truyện** có cả ở menu chung và trong nhóm học. Truyện nhập ở ngoài mặc định chia sẻ cho mọi tài khoản HQuizlet; truyện nhập trong nhóm mặc định chỉ chia sẻ cho thành viên nhóm. Hai thư viện lọc theo không gian, không tự xuất bản truyện của nhóm ra cộng đồng. Quyền `class-manga:Read/Create/Update/Delete` có trong phần quản lý vai trò. Hai vai trò dựng sẵn `manga-editor` và `manga-deleter` độc lập; giáo viên/chủ lớp/quản lý nội dung có quyền theo cấu hình quản lý sẵn.
 - Chủ truyện cũ có thể chọn **Đưa truyện từ thư viện cũ vào lớp** nếu có quyền nhập truyện ở lớp đích. Không tự đoán lớp đích của dữ liệu cũ.
+- Thư viện gom các tập vào một truyện bằng `manga_series` và `manga_volumes.series_id`. Tập cũ được backfill theo chủ sở hữu, không gian và tên truyện; giữ nguyên ID, ảnh và OCR. Chọn **Xem các tập** để đọc, **Thêm tập** để nhập tiếp; khi nhập có thể chọn truyện có sẵn hoặc tạo mới. Cài đặt từng tập có thể chuyển tập sang truyện khác trong cùng không gian. Xóa tập không xóa các tập còn lại.
 - Trình đọc mở toàn màn hình với **Vừa trang** mặc định, tự tính lại theo vùng hiển thị khi mở bảng OCR hoặc đổi kích thước. Có thể chọn 75–200% để phóng to.
 - Danh sách phát có thể tạo, sửa tên/mô tả/quyền xem, thêm video bằng **Lưu vào**, gỡ video và xóa. Mỗi danh sách tối đa 500 video. Quyền danh sách không mở rộng quyền của từng video. Bộ chọn Lưu vào hiển thị tối đa 100 danh sách của người dùng.
-- Bài đăng hỗ trợ tiêu đề và nội dung văn bản, chỉnh sửa, xóa, tìm kiếm và quyền xem. Đây chưa phải toàn bộ hệ thống kênh/bình luận/đăng ký của YouTube.
+- Bài đăng có bảng tin riêng kiểu mạng xã hội: ô “Bạn đang nghĩ gì?”, nhập nội dung trực tiếp (không bắt buộc đặt tiêu đề), chọn quyền xem, lọc bài của tôi, tìm kiếm, chỉnh sửa, xóa và sao chép liên kết. Các bài có sẵn được giữ nguyên. Liên kết `/posts?post=ID` vẫn kiểm tra quyền xem qua API; không tự công khai bài riêng tư. Hiện hỗ trợ nội dung văn bản, chưa có ảnh đính kèm, lượt thích và bình luận.
 
 ## Nguồn video
 
@@ -39,7 +40,7 @@ Chưa có số đo latency SQL trên dữ liệu triển khai: Docker/PostgreSQL
 
 ## Triển khai và kiểm tra
 
-- Class service tự áp dụng migration `026_scoped_manga` và `027_public_media`; study service thêm migration `025_kanji_index`.
+- Class service tự áp dụng migration `026_scoped_manga` và `027_public_media`, `028_manga_series`; study service thêm migration `025_kanji_index`.
 - Cần triển khai web, gateway, class service và study service cùng lượt. Dùng cấu hình kho video và khóa ký hiện có cho tải/phát video.
 - Web: `npm run build --prefix apps/web`; `npm test --prefix apps/web`.
 - Go: `go test ./services/class/... ./services/study/internal/http ./services/study/internal/migration ./services/gateway/...`.

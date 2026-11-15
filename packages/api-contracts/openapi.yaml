@@ -4388,7 +4388,7 @@ paths:
           description: Invalid HTML, OCR or metadata
     post:
       operationId: createMangaVolume
-      summary: Start or resume an import in the requested space; accepts title, volume, sourceUuid, pageCount and optional htmlSource/sourceName
+      summary: Start or resume a volume import; optional seriesId appends to a visible story in the same space. Existing title creates or reuses an owned story.
       tags:
       - manga
       security:
