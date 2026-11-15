@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { videoSubtitleApi, type ClassVideo, type VideoSubtitleResult, type VideoSubtitleTrack } from '../../lib/api';
 import { cueAtTime, exportLearningSRT, formatCueTime, makeCloze, normalizePracticeAnswer, parseLearningSubtitles, translationForCue } from './videoLearning';
 import { describeYouTubeError, loadYouTubeAPI, type YouTubePlayer } from './youtubePlayer';
@@ -143,10 +144,28 @@ export function YouTubeLearningDialog({ video, classId, token, canEditSubtitles,
         audioURLRef.current = '';
         setAudioURL('');
     } stopMic(); }, [focus, mode, data.original]);
-    useEffect(() => { if (!follow || !list.current)
-        return; const row = list.current.querySelector<HTMLElement>(`[data-cue="${focus}"]`); if (!row)
-        return; const top = row.offsetTop - list.current.offsetTop; if (top < list.current.scrollTop || top + row.offsetHeight > list.current.scrollTop + list.current.clientHeight)
-        list.current.scrollTo({ top: Math.max(0, top - 32), behavior: 'smooth' }); }, [focus, follow, panel]);
+    useEffect(() => {
+        const container = list.current;
+        if (!follow || !container || loading) return;
+        const row = container.querySelector<HTMLElement>(`[data-cue="${focus}"]`);
+        if (!row) return;
+        const scrollToCurrent = () => {
+            const viewport = container.getBoundingClientRect();
+            const current = row.getBoundingClientRect();
+            // Both rectangles use viewport coordinates; offsetTop may use different parents.
+            if (current.top < viewport.top + 12 || current.bottom > viewport.bottom - 12) {
+                container.scrollTo({
+                    top: Math.max(0, container.scrollTop + current.top - viewport.top - container.clientTop - Math.max(12, (container.clientHeight - current.height) / 2)),
+                    behavior: 'auto',
+                });
+            }
+        };
+        const frame = requestAnimationFrame(scrollToCurrent);
+        const observer = new ResizeObserver(scrollToCurrent);
+        observer.observe(container);
+        observer.observe(row);
+        return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+    }, [focus, follow, panel, loading, search, large, bilingual, data.original, data.translation]);
     function seek(index: number, play = true) { if (index < 0 || index >= cues.length)
         return; setFocus(index); setTime(cues[index].start); setAnswer(''); setChecked(false); setRevealed(false); if (player.current && ready) {
         player.current.seekTo(cues[index].start, true);
@@ -250,7 +269,7 @@ export function YouTubeLearningDialog({ video, classId, token, canEditSubtitles,
     }
     function changeMode(next: Mode) { stopMic(); setMode(next); setRepeat(false); player.current?.pauseVideo(); if (cue)
         player.current?.seekTo(cue.start, true); }
-    return <dialog ref={dialog} className={`youtube-learning-dialog ${large ? 'large-text' : ''}`} aria-labelledby="youtube-learning-title" onCancel={e => { e.preventDefault(); onClose(); }} onKeyDown={e => {
+    return createPortal(<dialog ref={dialog} className={`youtube-learning-dialog ${large ? 'large-text' : ''}`} aria-labelledby="youtube-learning-title" onCancel={e => { e.preventDefault(); onClose(); }} onKeyDown={e => {
             if ((e.target as HTMLElement).closest('input,textarea,select,button,audio') || (e.target as HTMLElement).isContentEditable)
                 return;
             if (e.key === ' ') {
@@ -304,5 +323,5 @@ export function YouTubeLearningDialog({ video, classId, token, canEditSubtitles,
     <footer className="yl-transcript-footer"><button disabled={loading} onClick={() => void loadSubtitles({ youtube: 1, translation: 'vi' })}>{loading ? 'Đang tải…' : '↻ Lấy phụ đề YouTube'}</button>{data.translation && <button onClick={() => download(data.translation)}>↓ Bản dịch</button>}</footer>
    </aside>}
   </div>
- </dialog>;
+ </dialog>, document.body);
 }

@@ -15,3 +15,18 @@
 .youtube-learning-dialog .yl-header{flex:0 0 auto}
 .youtube-learning-dialog .yl-workspace{flex:1;min-height:0;height:auto;width:100%}
 @media(max-width:760px){.youtube-learning-dialog[open]{display:block}.youtube-learning-dialog .yl-workspace{height:auto}}
+/* Keep the player and the bilingual sentence together in short desktop viewports. */
+@media(min-width:761px){
+ .youtube-learning-dialog .yl-player{width:min(100%,max(284px,calc((100dvh - 340px)*1.77778)));min-height:160px;margin-inline:auto}
+ .youtube-learning-dialog .yl-current-section{margin-bottom:12px}
+ .youtube-learning-dialog .yl-current-cue{min-height:70px;padding:12px 20px}
+ .youtube-learning-dialog .yl-current-cue p{font-size:clamp(18px,1.4vw,24px);line-height:1.65}
+ .youtube-learning-dialog .yl-current-translation{margin-top:9px;font-size:15px;line-height:1.6}
+ .youtube-learning-dialog .yl-playback-controls{padding-block:9px}
+}
+.youtube-learning-dialog .yl-transcript-heading,.youtube-learning-dialog .yl-transcript-tools,.youtube-learning-dialog .yl-transcript-footer{flex-shrink:0}
+.youtube-learning-dialog .yl-search{margin:0;min-height:38px}
+.youtube-learning-dialog .yl-search input{margin:0;min-height:0}
+@media(prefers-reduced-motion:reduce){.youtube-learning-dialog .yl-cue-list{scroll-behavior:auto}}
+.youtube-learning-dialog .yl-playback-controls label{white-space:nowrap;flex-shrink:0}
+.youtube-learning-dialog .yl-playback-controls select{width:auto;min-width:62px}

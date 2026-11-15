@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hquizlet",
+  "account_id": "f8f2ce418b4c42c64812308c25fbb637",
   "main": "src/index.js",
   "compatibility_date": "2026-10-06",
   "workers_dev": true,
