@@ -68,3 +68,5 @@ dialog.video-watch-dialog { position: fixed; inset: 0; margin: auto; padding: 0;
 }
 
 .video-player-loading { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; color: #dbe3f6; font-size: 14px; }
+
+.group-detail-page .class-videos label.video-library-search{display:flex;flex-direction:row;align-items:center;min-height:46px;height:46px;gap:10px;box-sizing:border-box}.group-detail-page .class-videos .video-library-search input{margin:0;min-height:0;height:100%;flex:1;padding:0;border-radius:0}.video-library-search svg{display:block;width:18px;height:18px}

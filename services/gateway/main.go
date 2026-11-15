@@ -142,6 +142,9 @@ func main() {
 	mux.HandleFunc("/v1/classes", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/classes/", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/activity", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/media", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/media/", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("GET /v1/media-stream", reverseProxy(classURL))
 	mux.HandleFunc("/v1/manga", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/manga/", authenticatedProxy(authURL, classURL))
 

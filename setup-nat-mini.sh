@@ -14,8 +14,9 @@ if [[ -n "${1:-}" ]]; then
   [[ "$1" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]] || { echo "Invalid image tag" >&2; exit 1; }
   export IMAGE_TAG="$1"
   # An explicit release tag selects registry images for every service. Keep
-  # CLASS_IMAGE overrides only for manual deployments without a release tag.
+  # Service overrides apply only to manual deployments without a release tag.
   export CLASS_IMAGE=
+  export GATEWAY_IMAGE=
 fi
 "${compose[@]}" config --quiet
 "${compose[@]}" pull nginx gateway auth study quiz class payment file

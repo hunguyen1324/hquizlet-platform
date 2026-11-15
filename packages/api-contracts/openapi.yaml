@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 1.12.0
+  version: 1.13.0
   description: |
     Class workspace adds scoped custom roles, member role assignments and private homework attachments.
     HQuizlet Platform API contract. All public application routes are exposed
@@ -53,6 +53,16 @@ components:
       description: 'Opaque participant token issued on join. Use "Authorization: Bearer <participantToken>".'
 
   schemas:
+    CommunityMediaInput:
+      type: object
+      required: [kind, title, visibility]
+      properties:
+        kind: {type: string, enum: [video, playlist, post]}
+        title: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, maxLength: 10000}
+        url: {type: string, format: uri, description: Full HTTPS YouTube/TikTok/Facebook video URL or direct MP4/WebM URL. Required for new linked videos.}
+        visibility: {type: string, enum: [public, private, selected], default: public}
+        viewerIds: {type: array, maxItems: 1000, items: {type: integer, format: int64, minimum: 1}}
     ClassRolePolicy:
       type: object
       required:
@@ -4351,6 +4361,11 @@ paths:
         '403': {description: Required class action is not permitted}
         '404': {description: Video absent or outside audience}
   /v1/manga:
+    parameters:
+      - in: query
+        name: classId
+        description: Classroom scope. Requires class-manga Read/Create; new classroom volumes default to shared with members. Omit for legacy personal library.
+        schema: {type: integer, format: int64, minimum: 1}
     get:
       operationId: listMangaVolumes
       summary: List own volumes and shared ready volumes
@@ -4373,7 +4388,7 @@ paths:
           description: Invalid HTML, OCR or metadata
     post:
       operationId: createMangaVolume
-      summary: Start or resume a private import; accepts title, volume, sourceUuid, pageCount and optional htmlSource/sourceName
+      summary: Start or resume an import in the requested space; accepts title, volume, sourceUuid, pageCount and optional htmlSource/sourceName
       tags:
       - manga
       security:
@@ -4674,3 +4689,200 @@ paths:
           description: Revision conflict or incomplete import
         '422':
           description: Invalid HTML, OCR or metadata
+
+  /v1/media:
+    get:
+      operationId: listCommunityMedia
+      summary: List community content allowed for the current viewer
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: query, name: kind, schema: {type: string, enum: [video, post, playlist], default: video}}
+        - {in: query, name: search, schema: {type: string}}
+        - {in: query, name: mine, schema: {type: boolean, default: false}}
+        - {in: query, name: playlistId, schema: {type: integer, format: int64}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
+        - {in: query, name: offset, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200': {description: Array of visible items; selected viewer IDs are returned only to the owner}
+        '401': {description: Authentication required}
+        '404': {description: Playlist absent or not visible}
+    post:
+      operationId: createCommunityMedia
+      summary: Create a linked video, playlist or community post; defaults to public
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CommunityMediaInput'}
+      responses:
+        '201': {description: Created item ID}
+        '401': {description: Authentication required}
+        '422': {description: Invalid input or unsupported video URL}
+  /v1/media/{id}:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: integer, format: int64, minimum: 1}}
+    get:
+      operationId: getCommunityMedia
+      summary: Read a visible community item
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Community item}
+        '401': {description: Authentication required}
+        '404': {description: Item absent or outside audience}
+    put:
+      operationId: updateCommunityMedia
+      summary: Owner updates title, body and audience; kind and video source remain unchanged
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CommunityMediaInput'}
+      responses:
+        '204': {description: Updated}
+        '403': {description: Owner permission required}
+        '404': {description: Item absent}
+        '422': {description: Invalid metadata or audience}
+    delete:
+      operationId: deleteCommunityMedia
+      summary: Owner deletes item and queues stored file cleanup
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      responses:
+        '204': {description: Deleted}
+        '403': {description: Owner permission required}
+        '404': {description: Item absent}
+  /v1/media/{id}/items:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: integer, format: int64, minimum: 1}}
+    put:
+      operationId: saveCommunityPlaylistItems
+      summary: Owner replaces ordered playlist contents; every video must be visible to the owner
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [videoIds]
+              properties:
+                videoIds: {type: array, maxItems: 500, items: {type: integer, format: int64, minimum: 1}}
+      responses:
+        '204': {description: Saved atomically}
+        '403': {description: Playlist owner required}
+        '404': {description: Playlist absent}
+        '422': {description: Invalid or inaccessible video}
+  /v1/media/{id}/playback:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: integer, format: int64, minimum: 1}}
+    post:
+      operationId: createCommunityVideoPlayback
+      summary: Issue a five minute playback URL; stream requests recheck audience
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Object with gateway-relative url}
+        '404': {description: Uploaded video absent or outside audience}
+        '503': {description: Video store unavailable}
+  /v1/media/upload:
+    post:
+      operationId: uploadCommunityVideo
+      summary: Stream one MP4/WebM file; metadata must precede file in multipart body
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [metadata, file]
+              properties:
+                metadata: {type: string, description: JSON CommunityMediaInput; title/body/visibility/viewerIds are saved atomically}
+                file: {type: string, format: binary}
+      responses:
+        '201': {description: Created video ID}
+        '400': {description: Invalid multipart field order or more than one file}
+        '415': {description: Unsupported file content}
+        '422': {description: Invalid metadata}
+        '502': {description: Upload failed or size limit exceeded}
+        '503': {description: Video storage unavailable}
+  /v1/media-stream:
+    get:
+      operationId: streamCommunityVideo
+      summary: Range-capable uploaded video stream with signed audience-checked ticket
+      tags: [classes]
+      security: []
+      parameters:
+        - {in: query, name: ticket, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Video bytes}
+        '206': {description: Video byte range}
+        '401': {description: Invalid or expired ticket}
+        '404': {description: Video absent or viewer access revoked}
+  /v1/manga/{id}/move:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: integer, format: int64, minimum: 1}}
+    post:
+      operationId: moveLegacyMangaToClass
+      summary: Volume owner moves a legacy volume into a class with class-manga Create permission
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [classId]
+              properties:
+                classId: {type: integer, format: int64, minimum: 1}
+      responses:
+        '204': {description: Moved and shared with class members}
+        '403': {description: Owner and target class Create permission required}
+        '422': {description: Invalid class}
+  /v1/study-sets/{id}/kanji-graph:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: integer, format: int64, minimum: 1}}
+    get:
+      operationId: getIndexedKanjiWordGraph
+      summary: Indexed PostgreSQL word graph for current authorized set and viewer-owned sets; no Neo4j needed
+      tags: [study-sets]
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: query, name: term, required: true, schema: {type: string, maxLength: 40}}
+      responses:
+        '200': {description: 'groups of char and words (id/term/definition/studySetId), plus truncated flag; maximum 200 word links'}
+        '403': {description: Study set learning access required}
+        '400': {description: Term too long}
+        '503': {description: Graph unavailable}
+
+  /v1/media/{id}/items/{videoId}:
+    parameters:
+      - {in: path, name: id, required: true, schema: {type: integer, format: int64, minimum: 1}}
+      - {in: path, name: videoId, required: true, schema: {type: integer, format: int64, minimum: 1}}
+    post:
+      operationId: addCommunityPlaylistVideo
+      summary: Atomically append one visible video without replacing other playlist entries
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      responses:
+        '204': {description: Added or already present}
+        '403': {description: Playlist owner required}
+        '422': {description: Video inaccessible or playlist full}
+    delete:
+      operationId: removeCommunityPlaylistVideo
+      summary: Atomically remove one video from an owned playlist
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      responses:
+        '204': {description: Removed}
+        '403': {description: Playlist owner required}
+        '422': {description: Invalid video ID}

@@ -2,7 +2,7 @@
 // Unified design system: ql-* classes, full Quizlet parity
 
 import React from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { repetitionApi, repetitionKey, type Rating } from "./spacedRepetitionApi";
 import { useAuth } from "../auth/AuthContext";
 import type { Flashcard } from "./types";
@@ -14,6 +14,7 @@ import { FlashcardsSettingsDialog } from "./FlashcardsSettingsDialog";
 import type { FlashcardsSettings } from "./FlashcardsSettingsDialog";
 import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
+import { KanjiGraph } from "../kanji/KanjiGraph";
 import { KanjiTools } from "../kanji/KanjiTools";
 
 /** Phát âm text qua Web Speech API */
@@ -35,7 +36,6 @@ type Props = {
 export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
-  const [showRelated, setShowRelated] = React.useState(false);
   const [showSearch, setShowSearch] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const searchInput = React.useRef<HTMLInputElement>(null);
@@ -110,8 +110,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         ? [{ card, position }] : []) : [];
   }, [deck, search]);
   React.useEffect(() => { if (showSearch) searchInput.current?.focus(); }, [showSearch]);
-  const related = useQuery({ queryKey: ["related-kanji", user?.id, studySetId, current?.term], queryFn: () => repetitionApi.related(token, studySetId, current!.term), enabled: showRelated && !!current && !!token, retry: false });
-  React.useEffect(() => { setShowRelated(false); review.reset(); }, [current?.id, studySetId]);
+  React.useEffect(() => { review.reset(); }, [current?.id, studySetId]);
   // Tổng thẻ để hiển thị: dùng total từ API nếu có, fallback về totalCount prop
   const displayTotal = generation.state.state === "ready"
     ? generation.state.data.total
@@ -182,6 +181,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (document.querySelector("dialog[open]")) return;
       if (e.target instanceof HTMLElement && (e.target.closest("input, textarea, select, button, [contenteditable=true]") || e.target.isContentEditable)) return;
       if (e.key === "/") { e.preventDefault(); setShowSearch(true); searchInput.current?.focus(); }
       if (e.key === " ") { e.preventDefault(); setFlipped((f) => !f); }
@@ -353,7 +353,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       </section>}
 
       {/* ── Card ── */}
-      <KanjiTools term={current.term} />
+      <div className="ql-card-workspace"><div className="ql-card-tools"><KanjiTools term={current.term} /><KanjiGraph term={current.term} cards={cards} studySetId={studySetId} /></div>
       {showBothSides ? (
         /* Both-sides view */
         <div className="ql-bothsides" ref={cardView} tabIndex={-1}>
@@ -436,16 +436,13 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         </div>
       )}
 
+      </div>
       <div className="ql-review-tools">
-        <button type="button" className="ql-related-toggle" aria-expanded={showRelated} onClick={() => setShowRelated(v => !v)}>♧ Kanji liên quan</button>
         {(flipped || showBothSides) && token && <div className="ql-ratings" aria-label="Tự đánh giá mức nhớ">
           {([["again", "Chưa nhớ"], ["hard", "Khó"], ["good", "Đã nhớ"], ["easy", "Dễ"]] as const).map(([rating, label]) => <button key={rating} className={`ql-rating ql-rating--${rating}`} disabled={review.isPending} onClick={() => review.mutate({ cardId: current.id, rating })}>{label}</button>)}
         </div>}
       </div>
       {review.isError && <p role="alert">Không lưu được đánh giá. Vui lòng thử lại.</p>}
-      {showRelated && <div className="ql-related" role="status">
-        {!token ? "Đăng nhập để xem Kanji liên quan." : related.isPending ? "Đang tìm Kanji liên quan…" : related.isError ? <><span>{related.error.message}</span> <button type="button" className="ql-related-toggle" onClick={() => void related.refetch()}>Thử lại</button></> : related.data?.characters.length ? related.data.characters.join(" · ") : "Chưa có Kanji liên quan."}
-      </div>}
       {/* ── Navigation ── */}
       <div className="ql-nav">
         <button className="ql-nav-btn" onClick={handlePrev} disabled={total <= 1} aria-label="Thẻ trước">

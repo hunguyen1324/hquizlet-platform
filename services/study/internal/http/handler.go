@@ -227,7 +227,7 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 		h.spacedRepetition(w, r, setID)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "related-kanji" {
+	if len(parts) == 2 && (parts[1] == "related-kanji" || parts[1] == "kanji-graph") {
 		h.relatedKanji(w, r, setID)
 		return
 	}

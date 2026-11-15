@@ -16,6 +16,7 @@ type ClassAction struct {
 }
 
 var ClassActions = []ClassAction{
+	{"class-manga:Read", "Đọc truyện", "Truyện"}, {"class-manga:Create", "Nhập truyện", "Truyện"}, {"class-manga:Update", "Chỉnh sửa truyện và OCR", "Truyện"}, {"class-manga:Delete", "Xóa truyện", "Truyện"},
 	{"class:Read", "Xem lớp", "Lớp học"}, {"class:Update", "Sửa thông tin và cài đặt", "Lớp học"}, {"class:Delete", "Xóa lớp", "Lớp học"}, {"class:ResetInvite", "Đổi mã mời", "Lớp học"},
 	{"live:Host", "Tổ chức live quiz", "Lớp học"}, {"class-member:ViewProgress", "Xem tiến độ của thành viên", "Thành viên"},
 	{"class:ViewDashboard", "Xem tổng quan", "Lớp học"}, {"class-access:Manage", "Quản lý role và gán quyền", "Phân quyền"},
@@ -51,7 +52,7 @@ func KnownClassAction(key string) bool {
 	return false
 }
 func ManagedClassRoles() []ClassRole {
-	read := []string{"class:Read", "class:ViewDashboard", "class-member:List", "class-content:ReadStudySet", "class-content:ViewVideo", "class-document:Read", "class-assignment:Read"}
+	read := []string{"class:Read", "class:ViewDashboard", "class-member:List", "class-content:ReadStudySet", "class-manga:Read", "class-content:ViewVideo", "class-document:Read", "class-assignment:Read"}
 	teacher := []string{}
 	for _, a := range ClassActions {
 		if a.Key != "class:Delete" && a.Key != "class-access:Manage" {
@@ -61,7 +62,7 @@ func ManagedClassRoles() []ClassRole {
 	assistant := append(append([]string{}, read...), "class-member:Add", "class-content:AssignStudySet", "class-content:UploadVideo", "class-document:Create", "class-assignment:Create", "class-assignment:Update", "class-assignment:Publish")
 	content := append([]string{}, read...)
 	for _, a := range ClassActions {
-		if a.Group == "Video" || a.Group == "Tài liệu" || a.Group == "Học phần" {
+		if a.Group == "Truyện" || a.Group == "Video" || a.Group == "Tài liệu" || a.Group == "Học phần" {
 			content = append(content, a.Key)
 		}
 	}
@@ -70,8 +71,10 @@ func ManagedClassRoles() []ClassRole {
 		{"teacher", "Giáo viên", "Quản lý nội dung, bài tập, thành viên và thông tin lớp.", true, teacher, []string{}},
 		{"assistant", "Trợ giảng", "Hỗ trợ thêm thành viên, nội dung và giao bài.", true, assistant, []string{}},
 		{"content-manager", "Quản lý nội dung", "Quản lý video, tài liệu và học phần.", true, content, []string{}},
+		{"manga-editor", "Chỉnh sửa truyện", "Đọc và chỉnh sửa truyện, chữ OCR trong lớp.", true, []string{"class:Read", "class-manga:Read", "class-manga:Update"}, []string{}},
+		{"manga-deleter", "Xóa truyện", "Đọc và xóa truyện trong lớp.", true, []string{"class:Read", "class-manga:Read", "class-manga:Delete"}, []string{}},
 		{"student", "Học viên", "Xem nội dung, tải tài liệu và xem bài tập.", true, read, []string{}},
-		{"viewer", "Người xem", "Chỉ xem nội dung học tập, không xem danh sách thành viên.", true, []string{"class:Read", "class-content:ReadStudySet", "class-content:ViewVideo", "class-document:Read", "class-assignment:Read"}, []string{}},
+		{"viewer", "Người xem", "Chỉ xem nội dung học tập, không xem danh sách thành viên.", true, []string{"class:Read", "class-content:ReadStudySet", "class-manga:Read", "class-content:ViewVideo", "class-document:Read", "class-assignment:Read"}, []string{}},
 	}
 }
 

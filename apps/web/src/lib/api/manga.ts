@@ -31,6 +31,8 @@ export type MangaVolume = {
     pageCount: number;
     uploaded: number;
     canEdit: boolean;
+    canDelete: boolean;
+    classId: number;
 };
 export type HTMLInspection = {
     sourceUuid: string;
@@ -50,7 +52,8 @@ const privateBlob = async (token: string, url: string, signal?: AbortSignal) => 
     return response.blob();
 };
 export const mangaApi = {
-    list: (token: string) => apiFetch<MangaVolume[]>('/v1/manga', token),
+    move: (token: string,id: number,classId: number) => apiFetch<void>(`${path(id)}/move`,token,{method:"POST",body:JSON.stringify({classId})}),
+    list: (token: string, classId?: number) => apiFetch<MangaVolume[]>('/v1/manga', token, {}, {classId}),
     inspect: (token: string, htmlSource: string, sourceName: string) => apiFetch<HTMLInspection>('/v1/manga/inspect', token, { method: 'POST', body: JSON.stringify({ htmlSource, sourceName }) }),
     create: (token: string, input: {
         sourceUuid: string;
@@ -59,9 +62,9 @@ export const mangaApi = {
         pageCount: number;
         htmlSource?: string;
         sourceName?: string;
-    }) => apiFetch<{
+    }, classId?: number) => apiFetch<{
         id: number;
-    }>('/v1/manga', token, { method: 'POST', body: JSON.stringify(input) }),
+    }>('/v1/manga', token, { method: 'POST', body: JSON.stringify(input) }, {classId}),
     detail: (token: string, id: number) => apiFetch<{
         volume: MangaVolume;
         pages: number[];

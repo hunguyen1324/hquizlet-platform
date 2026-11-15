@@ -1,4 +1,3 @@
-import { ListeningMediaEditor } from "./ListeningMediaEditor";
 import { normalizeSubtitleText } from "../../lib/subtitles";
 // QuizSetEditor — tạo/sửa quiz set (multiple choice, true/false, written)
 // Tham chiếu: hquizlet/apps/nextjs/src/components/study-set/quiz-set-form.tsx
@@ -9,6 +8,8 @@ import { quizApi, importApi, quizQuestionApi, studySetApi } from "../../lib/api"
 import { RichTextContent } from "./exam/RichTextContent";
 import { StudyActionIcon } from "./StudyActionIcon";
 import "./QuizSetEditor.css";
+
+const ListeningMediaEditor = React.lazy(() => import("./ListeningMediaEditor").then(module => ({ default: module.ListeningMediaEditor })));
 
 const LANGUAGES = [
   { code: "en-US", name: "English (US)", flag: "🇺🇸" },
@@ -100,6 +101,9 @@ function QuestionCard({
   latestQuestion.current = question;
   const mediaBusy = React.useCallback((busy: boolean) => onBusyChange(question.key, busy), [onBusyChange, question.key]);
   const [editing, setEditing] = React.useState(!question.questionText.trim());
+  const [editorMounted, setEditorMounted] = React.useState(editing);
+  const [explanationOpen, setExplanationOpen] = React.useState(false);
+  const [mediaMounted, setMediaMounted] = React.useState(false);
   const [customLabel, setCustomLabel] = React.useState("");
   const tags = question.tags ?? [];
   function addCustomLabel() {
@@ -154,7 +158,7 @@ function QuestionCard({
         <div className="qedit-question-actions">
           <button type="button" className="qedit-icon-button" onClick={onDuplicate} disabled={disabled} title="Nhân bản câu hỏi" aria-label={`Nhân bản câu ${index + 1}`}><StudyActionIcon name="copy" /></button>
           <button type="button" className="qedit-icon-button qedit-danger" onClick={onRemove} disabled={disabled} title="Xóa câu hỏi" aria-label={`Xóa câu ${index + 1}`}><StudyActionIcon name="trash" /></button>
-          <button type="button" className="qedit-edit-button" disabled={disabled} onClick={() => setEditing(value => !value)} aria-expanded={editing}><StudyActionIcon name={editing ? "check" : "edit"} />{editing ? "Xong" : "Chỉnh sửa"}</button>
+          <button type="button" className="qedit-edit-button" disabled={disabled} onClick={() => { setEditorMounted(true); setEditing(value => !value); }} aria-expanded={editing}><StudyActionIcon name={editing ? "check" : "edit"} />{editing ? "Xong" : "Chỉnh sửa"}</button>
         </div>
       </header>
       {tags.length > 0 && <div className="qedit-labels" aria-label={`Nhãn câu ${index + 1}`}>{tags.map(tag => <span className="qedit-label" key={tag}>{tag}</span>)}</div>}
@@ -165,10 +169,13 @@ function QuestionCard({
         {question.questionType === "multiple_choice" && <div className="qedit-preview-options">{question.options.map((option, optionIndex) => <div key={optionIndex} className={`qedit-preview-option${correctOption(option.text, optionIndex) ? " qedit-preview-option--correct" : ""}`}><span className="qedit-option-indicator">{correctOption(option.text, optionIndex) ? "✓" : ""}</span><RichTextContent value={option.text} /></div>)}</div>}
         {question.questionType === "true_false" && <div className="qedit-preview-options">{["true", "false"].map(value => <div key={value} className={`qedit-preview-option${question.correctAnswer === value ? " qedit-preview-option--correct" : ""}`}><span className="qedit-option-indicator">{question.correctAnswer === value ? "✓" : ""}</span>{value === "true" ? "Đúng" : "Sai"}</div>)}</div>}
         {question.questionType !== "multiple_choice" && question.questionType !== "true_false" && question.correctAnswer && <div className="qedit-answer"><span>Đáp án</span><RichTextContent value={question.correctAnswer} /></div>}
-        {question.answerExplanation && <div className="qedit-explanation"><span>Giải thích câu trả lời</span><RichTextContent value={question.answerExplanation} /></div>}
+        {question.answerExplanation && <div className="qedit-explanation">
+          <button type="button" className="qedit-explanation-toggle" aria-expanded={explanationOpen} aria-controls={`explanation-${question.key}`} onClick={() => setExplanationOpen(value => !value)}>{explanationOpen ? "Ẩn giải thích" : "Xem giải thích câu trả lời"}</button>
+          {explanationOpen && <div id={`explanation-${question.key}`}><RichTextContent className="qedit-explanation-content" value={question.answerExplanation} /></div>}
+        </div>}
         {question.audioUrl && <span className="qedit-media-badge">Có âm thanh</span>}
       </div>}
-      <div className="quiz-question-body" hidden={!editing}>
+      {editorMounted && <div className="quiz-question-body" hidden={!editing}>
         <div className="qedit-content-column">
         {/* Question text */}
         <label>
@@ -366,7 +373,9 @@ function QuestionCard({
         )}
 
         {/* Explanation */}
-        <label>
+        <div className="qedit-explanation">
+        <button type="button" className="qedit-explanation-toggle" aria-expanded={explanationOpen} aria-controls={`edit-explanation-${question.key}`} onClick={() => setExplanationOpen(value => !value)}>{explanationOpen ? "Ẩn giải thích" : "Chỉnh sửa giải thích (tùy chọn)"}</button>
+        {explanationOpen && <label id={`edit-explanation-${question.key}`}>
           Giải thích (tùy chọn)
           <textarea
             rows={2}
@@ -375,21 +384,22 @@ function QuestionCard({
             onChange={(e) => setField("answerExplanation", e.target.value)}
             disabled={disabled}
           />
-        </label>
+        </label>}
         </div>
-        <details className="qedit-media-settings">
+        </div>
+        <details className="qedit-media-settings" onToggle={event => { if (event.currentTarget.open) setMediaMounted(true); }}>
           <summary>Ảnh, âm thanh & phụ đề{question.imageUrl || question.audioUrl || question.srtText ? " · Đã thêm nội dung" : " · Tùy chọn"}</summary>
           <div className="qedit-media-content">
-        <ListeningMediaEditor
+        {mediaMounted && <React.Suspense fallback={<p role="status">Đang tải công cụ âm thanh…</p>}><ListeningMediaEditor
           audioUrl={question.audioUrl} srtText={question.srtText} studySetId={studySetId}
           ensureStudySet={ensureStudySet} onBusyChange={mediaBusy} disabled={disabled}
           onChange={patch => onChange({ ...latestQuestion.current, ...patch })}
-        />
+        /></React.Suspense>}
         <label>Link / đường dẫn ảnh<input value={question.imageUrl} onChange={(e) => setField("imageUrl", e.target.value)} placeholder="https://... hoặc /images/question.png" disabled={disabled} /></label>
 
           </div>
         </details>
-      </div>
+      </div>}
     </article>
   );
 }

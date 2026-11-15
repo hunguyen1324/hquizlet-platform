@@ -2441,3 +2441,5 @@
 .ql-card-search-results button:hover, .ql-card-search-results button:focus-visible { background: #eeefff; }
 .ql-search-position { color: #586380; min-width: 30px; font-size: .85rem; }
 .ql-search-definition { display: block; font-size: .9rem; margin-top: 4px; }
+
+.ql-card-workspace{position:relative}.ql-card-tools{position:absolute;top:14px;right:18px;left:120px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;z-index:3}.ql-card-tools .kanji-tools{margin:0}.ql-card-tools button{font-size:11px;padding:6px 8px}.ql-card-workspace .ql-face{padding-top:65px}.kanji-word-graph{list-style:none;padding:0}.kanji-word-graph li{display:flex;align-items:center;gap:16px;border:1px solid #e2e8f0;padding:12px;border-radius:12px;margin-top:10px}.kanji-word-graph li>strong{font-size:30px;color:#6366f1}.kanji-word-graph small{display:block;color:#64748b;margin-top:5px}@media(max-width:600px){.ql-card-tools{left:70px;right:10px;top:10px;gap:4px}.ql-card-tools button{font-size:10px;padding:4px}.ql-card-workspace .ql-face{padding-top:95px}}

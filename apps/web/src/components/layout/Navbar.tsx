@@ -77,10 +77,7 @@ export function Navbar({ user, onSearch, onCreateSet, onLogout, onNavigate, onSe
       {/* Logo */}
       <button className="hq-nav-logo" onClick={() => onNavigate?.("home")}>
         <div className="hq-nav-logo-mark">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2"/>
-            <path d="M8 21h8M12 17v4"/>
-          </svg>
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} width="32" height="32" alt="" />
         </div>
         <span className="hq-nav-logo-text">HQuizlet</span>
       </button>
