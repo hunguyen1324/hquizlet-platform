@@ -38,6 +38,11 @@ export function CustomAudioPlayer({
     setIsPlaying(false);
     setCurrent(0);
     setDuration(0);
+    setIsSeeking(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
   }, [src]);
 
   useEffect(() => {
@@ -138,6 +143,7 @@ export function CustomAudioPlayer({
           }}
           onChange={(e) => setCurrent(Number(e.target.value))}
           className="flex-1 accent-[#4a90d9]"
+          style={{ padding: 0, margin: 0, border: 0, background: "transparent", minWidth: 0 }}
         />
         <span className="w-24 shrink-0 text-right text-xs tabular-nums text-zinc-600">
           {formatTime(current)} / {formatTime(effectiveDuration)}

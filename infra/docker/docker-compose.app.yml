@@ -183,6 +183,7 @@ services:
       ADMIN_TOKEN:                "${ADMIN_TOKEN:?ADMIN_TOKEN is required}"
       SEPAY_API_TOKEN:            "${SEPAY_API_TOKEN:-}"
       SEPAY_BIDV_BANK_ACCOUNT_ID: "${SEPAY_BIDV_BANK_ACCOUNT_ID:-}"
+      SEPAY_VA_ACCOUNT_NUMBER:    "${SEPAY_VA_ACCOUNT_NUMBER:-}"
       SEPAY_WEBHOOK_API_KEY:      "${SEPAY_WEBHOOK_API_KEY:-}"
     expose: ["8085"]
     depends_on:

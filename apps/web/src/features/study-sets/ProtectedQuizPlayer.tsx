@@ -702,20 +702,6 @@ export function ProtectedQuizPlayer({
       <div className="qz-body">
         {audioNotice}
         {audioUrl && view.layout === "default" && <CustomAudioPlayer key={audioUrl} src={audioUrl} srtText={audioItem?.question.srtText} muted={false} />}
-        {audioUrl && view.layout === "default" && (
-          <button
-            type="button"
-            className="qz-link"
-            onClick={() => {
-              const entry = mediaCache.current.get(audioKey);
-              if (entry) URL.revokeObjectURL(entry.url);
-              mediaCache.current.delete(audioKey);
-              setAudioRetry((n) => n + 1);
-            }}
-          >
-            Tải lại âm thanh
-          </button>
-        )}
 
         {view.layout === "toeic" ? (
           <div className="qz-toeic">
@@ -738,7 +724,7 @@ export function ProtectedQuizPlayer({
           <QuizPageSkeleton />
         ) : (
           view.page.map((item) => (
-            <article key={item.index} className="qz-question-layout">
+            <article key={item.index} className={`qz-question-layout${item.revealed ? " qz-question-layout--revealed" : ""}`}>
               <div className="qz-question-main">
               <p className="qz-eyebrow">
                 Câu {view.manifest?.[item.index]?.number} / {manifest.length}
@@ -761,8 +747,7 @@ export function ProtectedQuizPlayer({
               />
               {view.submitted && !item.revealed && <p className="qz-muted">Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
               </div>
-              <aside className="qz-question-feedback" aria-label="Đáp án và giải thích">
-              {item.revealed ? (
+              {item.revealed && <aside className="qz-question-feedback" tabIndex={0} aria-label="Đáp án và giải thích — cuộn để xem thêm">
                 <div className={`qz-feedback ${view.results[item.index] ? "qz-feedback--ok" : "qz-feedback--bad"}`} aria-live="polite">
                   <strong>{view.results[item.index] ? "✓ Chính xác" : "✗ Chưa đúng"}</strong>
                   <p>Đáp án: {item.question.options?.find((o) => o.isCorrect)?.text ?? item.question.correctAnswer}</p>
@@ -770,8 +755,7 @@ export function ProtectedQuizPlayer({
                   <RichTextContent value={item.question.answerExplanation} />
                   {!item.question.answerExplanation && <p className="qz-muted">Câu hỏi này chưa có giải thích.</p>}
                 </div>
-              ) : <p className="qz-muted">{view.instant ? "Chọn đáp án để xem kết quả và giải thích tại đây." : "Đáp án và giải thích sẽ xuất hiện sau khi nộp bài."}</p>}
-              </aside>
+              </aside>}
             </article>
           ))
         )}
