@@ -3,8 +3,8 @@
 ## Hành vi
 
 - Menu **Video & bài đăng** mở `/videos`. Nội dung mới ở không gian cộng đồng mặc định công khai cho tài khoản HQuizlet. Người tạo có thể đổi thành riêng tư hoặc chọn mã người dùng được xem; quyền được kiểm tra ở API và khi lấy byte video.
-- Bộ chọn không gian trong mục Video cho phép vào thư viện video lớp. Video đã có trong lớp vẫn giữ nguyên quyền; không tự công khai dữ liệu cũ khi đổi điều hướng.
-- **Truyện** nằm trong lớp, mặc định chia sẻ cho thành viên lớp. Quyền `class-manga:Read/Create/Update/Delete` có trong phần quản lý vai trò. Hai vai trò dựng sẵn `manga-editor` và `manga-deleter` độc lập; giáo viên/chủ lớp/quản lý nội dung có quyền theo cấu hình quản lý sẵn.
+- Video có cả ở menu chung và tab **Video** trong nhóm học. Bộ chọn không gian trong mục Video cũng cho phép vào thư viện video lớp. Video đã có trong lớp vẫn giữ nguyên quyền; không tự công khai dữ liệu cũ khi đổi điều hướng.
+- **Truyện** có cả ở menu chung và trong nhóm học. Truyện nhập ở ngoài mặc định chia sẻ cho mọi tài khoản HQuizlet; truyện nhập trong nhóm mặc định chỉ chia sẻ cho thành viên nhóm. Hai thư viện lọc theo không gian, không tự xuất bản truyện của nhóm ra cộng đồng. Quyền `class-manga:Read/Create/Update/Delete` có trong phần quản lý vai trò. Hai vai trò dựng sẵn `manga-editor` và `manga-deleter` độc lập; giáo viên/chủ lớp/quản lý nội dung có quyền theo cấu hình quản lý sẵn.
 - Chủ truyện cũ có thể chọn **Đưa truyện từ thư viện cũ vào lớp** nếu có quyền nhập truyện ở lớp đích. Không tự đoán lớp đích của dữ liệu cũ.
 - Trình đọc mở toàn màn hình với **Vừa trang** mặc định, tự tính lại theo vùng hiển thị khi mở bảng OCR hoặc đổi kích thước. Có thể chọn 75–200% để phóng to.
 - Danh sách phát có thể tạo, sửa tên/mô tả/quyền xem, thêm video bằng **Lưu vào**, gỡ video và xóa. Mỗi danh sách tối đa 500 video. Quyền danh sách không mở rộng quyền của từng video. Bộ chọn Lưu vào hiển thị tối đa 100 danh sách của người dùng.

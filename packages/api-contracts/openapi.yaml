@@ -4364,7 +4364,7 @@ paths:
     parameters:
       - in: query
         name: classId
-        description: Classroom scope. Requires class-manga Read/Create; new classroom volumes default to shared with members. Omit for legacy personal library.
+        description: Classroom scope. Requires class-manga Read/Create; new classroom volumes default to shared with members. Omit for community library; new volumes default to shared with all authenticated users.
         schema: {type: integer, format: int64, minimum: 1}
     get:
       operationId: listMangaVolumes

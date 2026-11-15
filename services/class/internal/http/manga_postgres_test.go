@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func testMangaWorkspace(t *testing.T, h *Handler) {
+func testMangaWorkspace(t *testing.T, h *Handler, classID int64) {
 	t.Helper()
 	h.mangaStore = &memoryVideoStore{}
 	call := func(method, path, body, uid string) *httptest.ResponseRecorder {
@@ -51,6 +51,7 @@ func testMangaWorkspace(t *testing.T, h *Handler) {
 		t.Fatal(e)
 	}
 	form.Close()
+	payload := append([]byte{}, body.Bytes()...)
 	upload := httptest.NewRequest("POST", "/v1/manga"+base+"/pages/0", &body)
 	upload.Header.Set("X-User-ID", "1")
 	upload.Header.Set("Content-Type", form.FormDataContentType())
@@ -59,7 +60,9 @@ func testMangaWorkspace(t *testing.T, h *Handler) {
 	status(w, 204)
 	status(call("POST", base+"/complete", "", "1"), 204)
 	status(call("GET", base+"/pages/0/image", "", "1"), 200)
-	status(call("PUT", base+"/pages/0", `{"revision":1,"lines":[["OCR fixed"]]}`, "2"), 404)
+	// Community imports become visible to other users once complete, but remain owner-editable.
+	status(call("GET", base+"/pages/0", "", "2"), 200)
+	status(call("PUT", base+"/pages/0", `{"revision":1,"lines":[["OCR fixed"]]}`, "2"), 403)
 	status(call("PUT", base, `{"title":"QA manga","volume":"1","visibility":"shared"}`, "1"), 204)
 	status(call("GET", base+"/pages/0", "", "2"), 200)
 	status(call("PUT", base+"/pages/0", `{"revision":1,"lines":[["bad"]]}`, "2"), 403)
@@ -97,4 +100,42 @@ func testMangaWorkspace(t *testing.T, h *Handler) {
 	if e = h.db.QueryRow(`SELECT count(*) FROM manga_image_gc`).Scan(&queued); e != nil || queued != 1 {
 		t.Fatal("missing durable image cleanup", queued, e)
 	}
+
+	// The same reader and importer must keep classroom content out of the community library.
+	scoped := call("POST", fmt.Sprintf("?classId=%d", classID), `{"sourceUuid":"manga-scoped-qa","title":"Group manga","volume":"1","pageCount":1}`, "1")
+	status(scoped, 201)
+	var group struct {
+		ID int64 `json:"id"`
+	}
+	if json.Unmarshal(scoped.Body.Bytes(), &group) != nil || group.ID < 1 {
+		t.Fatal(scoped.Body.String())
+	}
+	groupBase := fmt.Sprintf("/%d", group.ID)
+	r := httptest.NewRequest("POST", "/v1/manga"+groupBase+"/pages/0", bytes.NewReader(payload))
+	r.Header.Set("X-User-ID", "1")
+	r.Header.Set("Content-Type", form.FormDataContentType())
+	w = httptest.NewRecorder()
+	h.mangaRouter(w, r)
+	status(w, 204)
+	status(call("POST", groupBase+"/complete", "", "1"), 204)
+	status(call("GET", groupBase, "", "3"), 200)
+	status(call("GET", groupBase, "", "99"), 403)
+	community := call("GET", "", "", "1")
+	status(community, 200)
+	var publicVolumes []mangaVolume
+	if json.Unmarshal(community.Body.Bytes(), &publicVolumes) != nil {
+		t.Fatal(community.Body.String())
+	}
+	for _, v := range publicVolumes {
+		if v.ID == group.ID {
+			t.Fatal("classroom manga leaked into community library")
+		}
+	}
+	groupList := call("GET", fmt.Sprintf("?classId=%d", classID), "", "3")
+	status(groupList, 200)
+	var groupVolumes []mangaVolume
+	if json.Unmarshal(groupList.Body.Bytes(), &groupVolumes) != nil || len(groupVolumes) != 1 || groupVolumes[0].ID != group.ID || groupVolumes[0].Visibility != "shared" {
+		t.Fatal("classroom default scope failed", groupList.Body.String())
+	}
+	status(call("DELETE", groupBase, "", "1"), 204)
 }

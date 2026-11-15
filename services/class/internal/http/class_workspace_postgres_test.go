@@ -78,7 +78,7 @@ func TestClassWorkspacePostgres(t *testing.T) {
 	ss := service.NewClassStudySetService(classes, members, sets, nil)
 	access := service.ConfigureClassAccess(db, cs, ms, ss)
 	h := New(cs, ms, ss, service.NewActivityService(repository.NewActivityRepository(db), nil), db).WithClassAccess(access)
-	t.Run("manga library", func(t *testing.T) { testMangaWorkspace(t, h) })
+	t.Run("manga library", func(t *testing.T) { testMangaWorkspace(t, h, c.ID) })
 	call := func(method, path, body, uid string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, fmt.Sprintf("/v1/classes/%d/%s", c.ID, path), strings.NewReader(body))
 		r.Header.Set("X-User-ID", uid)

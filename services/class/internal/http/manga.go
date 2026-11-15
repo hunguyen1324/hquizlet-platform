@@ -376,7 +376,7 @@ func (h *Handler) mangaCollection(w http.ResponseWriter, r *http.Request, uid in
 		return
 	}
 	var id int64
-	e := h.db.QueryRowContext(r.Context(), `INSERT INTO manga_volumes(owner_user_id,source_uuid,title,volume,page_count,html_source,source_name,class_id,visibility) VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,0),CASE WHEN $8>0 THEN 'shared' ELSE 'private' END) ON CONFLICT DO NOTHING RETURNING id`, uid, in.SourceUUID, strings.TrimSpace(in.Title), strings.TrimSpace(in.Volume), in.PageCount, in.HTMLSource, in.SourceName, classID).Scan(&id)
+	e := h.db.QueryRowContext(r.Context(), `INSERT INTO manga_volumes(owner_user_id,source_uuid,title,volume,page_count,html_source,source_name,class_id,visibility) VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,0),'shared') ON CONFLICT DO NOTHING RETURNING id`, uid, in.SourceUUID, strings.TrimSpace(in.Title), strings.TrimSpace(in.Volume), in.PageCount, in.HTMLSource, in.SourceName, classID).Scan(&id)
 	if e == sql.ErrNoRows {
 		var status string
 		var count int

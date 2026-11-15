@@ -5,6 +5,7 @@ import { MangaLibrary } from "../manga/MangaLibrary";
 import { ClassAssignments } from "./ClassAssignments";
 import "./class-settings.css";
 import { ClassDocuments } from "./ClassDocuments";
+import { ClassVideos } from "./ClassVideos";
 import { useAuth } from "../auth/AuthContext";
 import { classApi, memberApi, classStudySetApi, classAccessApi } from "../../lib/api";
 import type { ClassDetail as ClassDetailType, ClassMember, ClassStudySet } from "../../types";
@@ -27,7 +28,7 @@ type Props = {
     /** Phase 3: navigates to the class dashboard route. */
     onOpenDashboard?: () => void;
 };
-type Tab = "manga" | "study-sets" | "members" | "documents" | "assignments";
+type Tab = "videos" | "upload" | "manga" | "study-sets" | "members" | "documents" | "assignments";
 export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, onOpenSet, onOpenDashboard }: Props) {
     const { token } = useAuth();
     const [cls, setCls] = useState<ClassDetailType | null>(null);
@@ -58,6 +59,8 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
                 access.actions.includes("class-content:ReadStudySet") ? classStudySetApi.list(token, classId) : Promise.resolve([])
             ]);
             const available: Tab[] = [];
+            if (access.actions.includes("class-content:ViewVideo")) available.push("videos");
+            if (access.actions.includes("class-content:UploadVideo")) available.push("upload");
             if (access.actions.includes("class-assignment:Read") || access.actions.includes("class-assignment:Create") || access.actions.includes("class-assignment:Update") || access.actions.includes("class-assignment:Delete") || access.actions.includes("class-assignment:Publish"))
                 available.push("assignments");
             if (access.actions.includes("class-manga:Read")) available.push("manga");
@@ -117,6 +120,8 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
       </div>
 
       <div className="class-tabs" aria-label="Nội dung nhóm">
+        {can("class-content:ViewVideo") && <button aria-pressed={tab === "videos"} className={tab === "videos" ? "active" : ""} onClick={() => setTab("videos")}><TabIcon kind="videos"/>Video</button>}
+        {can("class-content:UploadVideo") && <button aria-pressed={tab === "upload"} className={tab === "upload" ? "active" : ""} onClick={() => setTab("upload")}>↑ Tải video</button>}
         {can("class-manga:Read") && <button aria-pressed={tab === "manga"} className={tab === "manga" ? "active" : ""} onClick={() => setTab("manga")}>Truyện</button>}
         {can("class-content:ReadStudySet") && <button aria-pressed={tab === "study-sets"} className={tab === "study-sets" ? "active" : ""} onClick={() => setTab("study-sets")}>
           <TabIcon kind="study-sets"/>Học phần <span className="class-tab-count">{studySets.length}</span>
@@ -129,6 +134,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
 
       </div>
 
+      {((tab === "videos" && can("class-content:ViewVideo")) || (tab === "upload" && can("class-content:UploadVideo"))) && <ClassVideos key={classId} classId={classId} members={members} canManage={can("class-content:UploadVideo")} canManageAudience={can("class-video:ManageAudience")} canSetCategory={can("class-video:Update")} canEditSubtitles={can("class-video:Update")} mode={tab as "videos" | "upload"}/>}
       {tab === "manga" && can("class-manga:Read") && <MangaLibrary key={classId} classId={classId} canCreate={can("class-manga:Create")} />}
       {tab === "documents" && can("class-document:Read") && <ClassDocuments key={classId} classId={classId} canManage={can("class-document:Create")} canDelete={can("class-document:Delete")} canUpdate={can("class-document:Update")}/>}
       {tab === "assignments" && <ClassAssignments key={classId} classId={classId} actions={actions}/>}
