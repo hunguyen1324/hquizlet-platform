@@ -11,13 +11,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/client"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/model"
 	classservice "github.com/hunguyen1324/hquizlet-platform/services/class/internal/service"
 	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/videostorage"
+	"github.com/hunguyen1324/hquizlet-platform/services/class/internal/youtubecaptions"
 )
 
 // Handler holds all service dependencies for HTTP routing.
 type Handler struct {
+	captions      *youtubecaptions.Client
+	users         *client.UserClient
+	access        *classservice.ClassAccess
 	classes       *classservice.ClassService
 	members       *classservice.MemberService
 	studySets     *classservice.ClassStudySetService
@@ -31,6 +36,10 @@ type Handler struct {
 	videoMaxBytes int64
 	videoProgress func(context.Context, int64, int, string)
 }
+
+func (h *Handler) WithUserDirectory(c *client.UserClient) *Handler { h.users = c; return h }
+
+func (h *Handler) WithClassAccess(a *classservice.ClassAccess) *Handler { h.access = a; return h }
 
 // WithDashboard wires the class dashboard service (GET /v1/classes/{id}/dashboard).
 func (h *Handler) WithDashboard(d *classservice.ClassDashboardService) *Handler {
@@ -58,6 +67,7 @@ func New(
 	db *sql.DB,
 ) *Handler {
 	return &Handler{
+		captions:      youtubecaptions.New(),
 		classes:       classes,
 		members:       members,
 		studySets:     studySets,
@@ -190,6 +200,15 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sub-routes
+	if len(parts) >= 2 && parts[1] == "access" {
+		h.accessRouter(w, r, classID, parts[2:])
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "assignments" {
+		h.assignmentRouter(w, r, classID, parts[2:])
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "permissions" && r.Method == http.MethodGet {
 		p := principalFromRequest(r)
 		actions, err := h.classes.Permissions(r.Context(), p, classID)
@@ -202,6 +221,10 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) >= 2 && parts[1] == "documents" {
 		h.documentRouter(w, r, classID, parts[2:])
+		return
+	}
+	if len(parts) == 4 && parts[1] == "videos" && parts[3] == "subtitles" {
+		h.subtitleRouter(w, r, classID, parts[2:])
 		return
 	}
 	if len(parts) >= 2 && parts[1] == "videos" {
@@ -328,6 +351,9 @@ func (h *Handler) classRouter(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getClassDetail(w http.ResponseWriter, r *http.Request, classID int64) {
 	userID := userIDFromHeader(r)
+	if !h.requireClassAction(w, r, classID, "class:Read") {
+		return
+	}
 	class, err := h.classes.GetByID(r.Context(), classID, userID)
 	if err != nil {
 		writeServiceError(w, r, err)
@@ -484,6 +510,17 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request, classID in
 	}
 	if members == nil {
 		members = []*model.ClassMember{}
+	}
+	if h.users != nil {
+		ids := []int64{}
+		for _, m := range members {
+			ids = append(ids, m.UserID)
+		}
+		if users, e := h.users.Lookup(r.Context(), ids); e == nil {
+			for _, m := range members {
+				m.Name = users[m.UserID].Name
+			}
+		}
 	}
 	WriteJSON(w, http.StatusOK, members)
 }

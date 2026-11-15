@@ -12,6 +12,7 @@ import (
 
 // ClassStudySetService handles study set assignment operations.
 type ClassStudySetService struct {
+	access      *ClassAccess
 	classes     repository.ClassStore
 	members     repository.MemberStore
 	studySets   repository.ClassStudySetStore
@@ -87,6 +88,13 @@ func (s *ClassStudySetService) CountByClass(ctx context.Context, classID int64) 
 }
 
 func (s *ClassStudySetService) authorize(ctx context.Context, p authz.Principal, classID int64, action authz.Action) error {
+	if s.access != nil {
+		key := string(action)
+		if action == authz.ActionClassContentView {
+			key = "class-content:ReadStudySet"
+		}
+		return s.access.Require(ctx, classID, p.UserID, key)
+	}
 	authorizer := &ClassService{classes: s.classes, members: s.members}
 	_, err := authorizer.authorizeClass(ctx, p, classID, action)
 	return err

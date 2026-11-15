@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -27,6 +28,20 @@ type classDocument struct {
 // Documents are private class attachments, never public asset URLs.
 func (h *Handler) documentRouter(w http.ResponseWriter, r *http.Request, classID int64, parts []string) {
 	w.Header().Set("Cache-Control", "private, no-store")
+	if h.access != nil {
+		action := "class-document:Read"
+		switch r.Method {
+		case http.MethodPost:
+			action = "class-document:Create"
+		case http.MethodPut:
+			action = "class-document:Update"
+		case http.MethodDelete:
+			action = "class-document:Delete"
+		}
+		if !h.requireClassAction(w, r, classID, action) {
+			return
+		}
+	}
 	uid := userIDFromHeader(r)
 	cls, err := h.classes.GetByID(r.Context(), classID, uid)
 	if err != nil {
@@ -97,7 +112,7 @@ func (h *Handler) documentRouter(w http.ResponseWriter, r *http.Request, classID
 		w.Write(data)
 		return
 	}
-	if !staff {
+	if !staff && h.access == nil {
 		writeServiceError(w, r, classservice.ErrForbidden)
 		return
 	}
@@ -128,6 +143,35 @@ func (h *Handler) documentRouter(w http.ResponseWriter, r *http.Request, classID
 			return
 		}
 		WriteJSON(w, 201, d)
+		return
+	}
+	if r.Method == http.MethodPut && id > 0 {
+		var in struct {
+			Name string `json:"name"`
+		}
+		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in) != nil {
+			WriteError(w, 400, "invalid body")
+			return
+		}
+		in.Name = strings.TrimSpace(in.Name)
+		var old string
+		if err := h.db.QueryRowContext(r.Context(), `SELECT name FROM class_documents WHERE class_id=$1 AND id=$2`, classID, id).Scan(&old); err != nil {
+			if err == sql.ErrNoRows {
+				WriteError(w, 404, "document not found")
+			} else {
+				writeServiceError(w, r, err)
+			}
+			return
+		}
+		if in.Name == "" || len([]rune(in.Name)) > 255 || strings.ContainsAny(in.Name, "/\\\r\n\x00") || !strings.EqualFold(path.Ext(old), path.Ext(in.Name)) {
+			WriteError(w, 422, "Tên không hợp lệ hoặc đã đổi định dạng file")
+			return
+		}
+		if _, err := h.db.ExecContext(r.Context(), `UPDATE class_documents SET name=$3 WHERE class_id=$1 AND id=$2`, classID, id, in.Name); err != nil {
+			writeServiceError(w, r, err)
+			return
+		}
+		w.WriteHeader(204)
 		return
 	}
 	if r.Method == http.MethodDelete && id > 0 {

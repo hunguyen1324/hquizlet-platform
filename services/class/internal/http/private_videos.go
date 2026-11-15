@@ -73,6 +73,9 @@ func (h *Handler) uploadPrivateVideo(w http.ResponseWriter, r *http.Request, cla
 			return
 		}
 	}
+	if h.access != nil && audience != "all" && !h.requireClassAction(w, r, classID, "class-video:ManageAudience") {
+		return
+	}
 	ids, err := h.videoViewers(r.Context(), classID, ownerID, audience, viewers)
 	if err != nil {
 		WriteError(w, 422, err.Error())
@@ -309,6 +312,14 @@ func (h *Handler) streamPrivateVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	staff := cls.OwnerUserID == ticket.UserID || role == "owner" || role == "teacher"
+	if h.access != nil {
+		if err := h.access.Require(r.Context(), ticket.ClassID, ticket.UserID, "class-content:ViewVideo"); err != nil {
+			writeServiceError(w, r, err)
+			return
+		}
+		staff = h.access.Require(r.Context(), ticket.ClassID, ticket.UserID, "class-video:ManageAudience") == nil
+	}
+
 	if !staff && role == "" {
 		writeServiceError(w, r, classservice.ErrForbidden)
 		return

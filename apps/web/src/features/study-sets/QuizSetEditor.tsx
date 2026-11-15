@@ -24,6 +24,8 @@ const LANGUAGES = [
 
 type QuestionType = "multiple_choice" | "true_false" | "written" | "paragraph" | "sorting";
 
+const QUESTION_LABELS = ["Từ vựng", "Ngữ pháp", "Đọc", "Nghe"];
+
 interface QuizOption {
   text: string;
   position: number;
@@ -98,6 +100,16 @@ function QuestionCard({
   latestQuestion.current = question;
   const mediaBusy = React.useCallback((busy: boolean) => onBusyChange(question.key, busy), [onBusyChange, question.key]);
   const [editing, setEditing] = React.useState(!question.questionText.trim());
+  const [customLabel, setCustomLabel] = React.useState("");
+  const tags = question.tags ?? [];
+  function addCustomLabel() {
+    const label = customLabel.trim().replace(/\s+/g, " ");
+    if (!label) return;
+    if (!tags.some(tag => tag.toLocaleLowerCase() === label.toLocaleLowerCase())) {
+      setField("tags", [...tags, label]);
+    }
+    setCustomLabel("");
+  }
   const typeLabel = { multiple_choice: "Nhiều lựa chọn", true_false: "Đúng / Sai", written: "Tự luận", paragraph: "Đọc hiểu", sorting: "Sắp xếp" }[question.questionType];
   const correctOption = (text: string, index: number) => Boolean(question.correctAnswer) && (question.correctAnswer === text || question.correctAnswer.toUpperCase() === String.fromCharCode(65 + index));
   function setField<K extends keyof QuizQuestion>(key: K, value: QuizQuestion[K]) {
@@ -145,6 +157,7 @@ function QuestionCard({
           <button type="button" className="qedit-edit-button" disabled={disabled} onClick={() => setEditing(value => !value)} aria-expanded={editing}><StudyActionIcon name={editing ? "check" : "edit"} />{editing ? "Xong" : "Chỉnh sửa"}</button>
         </div>
       </header>
+      {tags.length > 0 && <div className="qedit-labels" aria-label={`Nhãn câu ${index + 1}`}>{tags.map(tag => <span className="qedit-label" key={tag}>{tag}</span>)}</div>}
       {!editing && <div className="qedit-question-preview">
         {question.paragraphText && <RichTextContent className="qedit-passage" value={question.paragraphText} />}
         <RichTextContent className="qedit-prompt" value={question.questionText} />
@@ -156,9 +169,10 @@ function QuestionCard({
         {question.audioUrl && <span className="qedit-media-badge">Có âm thanh</span>}
       </div>}
       <div className="quiz-question-body" hidden={!editing}>
+        <div className="qedit-content-column">
         {/* Question text */}
         <label>
-          Nội dung câu hỏi <span className="required">*</span>
+          <span>Nội dung câu hỏi <span className="required">*</span></span>
           <textarea
             rows={2}
             placeholder="Nhập câu hỏi..."
@@ -196,6 +210,23 @@ function QuestionCard({
           </label>
         </div>
 
+        <fieldset className="qedit-label-editor" disabled={disabled}>
+          <legend>Nhãn câu hỏi</legend>
+          <div className="qedit-labels">{QUESTION_LABELS.map(label => <button
+            type="button" key={label} className="qedit-label-choice" aria-pressed={tags.includes(label)}
+            onClick={() => setField("tags", tags.includes(label) ? tags.filter(tag => tag !== label) : [...tags, label])}
+          >{label}</button>)}</div>
+          <label htmlFor={`custom-label-${question.key}`}>Nhãn tùy chỉnh</label>
+          <div className="qedit-custom-label">
+            <input id={`custom-label-${question.key}`} value={customLabel} placeholder="Nhập nhãn rồi nhấn Enter…"
+              onChange={event => setCustomLabel(event.target.value)}
+              onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); addCustomLabel(); } }} />
+            <button type="button" className="secondary-button" disabled={disabled || !customLabel.trim()} onClick={addCustomLabel}>Thêm</button>
+          </div>
+          {tags.length > 0 && <div className="qedit-labels">{tags.map(tag => <button type="button" key={tag} className="qedit-label-choice" aria-label={`Xóa nhãn ${tag}`} onClick={() => setField("tags", tags.filter(value => value !== tag))}>{tag} ×</button>)}</div>}
+        </fieldset>
+        </div>
+        <div className="qedit-answer-column">
         {/* Options for multiple choice */}
         {question.questionType === "multiple_choice" && (
           <div className="quiz-options">
@@ -205,6 +236,7 @@ function QuestionCard({
                 <input
                   type="radio"
                   name={`correct-${question.key}`}
+                  aria-label={`Chọn đáp án ${optIdx + 1} là đáp án đúng`}
                   checked={correctOption(opt.text, optIdx) && opt.text !== ""}
                   onChange={() => setField("correctAnswer", opt.text)}
                   disabled={disabled || !opt.text}
@@ -212,6 +244,7 @@ function QuestionCard({
                 <input
                   type="text"
                   placeholder={`Đáp án ${optIdx + 1}`}
+                  aria-label={`Nội dung đáp án ${optIdx + 1}`}
                   value={opt.text}
                   onChange={(e) => setOptionText(optIdx, e.target.value)}
                   disabled={disabled}
@@ -332,13 +365,6 @@ function QuestionCard({
           </>
         )}
 
-        <ListeningMediaEditor
-          audioUrl={question.audioUrl} srtText={question.srtText} studySetId={studySetId}
-          ensureStudySet={ensureStudySet} onBusyChange={mediaBusy} disabled={disabled}
-          onChange={patch => onChange({ ...latestQuestion.current, ...patch })}
-        />
-        <label>Link / đường dẫn ảnh<input value={question.imageUrl} onChange={(e) => setField("imageUrl", e.target.value)} placeholder="https://... hoặc /images/question.png" disabled={disabled} /></label>
-
         {/* Explanation */}
         <label>
           Giải thích (tùy chọn)
@@ -350,6 +376,19 @@ function QuestionCard({
             disabled={disabled}
           />
         </label>
+        </div>
+        <details className="qedit-media-settings">
+          <summary>Ảnh, âm thanh & phụ đề{question.imageUrl || question.audioUrl || question.srtText ? " · Đã thêm nội dung" : " · Tùy chọn"}</summary>
+          <div className="qedit-media-content">
+        <ListeningMediaEditor
+          audioUrl={question.audioUrl} srtText={question.srtText} studySetId={studySetId}
+          ensureStudySet={ensureStudySet} onBusyChange={mediaBusy} disabled={disabled}
+          onChange={patch => onChange({ ...latestQuestion.current, ...patch })}
+        />
+        <label>Link / đường dẫn ảnh<input value={question.imageUrl} onChange={(e) => setField("imageUrl", e.target.value)} placeholder="https://... hoặc /images/question.png" disabled={disabled} /></label>
+
+          </div>
+        </details>
       </div>
     </article>
   );

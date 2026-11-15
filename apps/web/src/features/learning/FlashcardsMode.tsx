@@ -14,6 +14,7 @@ import { FlashcardsSettingsDialog } from "./FlashcardsSettingsDialog";
 import type { FlashcardsSettings } from "./FlashcardsSettingsDialog";
 import { ViewerWatermark } from "../../components/learning/ViewerWatermark";
 import "./learning.css";
+import { KanjiTools } from "../kanji/KanjiTools";
 
 /** Phát âm text qua Web Speech API */
 function speakText(text: string) {
@@ -38,6 +39,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
   const [showSearch, setShowSearch] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const searchInput = React.useRef<HTMLInputElement>(null);
+  const cardView = React.useRef<HTMLDivElement>(null);
   const review = useMutation({
     mutationFn: ({ cardId, rating }: { cardId: number; rating: Rating }) => repetitionApi.review(token, studySetId, cardId, rating),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: repetitionKey(String(user?.id ?? ""), studySetId) }); handleNext(); },
@@ -256,6 +258,10 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         </span>
 
         <div className="ql-actions">
+        <button type="button" className={`ql-icon-btn${showSearch ? " ql-icon-btn--on" : ""}`} aria-label="Tìm thẻ" title="Tìm thẻ (/)" aria-expanded={showSearch} aria-controls="ql-card-search" onClick={() => setShowSearch(value => !value)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+        </button>
+
           {/* Audio button */}
           <button
             className="ql-icon-btn"
@@ -333,10 +339,24 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         </div>
       </div>
 
+      {showSearch && <section id="ql-card-search" className="ql-card-search" aria-label="Tìm trong bộ thẻ">
+        <label htmlFor="ql-card-search-input">Tìm thuật ngữ hoặc định nghĩa</label>
+        <div className="ql-card-search-field">
+          <input ref={searchInput} id="ql-card-search-input" type="search" value={search} placeholder="Nhập từ cần tìm…" autoComplete="off" onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === "Escape") { setShowSearch(false); setSearch(""); } }} />
+          <button type="button" className="ql-related-toggle" onClick={() => { setShowSearch(false); setSearch(""); }}>Đóng</button>
+        </div>
+        <p role="status">{search.trim() ? `${searchResults.length} kết quả trong ${total} thẻ` : "Tìm thẻ rồi chọn kết quả để chuyển đến thẻ đó."}</p>
+        <ul className="ql-card-search-results">
+          {searchResults.slice(0, 50).map(({ card, position }) => <li key={card.id}><button type="button" onClick={() => { setFlipped(false); setIndex(position); setShowSearch(false); setSearch(""); requestAnimationFrame(() => { cardView.current?.focus({ preventScroll: true }); cardView.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }); }}><span className="ql-search-position">{position + 1}</span><span><strong>{card.term}</strong><span className="ql-search-definition">{card.definition}</span></span></button></li>)}
+        </ul>
+        {searchResults.length > 50 && <p>Hiển thị 50 kết quả đầu tiên. Nhập thêm để thu hẹp tìm kiếm.</p>}
+      </section>}
+
       {/* ── Card ── */}
+      <KanjiTools term={current.term} />
       {showBothSides ? (
         /* Both-sides view */
-        <div className="ql-bothsides">
+        <div className="ql-bothsides" ref={cardView} tabIndex={-1}>
           <div className="ql-bothside-card ql-bothside-card--front">
             <span className="ql-face-label">{frontLabel}</span>
             <p className="ql-card-text">{frontText}</p>
@@ -349,6 +369,7 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       ) : (
         /* Flip card */
         <div
+          ref={cardView}
           className={`ql-card${flipped ? " ql-card--flipped" : ""}`}
           onClick={() => setFlipped((f) => !f)}
           onKeyDown={(e) => {
@@ -453,23 +474,6 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         </button>
       </div>
 
-      <div className="ql-search-tools">
-        <button type="button" className="ql-icon-btn" aria-label="Tìm thẻ" title="Tìm thẻ (/)" aria-expanded={showSearch} aria-controls="ql-card-search" onClick={() => setShowSearch(value => !value)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
-        </button>
-      </div>
-      {showSearch && <section id="ql-card-search" className="ql-card-search" aria-label="Tìm trong bộ thẻ">
-        <label htmlFor="ql-card-search-input">Tìm thuật ngữ hoặc định nghĩa</label>
-        <div className="ql-card-search-field">
-          <input ref={searchInput} id="ql-card-search-input" type="search" value={search} placeholder="Nhập từ cần tìm…" autoComplete="off" onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === "Escape") { setShowSearch(false); setSearch(""); } }} />
-          <button type="button" className="ql-related-toggle" onClick={() => { setShowSearch(false); setSearch(""); }}>Đóng</button>
-        </div>
-        <p role="status">{search.trim() ? `${searchResults.length} kết quả trong ${total} thẻ` : "Tìm thẻ rồi chọn kết quả để chuyển đến thẻ đó."}</p>
-        <ul className="ql-card-search-results">
-          {searchResults.slice(0, 50).map(({ card, position }) => <li key={card.id}><button type="button" onClick={() => { setFlipped(false); setIndex(position); setShowSearch(false); setSearch(""); }}><span className="ql-search-position">{position + 1}</span><span><strong>{card.term}</strong><span className="ql-search-definition">{card.definition}</span></span></button></li>)}
-        </ul>
-        {searchResults.length > 50 && <p>Hiển thị 50 kết quả đầu tiên. Nhập thêm để thu hẹp tìm kiếm.</p>}
-      </section>}
 
       {/* ── Completion ── */}
       {allSeen && (

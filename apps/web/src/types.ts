@@ -200,6 +200,7 @@ export type ClassDetail = ClassSummary & {
 };
 
 export type ClassMember = {
+ name?:string;
   id: number;
   classId: number;
   userId: number;

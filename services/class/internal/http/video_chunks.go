@@ -50,6 +50,9 @@ func (h *Handler) chunkedVideo(w http.ResponseWriter, r *http.Request, classID, 
 			WriteError(w, 422, "Tiêu đề hoặc định dạng video không hợp lệ")
 			return
 		}
+		if h.access != nil && in.Audience != "all" && !h.requireClassAction(w, r, classID, "class-video:ManageAudience") {
+			return
+		}
 		ids, err := h.videoViewers(r.Context(), classID, ownerID, in.Audience, in.ViewerIDs)
 		if err != nil {
 			WriteError(w, 422, "Quyền xem không hợp lệ")

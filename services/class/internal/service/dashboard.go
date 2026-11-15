@@ -26,6 +26,7 @@ type userDirectory interface {
 
 // ClassDashboardService aggregates class progress for GET /v1/classes/{id}/dashboard.
 type ClassDashboardService struct {
+	access      *ClassAccess
 	classes     repository.ClassStore
 	members     repository.MemberStore
 	studySets   repository.ClassStudySetStore
@@ -79,6 +80,9 @@ func (s *ClassDashboardService) Get(ctx context.Context, p authz.Principal, clas
 	}
 
 	canViewAll := canViewOthersProgress(p, classID, role)
+	if s.access != nil {
+		canViewAll = s.access.Require(ctx, classID, p.UserID, "class-member:ViewProgress") == nil
+	}
 	setIDs := make([]int64, 0, len(sets))
 	for _, set := range sets {
 		setIDs = append(setIDs, set.StudySetID)
@@ -167,6 +171,12 @@ func (s *ClassDashboardService) authorizeAndResolve(ctx context.Context, p authz
 		return nil, "", err
 	}
 	role := resolveClassRole(ctx, s.members, class, classID, p.UserID)
+	if s.access != nil {
+		if err := s.access.Require(ctx, classID, p.UserID, string(action)); err != nil {
+			return nil, "", err
+		}
+		return class, role, nil
+	}
 	if role == "" {
 		if !authz.Can(p, action, authz.Resource{Type: "class", ID: classID, ClassID: classID, OwnerUserID: class.OwnerUserID}) {
 			return nil, "", ErrForbidden

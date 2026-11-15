@@ -12,6 +12,7 @@ import (
 
 // MemberService handles member management operations.
 type MemberService struct {
+	access  *ClassAccess
 	classes repository.ClassStore
 	members repository.MemberStore
 }
@@ -36,6 +37,11 @@ func (s *MemberService) AddMember(ctx context.Context, p authz.Principal, classI
 	}
 
 	role = strings.TrimSpace(strings.ToLower(role))
+	if role == "teacher" && s.access != nil {
+		if err := s.access.Require(ctx, classID, p.UserID, "class-member:UpdateRole"); err != nil {
+			return nil, err
+		}
+	}
 	if !model.ValidRoles[role] || role == "owner" {
 		return nil, errors.New("invalid role: must be 'teacher' or 'student'")
 	}
@@ -52,6 +58,11 @@ func (s *MemberService) AddMember(ctx context.Context, p authz.Principal, classI
 		return nil, errors.New("class is full")
 	}
 
+	if s.access != nil {
+		if err := s.access.CanDelegateLegacyRole(ctx, classID, p.UserID, role); err != nil {
+			return nil, err
+		}
+	}
 	return s.members.Add(ctx, classID, targetUserID, role)
 }
 
@@ -123,6 +134,35 @@ func (s *MemberService) UpdateRole(ctx context.Context, p authz.Principal, class
 		return errors.New("cannot change your own role")
 	}
 
+	if s.access != nil {
+		if err := s.access.CanDelegateLegacyRole(ctx, classID, p.UserID, newRole); err != nil {
+			return err
+		}
+		tx, err := s.access.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		var owner int64
+		if err = tx.QueryRowContext(ctx, `SELECT owner_user_id FROM classes WHERE id=$1 FOR UPDATE`, classID).Scan(&owner); err != nil {
+			return err
+		}
+		if owner == targetUserID {
+			return ErrForbidden
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE class_members SET role=$3 WHERE class_id=$1 AND user_id=$2`, classID, targetUserID, newRole)
+		if err != nil {
+			return err
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			return ErrNotFound
+		}
+		if _, err = tx.ExecContext(ctx, `DELETE FROM class_member_access WHERE class_id=$1 AND user_id=$2`, classID, targetUserID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
 	return s.members.UpdateRole(ctx, classID, targetUserID, newRole)
 }
 
@@ -172,6 +212,12 @@ func (s *MemberService) GetRole(ctx context.Context, classID, userID int64) (str
 
 // authorize resolves the caller's class role and checks the requested action with authz.Can.
 func (s *MemberService) authorize(ctx context.Context, p authz.Principal, classID int64, action authz.Action) (*model.Class, error) {
+	if s.access != nil {
+		if err := s.access.Require(ctx, classID, p.UserID, string(action)); err != nil {
+			return nil, err
+		}
+		return s.classes.GetByID(ctx, classID)
+	}
 	if p.UserID <= 0 {
 		return nil, ErrUnauthorized
 	}

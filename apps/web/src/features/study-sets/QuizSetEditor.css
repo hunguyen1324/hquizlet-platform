@@ -98,3 +98,40 @@
 .listening-editor details input { width: 100%; margin-top: 8px; }
 .dark .listening-editor { border-color: #475569; }
 @media(max-width:600px) { .listening-editor { padding: 14px; } .listening-editor__stt > button { width: 100%; } }
+/* Horizontal writing workspace with optional media. */
+.qedit-labels { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.qedit-label, .qedit-label-choice { border: 1px solid #dce2ed; border-radius: 999px; padding: 5px 10px; font-size: 12px; color: #52627e; background: #f8f9fc; overflow-wrap: anywhere; }
+.qedit-label-choice { cursor: pointer; }
+.qedit-label, .qedit-label-choice[aria-pressed="true"] { color: #4338ca; border-color: #c7d2fe; background: #eef2ff; }
+.qedit-label-editor { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 12px; border: 1px solid #dfe5ef; border-radius: 8px; }
+.qedit-label-editor legend { padding: 0 4px; font-size: 12px; color: #667590; }
+.qedit-label-editor .qedit-labels { margin: 0; }
+.qedit-custom-label { display: flex; gap: 8px; }
+.qedit-custom-label input { flex: 1; }
+.qedit-custom-label button { flex-shrink: 0; }
+.qedit-page .quiz-question-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px 24px; padding-top: 16px; }
+.qedit-content-column, .qedit-answer-column { display: grid; align-content: start; gap: 14px; min-width: 0; }
+.qedit-content-column > label:first-child textarea { min-height: 130px; }
+.qedit-page .qedit-card--editing .qedit-card-head { margin-bottom: 14px; }
+.qedit-page .quiz-options { gap: 10px; }
+.qedit-page .quiz-options-label { margin: 0; }
+.qedit-page .quiz-options > button { justify-self: start; padding: 8px 12px; }
+.qedit-media-settings { grid-column: 1 / -1; border-top: 1px solid #edf0f6; min-width: 0; }
+.qedit-media-settings > summary { padding: 12px 0 0; color: #596982; font-size: 12px; font-weight: 600; cursor: pointer; }
+.qedit-media-settings > summary:focus-visible { outline: 2px solid #a8afff; outline-offset: 3px; }
+.qedit-media-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 16px; padding-top: 14px; }
+.qedit-media-content .listening-editor { min-width: 0; padding: 14px; }
+.qedit-question-finder { position: sticky; top: 20px; }
+.qedit-question-finder nav { max-height: min(600px, 60dvh); }
+@media (min-width: 1001px) {
+  .qedit-workspace { grid-template-columns: minmax(0, 1fr) 250px; gap: 20px; }
+}
+@media (max-width: 1000px) {
+  .qedit-question-finder { position: static; }
+  .qedit-question-finder nav { max-height: 140px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .qedit-page .quiz-question-body, .qedit-media-content { grid-template-columns: minmax(0, 1fr); }
+  .qedit-content-column > label:first-child textarea { min-height: 90px; }
+  .qedit-question-finder nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

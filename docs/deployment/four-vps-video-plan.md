@@ -40,6 +40,30 @@ không chia đôi dung lượng để giữ replica.
 
 ## Cấu hình và bảo mật
 
+Cập nhật 14/11/2026: App truy cập bốn node qua Tailscale thay cho IPv6 public.
+Giữ nguyên node ID, host fingerprint, khóa dịch vụ và đường dẫn SFTP:
+
+| Node | IP Tailscale |
+| --- | --- |
+| video-1 | 100.95.74.107 |
+| video-2 | 100.82.132.14 |
+| video-3 | 100.105.209.85 |
+| video-4 | 100.98.37.57 |
+
+App hiện có IP Tailscale 100.119.206.61. Các node chạy Tailscale userspace
+do VPS không được cấp /dev/net/tun. Dùng OpenSSH/internal-sftp qua Tailscale
+cho tài khoản hqsegments; không bật Tailscale SSH interception trên node kho
+vì dịch vụ cần chroot /segments và xác thực bằng khóa riêng hiện hữu.
+video-2 đã tắt Tailscale SSH khi chuyển đổi. Không dùng mật khẩu root cho App.
+
+Cấu hình trước chuyển đổi được sao lưu riêng trên App tại:
+/opt/hquizlet/infra/docker/video-secrets/hls-nodes.json.before-tailscale-20261114T161749Z.
+Đã xác minh host key, xác thực khóa dịch vụ, StatVFS, ghi/đọc/xóa file thử
+và đọc segment có sẵn từ network namespace của Class trên đủ bốn node.
+Kiểm thử API production sau chuyển đổi đã đạt: upload 20 MiB, xử lý ready,
+đọc playlist/khóa/segment với xác thực và từ chối media chưa đăng nhập.
+Fixture tạo một segment; kiểm thử SFTP riêng ở trên xác minh đủ bốn node.
+
 Bốn VPS dùng hqsegments, SSH port 22, chỉ internal-sftp, không shell/forward,
 chroot /srv/hquizlet-hls, đường dẫn SFTP /segments. Dữ liệu nằm tại:
 /srv/hquizlet-hls/segments/OBJECT_KEY.hls/segmentNNNNNN.ts

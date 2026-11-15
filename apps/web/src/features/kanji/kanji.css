@@ -1,0 +1,22 @@
+.kanji-tools, .kanji-tool-pair, .kanji-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.kanji-tools { margin: 12px 0; }
+.kanji-tools button, .kanji-dialog button, .kanji-dialog select { color: inherit; background: var(--background, #fff); border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
+.kanji-tools button:hover { border-color: #6366f1; }
+.kanji-tools button:focus-visible, .kanji-dialog :focus-visible { outline: 2px solid #6366f1; outline-offset: 3px; }
+.kanji-dialog { width: min(540px, calc(100vw - 32px)); max-height: 85dvh; overflow: auto; border: 1px solid #cbd5e1; border-radius: 16px; padding: 24px; background: var(--background, white); color: var(--foreground, #1e293b); }
+.kanji-dialog::backdrop { background: #0f172a99; }
+.kanji-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.kanji-dialog h2 { margin: 0; font-size: 19px; }
+.kanji-dialog footer { margin-top: 24px; font-size: 11px; color: #64748b; }
+.kanji-dialog a { color: #6366f1; }
+.kanji-canvas { display: block; margin: auto; width: min(280px, 100%); border: 1px solid #cbd5e1; border-radius: 10px; }
+.kanji-controls label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.kanji-dialog button:disabled { opacity: .4; cursor: default; }
+.kanji-tree ul { list-style: none; padding-left: 22px; border-left: 1px dashed #cbd5e1; }
+.kanji-tree li { margin: 12px 0; }
+.kanji-tree strong { font-size: 25px; }
+.kanji-tree summary { cursor: pointer; }
+.kanji-tree span, .kanji-tree small, .kanji-tree p { font-size: 12px; }
+.kanji-active-stroke { stroke-dasharray: 1; animation: kanji-write .7s linear both; }
+@keyframes kanji-write { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .kanji-active-stroke { animation: none; } }

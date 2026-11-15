@@ -301,6 +301,12 @@ func (h *Handler) serveHLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	staff := cls.OwnerUserID == ticket.UserID || role == "owner" || role == "teacher"
+	if h.access != nil {
+		if !h.requireClassAction(w, r, ticket.ClassID, "class-content:ViewVideo") {
+			return
+		}
+		staff = h.hasClassAction(r, ticket.ClassID, "class-video:ManageAudience")
+	}
 	if !staff && role == "" {
 		WriteError(w, 403, "Bạn không còn là thành viên nhóm")
 		return

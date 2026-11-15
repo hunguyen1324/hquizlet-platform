@@ -1,8 +1,9 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 1.9.0
+  version: 1.11.0
   description: |
+    Class workspace adds scoped custom roles, member role assignments and private homework attachments.
     HQuizlet Platform API contract. All public application routes are exposed
     through the gateway at localhost:8080.
     Phase 10 adds: content types (study/quiz/grammar), TTS audio, language selectors,
@@ -52,6 +53,173 @@ components:
       description: 'Opaque participant token issued on join. Use "Authorization: Bearer <participantToken>".'
 
   schemas:
+    ClassRolePolicy:
+      type: object
+      required:
+      - name
+      - allow
+      - deny
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 500
+        allow:
+          type: array
+          maxItems: 29
+          items: &id001
+            type: string
+        deny:
+          type: array
+          maxItems: 29
+          items: *id001
+    ClassWorkspaceRole:
+      allOf:
+      - $ref: '#/components/schemas/ClassRolePolicy'
+      - type: object
+        required:
+        - key
+        - managed
+        properties:
+          key: *id001
+          managed:
+            type: boolean
+    ClassWorkspaceAccess:
+      type: object
+      required:
+      - roles
+      - members
+      - catalog
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClassWorkspaceRole'
+        members:
+          type: array
+          items:
+            type: object
+            required:
+            - userId
+            - legacyRole
+            - roleKeys
+            properties:
+              userId:
+                type: integer
+                format: int64
+              legacyRole: *id001
+              name: *id001
+              email: *id001
+              roleKeys:
+                type: array
+                items: *id001
+        catalog:
+          type: array
+          items:
+            type: object
+            required:
+            - key
+            - name
+            - group
+            properties:
+              key: *id001
+              name: *id001
+              group: *id001
+    ClassAssignmentFile:
+      type: object
+      required:
+      - id
+      - name
+      - contentType
+      - sizeBytes
+      properties:
+        id:
+          type: integer
+          format: int64
+        name: *id001
+        contentType: *id001
+        sizeBytes:
+          type: integer
+          format: int64
+          maximum: 20971520
+    ClassAssignmentMetadata:
+      type: object
+      required:
+      - title
+      - instructions
+      - status
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        instructions:
+          type: string
+          maxLength: 20000
+        status:
+          type: string
+          enum:
+          - draft
+          - published
+        dueAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        deleteFileIds:
+          type: array
+          maxItems: 5
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+    ClassHomework:
+      allOf:
+      - $ref: '#/components/schemas/ClassAssignmentMetadata'
+      - type: object
+        required:
+        - id
+        - createdBy
+        - createdAt
+        - updatedAt
+        - files
+        properties:
+          id:
+            type: integer
+            format: int64
+          createdBy:
+            type: integer
+            format: int64
+          createdAt:
+            type: string
+            format: date-time
+          updatedAt:
+            type: string
+            format: date-time
+          files:
+            type: array
+            maxItems: 5
+            items:
+              $ref: '#/components/schemas/ClassAssignmentFile'
+    ClassHomeworkUpload:
+      type: object
+      required:
+      - metadata
+      properties:
+        metadata:
+          type: string
+          description: JSON encoded ClassAssignmentMetadata. Metadata and all file changes
+            commit atomically.
+        files:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            format: binary
+          description: PDF, Word, Excel or PowerPoint; 20 MiB per file, 40 MiB per assignment.
     Error:
       type: object
       required: [code, message, requestId, details]
@@ -2910,7 +3078,7 @@ paths:
         '503':
           description: Dependency unavailable
       parameters:
-      - &id001
+      - &id001_scope2
         name: limit
         in: query
         required: false
@@ -3059,7 +3227,7 @@ paths:
         '503':
           description: Dependency unavailable
       parameters:
-      - *id001
+      - *id001_scope2
       - *id002
       - name: search
         in: query
@@ -3205,7 +3373,7 @@ paths:
         '503':
           description: Dependency unavailable
       parameters:
-      - *id001
+      - *id001_scope2
       - *id002
       - name: actorId
         in: query
@@ -3253,7 +3421,7 @@ paths:
         '503':
           description: Dependency unavailable
       parameters:
-      - *id001
+      - *id001_scope2
       - *id002
       - name: search
         in: query
@@ -3392,7 +3560,7 @@ paths:
         '503':
           description: Dependency unavailable
       parameters:
-      - *id001
+      - *id001_scope2
       - *id002
       - name: search
         in: query
@@ -3640,3 +3808,540 @@ paths:
         '401': { description: 'Missing, expired or invalid service signature' }
         '422': { description: Request exceeds batch limits }
         '503': { description: Statistics unavailable }
+
+  /v1/classes/{classId}/access/me:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    get:
+      operationId: getClassWorkspaceActions
+      summary: Read effective class actions, applying explicit deny
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items: &id001_scope3
+                      type: string
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+  /v1/classes/{classId}/access:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    get:
+      operationId: getClassWorkspaceAccess
+      summary: Read class roles, members and permission catalog (class-access:Manage)
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassWorkspaceAccess'
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+  /v1/classes/{classId}/access/roles:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    post:
+      operationId: createClassWorkspaceRole
+      summary: Create a custom class role (class-access:Manage)
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassWorkspaceRole'
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassRolePolicy'
+  /v1/classes/{classId}/access/roles/{roleKey}:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: roleKey
+      required: true
+      schema:
+        type: string
+    put:
+      operationId: updateClassWorkspaceRole
+      summary: Update a custom class role (managed roles are immutable)
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassWorkspaceRole'
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassRolePolicy'
+    delete:
+      operationId: deleteClassWorkspaceRole
+      summary: Delete an unassigned custom class role
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '409':
+          description: Role is still assigned to a class member
+  /v1/classes/{classId}/access/members/{userId}:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: userId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    put:
+      operationId: assignClassWorkspaceRoles
+      summary: Replace member roles; empty list revokes class actions; owner and self
+        changes forbidden
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - roleKeys
+              properties:
+                roleKeys:
+                  type: array
+                  maxItems: 50
+                  items: *id001_scope3
+  /v1/classes/{classId}/assignments:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    get:
+      operationId: listClassHomework
+      summary: List published homework or drafts visible to the caller
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClassHomework'
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+    post:
+      operationId: createClassHomework
+      summary: Create homework with private attachments; published state also requires
+        Publish
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassHomework'
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ClassHomeworkUpload'
+  /v1/classes/{classId}/assignments/{assignmentId}:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: assignmentId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    put:
+      operationId: updateClassHomework
+      summary: Atomically update homework and attachments; published edits require Update
+        and Publish
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassHomework'
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ClassHomeworkUpload'
+    delete:
+      operationId: deleteClassHomework
+      summary: Delete homework and all of its attachments
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+  /v1/classes/{classId}/assignments/{assignmentId}/files/{fileId}:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: assignmentId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: fileId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    get:
+      operationId: downloadClassHomeworkFile
+      summary: Download a private class-scoped homework attachment
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Private attachment; Content-Disposition attachment and Cache-Control
+            private, no-store
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+  /v1/classes/{classId}/videos/{videoId}/audience:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: videoId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    put:
+      operationId: updateClassVideoAudience
+      summary: Change video viewers (class-video:ManageAudience)
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - audience
+              - viewerIds
+              properties:
+                audience:
+                  type: string
+                  enum:
+                  - all
+                  - selected
+                viewerIds:
+                  type: array
+                  maxItems: 1000
+                  items:
+                    type: integer
+                    format: int64
+  /v1/classes/{classId}/documents/{documentId}:
+    parameters:
+    - in: path
+      name: classId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    - in: path
+      name: documentId
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    put:
+      operationId: renameClassDocument
+      summary: Rename a document without changing its extension (class-document:Update)
+      tags:
+      - classes
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Required class action is not permitted
+        '404':
+          description: Class-scoped resource not found
+        '422':
+          description: Invalid policy, metadata or file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+  /v1/classes/{classId}/videos/{videoId}/subtitles:
+    parameters:
+      - {in: path, name: classId, required: true, schema: {type: integer, minimum: 1}}
+      - {in: path, name: videoId, required: true, schema: {type: integer, minimum: 1}}
+    get:
+      operationId: getVideoSubtitles
+      summary: Read shared subtitles or try public YouTube captions for an accessible video
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: query, name: language, schema: {type: string, maxLength: 35}}
+        - {in: query, name: translation, schema: {type: string, maxLength: 35}}
+        - {in: query, name: youtube, schema: {type: integer, enum: [1]}}
+      responses:
+        '200': {description: Original and translation tracks (nullable), availableTracks and optional unavailable message. Tracks contain language, label, source and cues with start/end seconds and text. Requires ViewVideo and current audience membership.}
+        '403': {description: Required class action is not permitted}
+        '404': {description: Video absent or outside audience}
+    put:
+      operationId: saveVideoSubtitles
+      summary: Replace a shared track (class-video:Update)
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, cues]
+              properties:
+                kind: {type: string, enum: [original, translation]}
+                language: {type: string, maxLength: 35}
+                label: {type: string, maxLength: 100}
+                cues:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  items:
+                    type: object
+                    required: [start, end, text]
+                    properties:
+                      start: {type: number, minimum: 0, maximum: 43200}
+                      end: {type: number, exclusiveMinimum: 0, maximum: 43200}
+                      text: {type: string, minLength: 1, maxLength: 3000}
+      responses:
+        '200': {description: Saved uploaded track. End must exceed start; combined text at most 1 MiB.}
+        '403': {description: Required class action is not permitted}
+        '404': {description: Video absent or outside audience}
+        '422': {description: Invalid track or cues}
+    delete:
+      operationId: deleteVideoSubtitles
+      summary: Delete a shared track (class-video:Update)
+      tags: [classes]
+      security: [{BearerAuth: []}]
+      parameters:
+        - {in: query, name: kind, required: true, schema: {type: string, enum: [original, translation]}}
+      responses:
+        '204': {description: Track deleted}
+        '403': {description: Required class action is not permitted}
+        '404': {description: Video absent or outside audience}

@@ -292,7 +292,7 @@ export const classVideoApi = {
     return `${gatewayUrl}${data.path}`;
   },
   list: (token: string, classId: number): Promise<ClassVideo[]> => apiFetch(`/v1/classes/${classId}/videos`, token),
-  save: (token: string, classId: number, input: ClassVideoInput, id?: number): Promise<ClassVideo> => apiFetch(`/v1/classes/${classId}/videos${id ? `/${id}` : ""}`, token, { method: id ? "PUT" : "POST", body: JSON.stringify(input) }),
+  save: (token: string, classId: number, input: ClassVideoInput | Pick<ClassVideoInput,"title"|"url">, id?: number): Promise<ClassVideo> => apiFetch(`/v1/classes/${classId}/videos${id ? `/${id}` : ""}`, token, { method: id ? "PUT" : "POST", body: JSON.stringify(input) }),
   remove: (token: string, classId: number, id: number): Promise<void> => apiFetch(`/v1/classes/${classId}/videos/${id}`, token, { method: "DELETE" }),
 };
 

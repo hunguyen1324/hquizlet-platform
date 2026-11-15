@@ -65,12 +65,33 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		return
 	}
 	staff := cls.OwnerUserID == uid || role == "teacher" || role == "owner"
+	if h.access != nil {
+		action := "class-content:ViewVideo"
+		if len(parts) > 0 && (parts[0] == "uploads" || parts[0] == "upload") {
+			action = "class-content:UploadVideo"
+		} else if len(parts) == 2 && parts[1] == "audience" {
+			action = "class-video:ManageAudience"
+		} else if len(parts) == 2 && parts[1] == "category" {
+			action = "class-video:Update"
+		} else if r.Method == http.MethodDelete {
+			action = "class-video:Delete"
+		} else if r.Method == http.MethodPut {
+			action = "class-video:Update"
+		} else if r.Method == http.MethodPost && len(parts) == 0 {
+			action = "class-content:UploadVideo"
+		}
+		if !h.requireClassAction(w, r, classID, action) {
+			return
+		}
+		staff = h.hasClassAction(r, classID, "class-video:ManageAudience")
+	}
+
 	if !staff && role == "" {
 		writeServiceError(w, r, classservice.ErrForbidden)
 		return
 	}
 	if len(parts) > 0 && parts[0] == "uploads" {
-		if !staff {
+		if !staff && h.access == nil {
 			writeServiceError(w, r, classservice.ErrForbidden)
 			return
 		}
@@ -78,7 +99,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		return
 	}
 	if len(parts) == 1 && parts[0] == "upload" && r.Method == http.MethodPost {
-		if !staff {
+		if !staff && h.access == nil {
 			writeServiceError(w, r, classservice.ErrForbidden)
 			return
 		}
@@ -94,8 +115,40 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		h.privateVideoPlayback(w, r, classID, id, uid, staff)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "audience" && r.Method == http.MethodPut {
+		if !h.requireClassAction(w, r, classID, "class-video:ManageAudience") {
+			return
+		}
+		id, e := strconv.ParseInt(parts[0], 10, 64)
+		var in struct {
+			Audience  string  `json:"audience"`
+			ViewerIDs []int64 `json:"viewerIds"`
+		}
+		if e != nil || id <= 0 || json.NewDecoder(http.MaxBytesReader(w, r.Body, 32768)).Decode(&in) != nil {
+			WriteError(w, 400, "invalid audience request")
+			return
+		}
+		ids, e := h.videoViewers(r.Context(), classID, cls.OwnerUserID, in.Audience, in.ViewerIDs)
+		if e != nil {
+			WriteError(w, 422, e.Error())
+			return
+		}
+		raw, _ := json.Marshal(ids)
+		result, e := h.db.ExecContext(r.Context(), `UPDATE class_videos SET audience=$3,viewer_ids=$4::jsonb WHERE class_id=$1 AND id=$2`, classID, id, in.Audience, string(raw))
+		if e != nil {
+			writeServiceError(w, r, e)
+			return
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			WriteError(w, 404, "video not found")
+			return
+		}
+		w.WriteHeader(204)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "category" && r.Method == http.MethodPut {
-		if !staff {
+		if !staff && h.access == nil {
 			writeServiceError(w, r, classservice.ErrForbidden)
 			return
 		}
@@ -178,7 +231,7 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		WriteJSON(w, 200, videos)
 		return
 	}
-	if !staff {
+	if !staff && h.access == nil {
 		writeServiceError(w, r, classservice.ErrForbidden)
 		return
 	}
@@ -232,6 +285,37 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 			return
 		}
 		in.Title = strings.TrimSpace(in.Title)
+		if h.access != nil && !h.hasClassAction(r, classID, "class-video:ManageAudience") {
+			if r.Method == http.MethodPost {
+				if in.Audience != "all" {
+					WriteError(w, 403, "Không có quyền chọn người xem")
+					return
+				}
+			} else {
+				var oldAudience string
+				var raw []byte
+				if err := h.db.QueryRowContext(r.Context(), `SELECT audience,viewer_ids FROM class_videos WHERE class_id=$1 AND id=$2`, classID, id).Scan(&oldAudience, &raw); err != nil {
+					if err == sql.ErrNoRows {
+						WriteError(w, 404, "video not found")
+					} else {
+						writeServiceError(w, r, err)
+					}
+					return
+				}
+				var oldIDs []int64
+				if json.Unmarshal(raw, &oldIDs) != nil {
+					WriteError(w, 500, "invalid audience")
+					return
+				}
+				if (in.Audience != "" && oldAudience != in.Audience) || (in.ViewerIDs != nil && !sameViewerIDs(oldIDs, in.ViewerIDs)) {
+					WriteError(w, 403, "Không có quyền thay đổi người xem")
+					return
+				}
+				in.Audience = oldAudience
+				in.ViewerIDs = oldIDs
+			}
+		}
+
 		if r.Method == http.MethodPut {
 			var stored bool
 			if err := h.db.QueryRowContext(r.Context(), `SELECT storage_key IS NOT NULL FROM class_videos WHERE class_id=$1 AND id=$2`, classID, id).Scan(&stored); err != nil {
@@ -294,4 +378,24 @@ func (h *Handler) videoRouter(w http.ResponseWriter, r *http.Request, classID in
 		return
 	}
 	WriteError(w, 405, "method not allowed")
+}
+
+func sameViewerIDs(a, b []int64) bool {
+	set := map[int64]bool{}
+	for _, id := range a {
+		set[id] = true
+	}
+	other := map[int64]bool{}
+	for _, id := range b {
+		other[id] = true
+	}
+	if len(set) != len(other) {
+		return false
+	}
+	for id := range set {
+		if !other[id] {
+			return false
+		}
+	}
+	return true
 }

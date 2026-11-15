@@ -8,6 +8,14 @@ import (
 )
 
 func (s *ClassService) Permissions(ctx context.Context, p authz.Principal, classID int64) ([]authz.Action, error) {
+	if s.access != nil {
+		values, err := s.access.Effective(ctx, classID, p.UserID)
+		out := []authz.Action{}
+		for _, v := range values {
+			out = append(out, authz.Action(v))
+		}
+		return out, err
+	}
 	res, class, err := s.classResource(ctx, classID)
 	if err != nil {
 		return nil, err
@@ -47,6 +55,12 @@ func (s *ClassService) memberRole(ctx context.Context, classID, userID int64, cl
 }
 
 func (s *ClassService) authorizeClass(ctx context.Context, p authz.Principal, classID int64, action authz.Action) (*model.Class, error) {
+	if s.access != nil {
+		if err := s.access.Require(ctx, classID, p.UserID, string(action)); err != nil {
+			return nil, err
+		}
+		return s.classes.GetByID(ctx, classID)
+	}
 	if p.UserID <= 0 {
 		return nil, ErrUnauthorized
 	}

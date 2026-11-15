@@ -41,6 +41,7 @@ type ClassDetail struct {
 
 // ClassMember represents a user's membership in a class.
 type ClassMember struct {
+	Name     string    `json:"name,omitempty"`
 	ID       int64     `json:"id"`
 	ClassID  int64     `json:"classId"`
 	UserID   int64     `json:"userId"`

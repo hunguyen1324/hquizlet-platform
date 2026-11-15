@@ -22,6 +22,7 @@ var (
 
 // ClassService handles class CRUD operations.
 type ClassService struct {
+	access  *ClassAccess
 	classes repository.ClassStore
 	members repository.MemberStore
 }
