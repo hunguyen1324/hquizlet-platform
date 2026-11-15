@@ -20,6 +20,7 @@ import (
 
 // Handler holds all service dependencies for HTTP routing.
 type Handler struct {
+	mangaStore    videostorage.Store
 	captions      *youtubecaptions.Client
 	users         *client.UserClient
 	access        *classservice.ClassAccess
@@ -86,6 +87,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/classes", h.listClasses)
 	mux.HandleFunc("POST /v1/classes", h.createClass)
 	mux.HandleFunc("/v1/classes/", h.classRouter)
+	mux.HandleFunc("/v1/manga", h.mangaRouter)
+	mux.HandleFunc("/v1/manga/", h.mangaRouter)
 	mux.HandleFunc("GET /v1/class-video-stream", h.streamPrivateVideo)
 	mux.HandleFunc("GET /v1/class-video-hls", h.serveHLS)
 

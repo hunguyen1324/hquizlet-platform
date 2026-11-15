@@ -68,6 +68,12 @@ func main() {
 	mux := http.NewServeMux()
 	h := classhttp.New(classSvc, memberSvc, studySetSvc, activitySvc, db).WithDashboard(dashboardSvc).WithAdmin(adminSvc).WithClassAccess(access).WithUserDirectory(userClient)
 	if cfg.VideoStorage.Host != "" {
+		imageStore, err := videostorage.NewImages(cfg.VideoStorage)
+		if err != nil {
+			log.Fatalf("manga image storage: %v", err)
+		}
+		h.ConfigureManga(imageStore)
+		go h.RunMangaCleanup(context.Background())
 		if len(cfg.VideoTicketSecret) < 32 || cfg.VideoMaxBytes < 1024*1024 || cfg.VideoMaxBytes > 2*1024*1024*1024 {
 			log.Fatal("private videos require VIDEO_TICKET_SECRET >= 32 characters and VIDEO_MAX_UPLOAD_MB between 1 and 2048")
 		}

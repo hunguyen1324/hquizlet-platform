@@ -38,7 +38,7 @@ RUN --mount=type=cache,id=hquizlet-gomod,target=/go/pkg/mod \
 
 RUN --mount=type=cache,id=hquizlet-gomod,target=/go/pkg/mod \
     --mount=type=cache,id=hquizlet-gobuild,target=/root/.cache/go-build \
-    if [ "$SERVICE" = "class" ]; then go build -o /out/shard-migrate ./cmd/shard-migrate && go build -o /out/caption-tool ./cmd/caption-tool; fi
+    if [ "$SERVICE" = "class" ]; then go build -o /out/shard-migrate ./cmd/shard-migrate && go build -o /out/caption-tool ./cmd/caption-tool && go build -o /out/manga-tool ./cmd/manga-tool; fi
 
 FROM alpine:3.20
 ARG SERVICE

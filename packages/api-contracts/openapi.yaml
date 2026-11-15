@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HQuizlet Platform API
-  version: 1.11.0
+  version: 1.12.0
   description: |
     Class workspace adds scoped custom roles, member role assignments and private homework attachments.
     HQuizlet Platform API contract. All public application routes are exposed
@@ -4350,3 +4350,327 @@ paths:
         '204': {description: Track deleted}
         '403': {description: Required class action is not permitted}
         '404': {description: Video absent or outside audience}
+  /v1/manga:
+    get:
+      operationId: listMangaVolumes
+      summary: List own volumes and shared ready volumes
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+    post:
+      operationId: createMangaVolume
+      summary: Start or resume a private import; accepts title, volume, sourceUuid, pageCount and optional htmlSource/sourceName
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '201':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /v1/manga/inspect:
+    post:
+      operationId: inspectMangaHTML
+      summary: Parse HTML Mokuro and local image references without executing imported scripts; accepts htmlSource and sourceName
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /v1/manga/{id}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    get:
+      operationId: getMangaVolume
+      summary: Volume metadata and imported zero-based page indices
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+    put:
+      operationId: updateMangaVolume
+      summary: Owner updates title, volume and private/shared visibility
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+    delete:
+      operationId: deleteMangaVolume
+      summary: Owner deletes volume; private images queued for cleanup
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+  /v1/manga/{id}/complete:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    post:
+      operationId: completeMangaImport
+      summary: Mark ready only when all expected page images exist
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+  /v1/manga/{id}/pages/{index}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - in: path
+      name: index
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+    get:
+      operationId: getMangaPage
+      summary: Page dimensions, OCR blocks and revision
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+    post:
+      operationId: uploadMangaPage
+      summary: Import one JPEG/PNG image and page OCR JSON (fields image and page)
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '204':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+    put:
+      operationId: editMangaOCR
+      summary: Owner edits lines for existing blocks with expected revision, or restore=true
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /v1/manga/{id}/pages/{index}/image:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    - in: path
+      name: index
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+    get:
+      operationId: getMangaImage
+      summary: Authenticated private JPEG/PNG image stream
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata
+  /v1/manga/{id}/export.html:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    get:
+      operationId: exportMangaHTML
+      summary: Download original HTML with latest saved OCR paragraphs, reader scripts and image paths preserved
+      tags:
+      - manga
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+        '401':
+          description: Authentication required
+        '403':
+          description: Only the volume owner may edit
+        '404':
+          description: Volume/page absent or not visible
+        '409':
+          description: Revision conflict or incomplete import
+        '422':
+          description: Invalid HTML, OCR or metadata

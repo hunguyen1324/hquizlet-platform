@@ -21,6 +21,7 @@ const GrammarSetEditor = React.lazy(() => import("./features/study-sets/GrammarS
 const Folders = React.lazy(() => import("./features/folders/Folders").then(module => ({ default: module.Folders })));
 const LiveGame = React.lazy(() => import("./features/live/LiveGame").then(module => ({ default: module.LiveGame })));
 const ClassList = React.lazy(() => import("./features/classes/ClassList").then(module => ({ default: module.ClassList })));
+const MangaLibrary = React.lazy(() => import("./features/manga/MangaLibrary").then(module => ({ default: module.MangaLibrary })));
 const CreateClass = React.lazy(() => import("./features/classes/CreateClass").then(module => ({ default: module.CreateClass })));
 const ClassDetailView = React.lazy(() => import("./features/classes/ClassDetail").then(module => ({ default: module.ClassDetail })));
 const EditClass = React.lazy(() => import("./features/classes/EditClass").then(module => ({ default: module.EditClass })));
@@ -94,7 +95,7 @@ document.documentElement.classList.toggle("light", !initialDark);
 
 const VIEW_PATHS: Partial<Record<AppView, string>> = {
   home: "/", dashboard: "/library", folders: "/folders", live: "/live-quiz",
-  classes: "/classes", activity: "/notifications", wallet: "/wallet",
+  classes: "/classes", manga: "/manga", activity: "/notifications", wallet: "/wallet",
   deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
   "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar", "quiz-sessions": "/my/quiz-sessions",
   // Phase 2+: routes handled by react-router (not the legacy view switch)
@@ -275,6 +276,7 @@ function RootApp() {
       )}
       {navigationError && <div className="message message--error" role="alert">{navigationError}</div>}
 
+      {view === "manga" && !loadingSet && <MangaLibrary />}
       {view === "home" && !loadingSet && (
         <HomePage
           onOpenSet={(id) => void handleOpenSet(id)}

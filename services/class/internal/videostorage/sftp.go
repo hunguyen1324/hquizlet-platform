@@ -40,6 +40,7 @@ type Config struct {
 }
 
 type SFTP struct {
+	images    bool
 	cfg       Config
 	sshConfig *ssh.ClientConfig
 	slots     chan struct{}
@@ -109,9 +110,19 @@ func New(cfg Config) (*SFTP, error) {
 }
 
 var keyPattern = regexp.MustCompile(`^[a-f0-9]{32}\.(mp4|webm)$`)
+var mangaImageKeyPattern = regexp.MustCompile(`^[a-f0-9]{32}\.(jpg|png|webp)$`)
+
+// NewImages uses the same private server with a separate image-only key policy.
+func NewImages(cfg Config) (*SFTP, error) {
+	s, err := New(cfg)
+	if err == nil {
+		s.images = true
+	}
+	return s, err
+}
 
 func (s *SFTP) filename(key string) (string, error) {
-	if !keyPattern.MatchString(key) {
+	if (!s.images && !keyPattern.MatchString(key)) || (s.images && !mangaImageKeyPattern.MatchString(key)) {
 		return "", errors.New("invalid video storage key")
 	}
 	return path.Join(s.cfg.Root, key), nil

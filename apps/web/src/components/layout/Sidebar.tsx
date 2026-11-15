@@ -34,6 +34,10 @@ const primaryNav = [
 
 const toolsNav = [
   {
+    id: "manga", label: "Truyện",
+    icon: <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M3 3h7a2 2 0 012 2v16a3 3 0 00-3-2H3zM21 3h-7a2 2 0 00-2 2v16a3 3 0 013-2h6z"/></svg>,
+  },
+  {
     id: "live", label: "Live Quiz",
     icon: <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
   },

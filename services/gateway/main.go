@@ -142,6 +142,8 @@ func main() {
 	mux.HandleFunc("/v1/classes", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/classes/", authenticatedProxy(authURL, classURL))
 	mux.HandleFunc("/v1/activity", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/manga", authenticatedProxy(authURL, classURL))
+	mux.HandleFunc("/v1/manga/", authenticatedProxy(authURL, classURL))
 
 	// Phase 9: File upload routes [P9-GW-01]
 	mux.HandleFunc("POST /v1/files/presign", authenticatedProxy(authURL, fileURL))

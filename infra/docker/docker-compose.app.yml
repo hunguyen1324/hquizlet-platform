@@ -31,7 +31,7 @@ services:
       start_period: 5s
 
   gateway:
-    image: ${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-gateway:${IMAGE_TAG:-latest}
+    image: ${GATEWAY_IMAGE:-${IMAGE_REGISTRY:-ghcr.io/hunguyen1324}/hquizlet-platform-gateway:${IMAGE_TAG:-latest}}
     environment:
       PORT: "8080"
       AUTH_SERVICE_URL:    "http://auth:8081"
