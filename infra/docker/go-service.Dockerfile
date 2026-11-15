@@ -38,11 +38,17 @@ RUN --mount=type=cache,id=hquizlet-gomod,target=/go/pkg/mod \
 
 RUN --mount=type=cache,id=hquizlet-gomod,target=/go/pkg/mod \
     --mount=type=cache,id=hquizlet-gobuild,target=/root/.cache/go-build \
-    if [ "$SERVICE" = "class" ]; then go build -o /out/shard-migrate ./cmd/shard-migrate; fi
+    if [ "$SERVICE" = "class" ]; then go build -o /out/shard-migrate ./cmd/shard-migrate && go build -o /out/caption-tool ./cmd/caption-tool; fi
 
 FROM alpine:3.20
 ARG SERVICE
-RUN if [ "$SERVICE" = "class" ]; then apk add --no-cache ffmpeg; fi
+ARG YTDLP_VERSION=2026.10.26
+RUN if [ "$SERVICE" = "class" ]; then \
+      apk add --no-cache ffmpeg python3 py3-pip ca-certificates && \
+      python3 -m venv /opt/caption-tools && \
+      /opt/caption-tools/bin/pip install --no-cache-dir "yt-dlp==${YTDLP_VERSION}"; \
+    fi
+ENV YOUTUBE_YTDLP_BIN=/opt/caption-tools/bin/yt-dlp
 LABEL org.opencontainers.image.source="https://github.com/hunguyen1324/hquizlet-platform"
 WORKDIR /app
 COPY --from=build /out/ /app/

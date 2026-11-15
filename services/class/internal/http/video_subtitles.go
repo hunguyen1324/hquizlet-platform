@@ -101,6 +101,9 @@ func (h *Handler) subtitleRouter(w http.ResponseWriter, r *http.Request, classID
 				result.Message = public.Message
 			} else if result.Original == nil {
 				result.Message = "YouTube chưa cung cấp phụ đề cho ứng dụng. Bạn vẫn có thể xem video hoặc nhập file SRT/VTT để học theo câu."
+				if public.Message != "" {
+					result.Message = public.Message
+				}
 			} else {
 				result.Message = "Không lấy được phụ đề YouTube; đang dùng phụ đề đã lưu của lớp."
 			}

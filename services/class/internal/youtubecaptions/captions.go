@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -88,14 +89,19 @@ type cacheEntry struct {
 	until  time.Time
 }
 type Client struct {
-	HTTP  *http.Client
-	mu    sync.Mutex
-	cache map[string]cacheEntry
-	slots chan struct{}
+	HTTP      *http.Client
+	Extractor *YTDLP
+	mu        sync.Mutex
+	cache     map[string]cacheEntry
+	slots     chan struct{}
 }
 
 func New() *Client {
-	return &Client{HTTP: &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]cacheEntry{}, slots: make(chan struct{}, 4)}
+	c := &Client{HTTP: &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]cacheEntry{}, slots: make(chan struct{}, 2)}
+	if binary := os.Getenv("YOUTUBE_YTDLP_BIN"); binary != "" {
+		c.Extractor = &YTDLP{Binary: binary}
+	}
+	return c
 }
 func (c *Client) get(ctx context.Context, raw string, limit int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", raw, nil)
@@ -211,9 +217,22 @@ func (c *Client) Fetch(ctx context.Context, id, language, translation string) (R
 	case <-ctx.Done():
 		return Result{}, ctx.Err()
 	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 27*time.Second)
 	defer cancel()
-	result, err := c.fetch(ctx, id, language, translation)
+	publicCtx, publicCancel := context.WithTimeout(ctx, 6*time.Second)
+	result, err := c.fetch(publicCtx, id, language, translation)
+	publicCancel()
+	if err != nil && c.Extractor != nil && ctx.Err() == nil {
+		fallback, fallbackErr := c.Extractor.Fetch(ctx, id, language, translation)
+		if len(fallback.AvailableTracks) > 0 {
+			result.AvailableTracks = fallback.AvailableTracks
+		}
+		if fallbackErr == nil {
+			result, err = fallback, nil
+		} else {
+			result.Message = "Đã thử nguồn trực tiếp và yt-dlp nhưng chưa tải được nội dung phụ đề. Có thể nhập SRT/VTT."
+		}
+	}
 	c.mu.Lock()
 	if len(c.cache) >= 128 {
 		c.cache = map[string]cacheEntry{}

@@ -23,3 +23,13 @@ Trình phát dùng YouTube IFrame API, giữ điều khiển chính thức; vide
 ## Kiểm tra
 
 Frontend unit tests và production build; Go class-service tests, bộ kiểm tra public-caption parser/URL an toàn và phân quyền subtitle; PostgreSQL integration chạy migration hai lần rồi lưu/đọc/xóa phụ đề và thay đổi audience. Chrome headless kiểm tra desktop 1440px, mobile 390px, đồng bộ/tua/lặp/tốc độ/tìm kiếm, nghe chép lại, điền từ và nhập SRT dùng chung bằng player/API mô phỏng. Microphone và khả năng tải caption của từng video thực tế cần kiểm tra trên môi trường triển khai.
+
+## Fallback yt-dlp
+
+Đã bổ sung `tools/captions/Get-VideoSubtitles.ps1` và Go CLI `services/class/cmd/caption-tool` để lấy JSON/SRT. Class image mới đóng gói yt-dlp và tự thử lại khi nguồn trực tiếp không trả phụ đề; xem `tools/captions/README.md` để cài, chạy và chẩn đoán. Thay đổi chỉ có hiệu lực trên production sau khi triển khai lại class image.
+
+## Production — 2026-11-15
+
+Đã triển khai class image `hquizlet-class:captions-20261115` trên server app. Chọn image trong `/opt/hquizlet/.image_tag.env` bằng `CLASS_IMAGE`. Artifact và bản backup cấu hình/image trước triển khai nằm tại `/opt/hquizlet/releases/captions-20261115`; rollback image được giữ bằng tag `hquizlet-class:before-captions-20261115`. Khi triển khai CI bản tiếp theo, cần đưa các thay đổi extractor/Dockerfile vào image mới trước khi bỏ override này.
+
+Xác minh sau triển khai: class và các dịch vụ ứng dụng healthy; public `/api/healthz` trả 200; subtitle API không có token trả 401. `/app/caption-tool` trong chính container production chạy provider auto với ngôn ngữ tự nhận diện lấy được 191 câu tiếng Nhật của J2cmxVjMZtc. Chưa kiểm tra tương tác bằng phiên đăng nhập của người dùng.
