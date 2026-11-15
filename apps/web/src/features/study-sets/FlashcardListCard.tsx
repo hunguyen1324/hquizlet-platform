@@ -1,6 +1,5 @@
 import React from "react";
 import type { Flashcard } from "../../types";
-import { KanjiTools } from "../kanji/KanjiTools";
 
 type Props = {
   card: Flashcard;
@@ -19,7 +18,7 @@ export function FlashcardListCard({ card, onToggleStar, onEdit, onDelete }: Prop
     <div className="sd-fc-row-wrap">
       <article className="sd-fc-row ql-card-row">
         <div className="sd-fc-row-main">
-          <div className="sd-fc-row-term">{card.term}<KanjiTools term={card.term} /></div>
+          <div className="sd-fc-row-term">{card.term}</div>
           <div className="sd-fc-row-sep" aria-hidden />
           <div className="sd-fc-row-def">{card.definition}</div>
           <div className="sd-fc-row-actions">

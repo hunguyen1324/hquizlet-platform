@@ -1441,6 +1441,12 @@
   left: 1.1rem;
 }
 
+.ql-bothside-card > .ql-card-tools {
+  position: static;
+  align-self: stretch;
+  margin-top: 1rem;
+}
+
 @media (max-width: 540px) {
   .ql-bothsides { grid-template-columns: 1fr; }
 }

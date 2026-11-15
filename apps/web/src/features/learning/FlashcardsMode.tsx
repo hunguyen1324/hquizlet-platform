@@ -2,9 +2,6 @@
 // Unified design system: ql-* classes, full Quizlet parity
 
 import React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { repetitionApi, repetitionKey, type Rating } from "./spacedRepetitionApi";
-import { useAuth } from "../auth/AuthContext";
 import type { Flashcard } from "./types";
 import { LearningEmptyState } from "../../components/learning/LearningEmptyState";
 import { useProgressSave } from "./useProgressSave";
@@ -34,16 +31,10 @@ type Props = {
 };
 
 export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
-  const { token, user } = useAuth();
-  const queryClient = useQueryClient();
   const [showSearch, setShowSearch] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const searchInput = React.useRef<HTMLInputElement>(null);
   const cardView = React.useRef<HTMLDivElement>(null);
-  const review = useMutation({
-    mutationFn: ({ cardId, rating }: { cardId: number; rating: Rating }) => repetitionApi.review(token, studySetId, cardId, rating),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: repetitionKey(String(user?.id ?? ""), studySetId) }); handleNext(); },
-  });
 
   // Load toàn bộ thẻ ngay từ đầu — limit = totalCount (hoặc cards.length nếu chưa có)
   const limit = totalCount ?? cards.length;
@@ -110,7 +101,6 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
         ? [{ card, position }] : []) : [];
   }, [deck, search]);
   React.useEffect(() => { if (showSearch) searchInput.current?.focus(); }, [showSearch]);
-  React.useEffect(() => { review.reset(); }, [current?.id, studySetId]);
   // Tổng thẻ để hiển thị: dùng total từ API nếu có, fallback về totalCount prop
   const displayTotal = generation.state.state === "ready"
     ? generation.state.data.total
@@ -353,15 +343,18 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       </section>}
 
       {/* ── Card ── */}
-      <div className="ql-card-workspace"><div className="ql-card-tools"><KanjiTools term={current.term} /><KanjiGraph term={current.term} cards={cards} studySetId={studySetId} /></div>
+      <div className="ql-card-workspace">
+      {!showBothSides && flipped !== fcSettings.startFromDefinition && <div className="ql-card-tools"><KanjiTools term={current.term} /><KanjiGraph term={current.term} cards={cards} studySetId={studySetId} /></div>}
       {showBothSides ? (
         /* Both-sides view */
         <div className="ql-bothsides" ref={cardView} tabIndex={-1}>
           <div className="ql-bothside-card ql-bothside-card--front">
+            {fcSettings.startFromDefinition && <div className="ql-card-tools"><KanjiTools term={current.term} /><KanjiGraph term={current.term} cards={cards} studySetId={studySetId} /></div>}
             <span className="ql-face-label">{frontLabel}</span>
             <p className="ql-card-text">{frontText}</p>
           </div>
           <div className="ql-bothside-card ql-bothside-card--back">
+            {!fcSettings.startFromDefinition && <div className="ql-card-tools"><KanjiTools term={current.term} /><KanjiGraph term={current.term} cards={cards} studySetId={studySetId} /></div>}
             <span className="ql-face-label">{backLabel}</span>
             <p className="ql-card-text ql-card-text--def">{backText}</p>
           </div>
@@ -437,12 +430,6 @@ export function FlashcardsMode({ cards, studySetId, totalCount }: Props) {
       )}
 
       </div>
-      <div className="ql-review-tools">
-        {(flipped || showBothSides) && token && <div className="ql-ratings" aria-label="Tự đánh giá mức nhớ">
-          {([["again", "Chưa nhớ"], ["hard", "Khó"], ["good", "Đã nhớ"], ["easy", "Dễ"]] as const).map(([rating, label]) => <button key={rating} className={`ql-rating ql-rating--${rating}`} disabled={review.isPending} onClick={() => review.mutate({ cardId: current.id, rating })}>{label}</button>)}
-        </div>}
-      </div>
-      {review.isError && <p role="alert">Không lưu được đánh giá. Vui lòng thử lại.</p>}
       {/* ── Navigation ── */}
       <div className="ql-nav">
         <button className="ql-nav-btn" onClick={handlePrev} disabled={total <= 1} aria-label="Thẻ trước">
