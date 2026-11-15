@@ -4299,7 +4299,12 @@ paths:
         - {in: query, name: translation, schema: {type: string, maxLength: 35}}
         - {in: query, name: youtube, schema: {type: integer, enum: [1]}}
       responses:
-        '200': {description: Original and translation tracks (nullable), availableTracks and optional unavailable message. Tracks contain language, label, source and cues with start/end seconds and text. Requires ViewVideo and current audience membership.}
+        '200':
+          description: >-
+            Original and translation tracks (nullable), availableTracks and optional
+            unavailable message. Tracks contain language, label, source and cues
+            with start/end seconds and text. Requires ViewVideo and current
+            audience membership.
         '403': {description: Required class action is not permitted}
         '404': {description: Video absent or outside audience}
     put:
