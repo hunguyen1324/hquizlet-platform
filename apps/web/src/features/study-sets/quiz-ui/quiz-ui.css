@@ -17,8 +17,7 @@
 }
 
 .qz-top {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 20;
   flex-shrink: 0;
   padding: 8px 12px 0;
@@ -184,6 +183,86 @@
 .qz-answers {
   display: grid;
   gap: 10px;
+}
+
+/* Practice follows the document scroll; neither bar covers the question. */
+.qz-shell--page-flow {
+  height: auto;
+  min-height: 0;
+}
+
+.qz-shell--page-flow .qz-body {
+  flex: none;
+  overflow: visible;
+}
+
+.qz-shell--page-flow .qz-bottom {
+  position: static;
+}
+
+.qz-answers--columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qz-question-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.qz-question-main,
+.qz-question-feedback {
+  min-width: 0;
+}
+
+.qz-question-feedback {
+  padding: 18px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 14px;
+  background: var(--muted, #f7f8fc);
+  overflow-wrap: anywhere;
+}
+
+.qz-question-feedback .qz-feedback {
+  margin: 0;
+}
+
+.qz-question-feedback h3 {
+  margin: 20px 0 8px;
+  font-size: 1rem;
+}
+
+.qz-question-feedback img {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (min-width: 900px) {
+  .qz-question-layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr);
+  }
+}
+
+.qz-answers--columns .qz-answer {
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+
+.qz-answers--columns .qz-answer-state {
+  white-space: normal;
+}
+
+@media (min-width: 560px) {
+  .qz-answers--compact {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 359px) {
+  .qz-answers--columns:not(.qz-answers--compact) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .qz-answer {

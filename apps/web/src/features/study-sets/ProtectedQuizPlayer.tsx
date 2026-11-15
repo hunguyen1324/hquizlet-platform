@@ -9,7 +9,6 @@ import { ExamTimer } from "./exam/ExamTimer";
 import { PART_LABELS } from "./exam/toeic";
 import {
   AnswerOption,
-  FeedbackSheet,
   QuestionGrid,
   QuizBottomBar,
   QuizPageSkeleton,
@@ -126,7 +125,7 @@ function AnswerInput({
   const shown = pending?.value ?? selected;
 
   return (
-    <div className="qz-answers" role="group" aria-label="Các đáp án">
+    <div className={`qz-answers qz-answers--columns${options.every((option) => option.label.length <= 12) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
       {options.map((option, i) => {
         const isSelected = shown === option.text;
         let state: OptionState = "idle";
@@ -204,7 +203,6 @@ export function ProtectedQuizPlayer({
   // A cached page is painted before the server confirms it, and only the server
   // marks a page as delivered. Audio rights follow that confirmation.
   const [pageConfirmed, setPageConfirmed] = React.useState(true);
-  const [sheetDismissed, setSheetDismissed] = React.useState<number | null>(null);
   const peekCache = React.useRef(new Map<string, ProtectedQuizPeek>());
   const peekInFlight = React.useRef(new Set<string>());
   const [, bumpPeek] = React.useState(0);
@@ -292,7 +290,6 @@ export function ProtectedQuizPlayer({
     if (!view || busyRef.current) return;
     if (index < 0 || index >= (view.manifest?.length ?? view.total)) return;
     setNavigator(false);
-    setSheetDismissed(null);
     setPending(null);
     setError("");
     const cached = peekCache.current.get(pageKeyFor(view, index));
@@ -610,15 +607,12 @@ export function ProtectedQuizPlayer({
   ) : null;
 
   const pageItem = view.page[0];
-  const pageRevealed = !!pageItem?.revealed;
   const correctText =
     (pageItem?.question.options?.find((option) => option.isCorrect)?.text ?? pageItem?.question.correctAnswer) || undefined;
-  const feedbackOpen =
-    view.layout === "default" && view.instant && !view.submitted && pageRevealed && !pending && sheetDismissed !== pageItem?.index;
   const timeWarning = !view.deadline || view.submitted ? "" : timeLeft <= 60 ? "Còn dưới 1 phút" : timeLeft <= 300 ? "Còn dưới 5 phút" : "";
 
   return (
-    <QuizShell wide={view.layout === "toeic"}>
+    <QuizShell wide pageFlow={view.mode === "practice" && view.layout === "default"}>
       <QuizTopBar
         title={view.submitted ? "Kết quả" : view.mode === "exam" ? "Thi thử" : "Luyện tập"}
         position={position}
@@ -744,7 +738,8 @@ export function ProtectedQuizPlayer({
           <QuizPageSkeleton />
         ) : (
           view.page.map((item) => (
-            <article key={item.index}>
+            <article key={item.index} className="qz-question-layout">
+              <div className="qz-question-main">
               <p className="qz-eyebrow">
                 Câu {view.manifest?.[item.index]?.number} / {manifest.length}
                 {view.manifest?.[item.index]?.part ? ` · ${PART_LABELS[view.manifest[item.index]!.part] ?? `Part ${view.manifest[item.index]!.part}`}` : ""}
@@ -764,14 +759,19 @@ export function ProtectedQuizPlayer({
                 disabled={busy || view.submitted || (view.instant && view.answers[item.index] !== undefined)}
                 onAnswer={(value) => void answer(item.index, value)}
               />
-              {item.revealed && !view.instant && (
+              {view.submitted && !item.revealed && <p className="qz-muted">Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
+              </div>
+              <aside className="qz-question-feedback" aria-label="Đáp án và giải thích">
+              {item.revealed ? (
                 <div className={`qz-feedback ${view.results[item.index] ? "qz-feedback--ok" : "qz-feedback--bad"}`} aria-live="polite">
                   <strong>{view.results[item.index] ? "✓ Chính xác" : "✗ Chưa đúng"}</strong>
                   <p>Đáp án: {item.question.options?.find((o) => o.isCorrect)?.text ?? item.question.correctAnswer}</p>
+                  <h3>Giải thích</h3>
                   <RichTextContent value={item.question.answerExplanation} />
+                  {!item.question.answerExplanation && <p className="qz-muted">Câu hỏi này chưa có giải thích.</p>}
                 </div>
-              )}
-              {view.submitted && !item.revealed && <p className="qz-muted">Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
+              ) : <p className="qz-muted">{view.instant ? "Chọn đáp án để xem kết quả và giải thích tại đây." : "Đáp án và giải thích sẽ xuất hiện sau khi nộp bài."}</p>}
+              </aside>
             </article>
           ))
         )}
@@ -785,16 +785,6 @@ export function ProtectedQuizPlayer({
         onOpenGrid={() => setNavigator(true)}
         nextLabel={view.submitted ? "Tiếp" : "Tiếp"}
         hint={saveState === "saving" ? "Đang lưu đáp án…" : undefined}
-      />
-
-      <FeedbackSheet
-        open={feedbackOpen}
-        correct={!!view.results[pageItem?.index ?? -1]}
-        correctAnswer={correctText}
-        explanation={pageItem?.question.answerExplanation}
-        canNext={!busy && view.currentIndex < manifest.length - 1}
-        onNext={() => pageItem && navigate(pageItem.index + 1)}
-        onClose={() => setSheetDismissed(pageItem?.index ?? null)}
       />
 
       <QuestionGrid
