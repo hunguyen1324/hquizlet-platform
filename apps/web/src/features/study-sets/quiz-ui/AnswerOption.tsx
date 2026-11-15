@@ -1,6 +1,5 @@
-/** Visual state of one answer option. Correctness is never colour-only: each
- * state also carries a glyph and a text label, so it survives grayscale,
- * colour-blindness and screen readers. */
+/** Keep status available to screen readers without taking space from the answer.
+ * The result panel shows the full correctness message. */
 export type OptionState = "idle" | "selected" | "pending" | "correct" | "wrong" | "passed";
 
 const STATE_LABEL: Record<OptionState, string> = {
@@ -40,7 +39,7 @@ export function AnswerOption({
       </span>
       <span className="qz-answer-text">{text}</span>
       {label ? (
-        <span className="qz-answer-state">
+        <span className="qz-answer-state qz-answer-state--hidden">
           <span aria-hidden="true">{state === "pending" ? "◌" : state === "wrong" ? "✗" : "✓"}</span>
           <span>{label}</span>
         </span>

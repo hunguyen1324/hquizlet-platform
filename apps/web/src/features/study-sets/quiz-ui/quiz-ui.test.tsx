@@ -14,11 +14,12 @@ describe("quiz answer option", () => {
     expect(markup).toContain("disabled");
   });
 
-  it("never encodes correctness with colour alone", () => {
+  it("keeps correctness accessible without adding a visible badge to answer options", () => {
     const correct = renderToStaticMarkup(<AnswerOption letter="A" text="Đúng rồi" state="correct" disabled onSelect={() => {}} />);
     expect(correct).toContain(">✓</span>");
     expect(correct).toContain(">Đúng</span>");
     expect(correct).toContain('aria-pressed="true"');
+    expect(correct).toContain('class="qz-answer-state qz-answer-state--hidden"');
     const wrong = renderToStaticMarkup(<AnswerOption letter="C" text="Sai rồi" state="wrong" disabled onSelect={() => {}} />);
     expect(wrong).toContain(">✗</span>");
     expect(wrong).toContain(">Sai</span>");
