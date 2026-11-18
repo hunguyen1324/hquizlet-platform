@@ -16,7 +16,7 @@ export function SuggestedCarousel({ sets, onOpenSet }: Props) {
       <h2 className="text-lg font-bold mb-3">Gợi ý cho phiên học kế tiếp</h2>
       <Carousel>
         {sets.map((set) => (
-          <Card key={set.id} className="min-w-[220px] max-w-[240px] snap-start p-4 flex flex-col gap-2 shrink-0 cursor-pointer hover:border-[var(--primary)] transition-colors" onClick={() => onOpenSet(set.id)}>
+          <Card key={set.id} className="w-[220px] max-w-full snap-start p-4 flex flex-col gap-2 shrink-0 cursor-pointer hover:border-[var(--primary)] transition-colors" onClick={() => onOpenSet(set.id)}>
             <h3 className="text-sm font-bold line-clamp-2 min-h-[2.5rem]">{set.title}</h3>
             <span className="text-xs text-[var(--muted-foreground)]">
               {set.flashcards?.length ?? set.flashcardCount ?? 0} thẻ

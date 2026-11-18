@@ -1,7 +1,7 @@
 // Shared UI components - Dev 3 (CORE-FB-04)
 // Reusable: Button, EmptyState, LoadingSkeleton, ErrorAlert + Card, Badge, ProgressBar, Carousel
 
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 
 export function EmptyState({
   title,
@@ -129,7 +129,7 @@ export function Carousel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const checkScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -138,19 +138,31 @@ export function Carousel({
     setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
   }, []);
 
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScroll();
+    const observer = new ResizeObserver(checkScroll);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [checkScroll, children]);
+
+  const hasOverflow = canScrollLeft || canScrollRight;
   const scroll = (dir: "left" | "right") => {
     const el = scrollRef.current;
     if (!el) return;
-    const amount = el.clientWidth * 0.7;
+    const amount = el.clientWidth;
     el.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
   };
 
   return (
-    <div className={`relative group ${className}`}>
-      {canScrollLeft && (
+    <div className={`relative min-w-0 ${className}`}>
+      {hasOverflow && (
         <button
+          type="button"
+          disabled={!canScrollLeft}
           onClick={() => scroll("left")}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 border border-[var(--border)] shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-slate-700"
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 border border-[var(--border)] shadow-md flex items-center justify-center disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700"
           aria-label="Cuộn sang trái"
         >
           ‹
@@ -164,10 +176,12 @@ export function Carousel({
       >
         {children}
       </div>
-      {canScrollRight && (
+      {hasOverflow && (
         <button
+          type="button"
+          disabled={!canScrollRight}
           onClick={() => scroll("right")}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 border border-[var(--border)] shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white dark:hover:bg-slate-700"
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-800/90 border border-[var(--border)] shadow-md flex items-center justify-center disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700"
           aria-label="Cuộn sang phải"
         >
           ›

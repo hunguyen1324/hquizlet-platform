@@ -287,6 +287,7 @@
 .home-art-star, .home-art-check { position: absolute; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 13px; background: var(--card); box-shadow: 0 4px 12px #4255ff0b; }
 .home-art-star { top: 0; right: 0; color: #a17bc9; transform: rotate(12deg); }
 .home-art-check { bottom: 0; left: 0; color: #42a88b; transform: rotate(-9deg); }
+.home-page { grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; }
 .home-page > section:not(.home-welcome) { margin: 0; }
 .home-page > section > h2 { margin-bottom: 16px; font-size: 18px; font-weight: 750; }
 .home-page > .workspace-empty { background: var(--card); border: 1px solid var(--border); border-radius: 18px; }

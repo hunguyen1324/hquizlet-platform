@@ -16,7 +16,7 @@ export function ContinueLearningCarousel({ sets, onOpenSet }: Props) {
       <h2 className="text-lg font-bold mb-3">Học phần gần đây</h2>
       <Carousel>
         {sets.slice(0, 5).map((set) => (
-          <Card key={set.id} className="min-w-[260px] max-w-[280px] snap-start p-4 flex flex-col gap-3 shrink-0">
+          <Card key={set.id} className="w-[260px] max-w-full snap-start p-4 flex flex-col gap-3 shrink-0">
             <h3 className="text-sm font-bold line-clamp-2 min-h-[2.5rem]">{set.title}</h3>
             <span className="text-xs text-[var(--muted-foreground)]">
               {set.flashcards?.length ?? set.flashcardCount ?? 0} thẻ

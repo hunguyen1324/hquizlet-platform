@@ -13,8 +13,8 @@ export function RecentList({ sets, onOpenSet }: Props) {
   return (
     <section className="mb-8">
       <h2 className="text-lg font-bold mb-3">Gần đây</h2>
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl divide-y divide-[var(--border)] overflow-hidden">
-        {sets.slice(0, 8).map((set) => (
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl divide-y divide-[var(--border)] max-h-80 overflow-y-auto">
+        {sets.slice(0, 10).map((set) => (
           <button
             key={set.id}
             onClick={() => onOpenSet(set.id)}
