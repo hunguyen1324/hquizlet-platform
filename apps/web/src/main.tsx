@@ -98,7 +98,7 @@ document.documentElement.classList.toggle("light", !initialDark);
 const VIEW_PATHS: Partial<Record<AppView, string>> = {
   home: "/", dashboard: "/library", folders: "/folders", live: "/live-quiz",
   posts: "/posts", videos: "/videos", classes: "/classes", manga: "/manga", activity: "/notifications", wallet: "/wallet",
-  deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
+  "class-join": "/classes/join", deposit: "/wallet/deposit", "create-type": "/create", editor: "/create/flashcards",
   "quiz-editor": "/create/quiz", "grammar-editor": "/create/grammar", "quiz-sessions": "/my/quiz-sessions",
   // Phase 2+: routes handled by react-router (not the legacy view switch)
   overview: "/dashboard", admin: "/admin",
@@ -123,6 +123,9 @@ function RootApp() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeView = routeViewForPath(location.pathname);
+  const inviteCode = location.pathname === VIEW_PATHS["class-join"]
+    ? (new URLSearchParams(location.search).get("code") ?? "").trim().toUpperCase().slice(0, 8)
+    : "";
   const [view, setView] = useState<AppView>("home");
  useEffect(()=>{if(!user){setSelectedSet(null);setSelectedClass(null);setView("home");}},[user?.id]);
   const [resumeSessionId, setResumeSessionId] = useState<string | undefined>();
@@ -362,7 +365,7 @@ function RootApp() {
       {!loadingSet && view === "classes" && (
         <ClassList
           onCreate={() => setView("class-create")}
-          onJoin={() => setView("class-join")}
+          onJoin={() => handleNavigate("class-join")}
           onSelect={(id) => void handleOpenClass(id)}
         />
       )}
@@ -376,6 +379,8 @@ function RootApp() {
 
       {view === "class-join" && (
         <JoinClass
+          key={inviteCode}
+          initialCode={inviteCode}
           onJoined={async (resp) => {
             if (token) {
               try {
@@ -389,9 +394,13 @@ function RootApp() {
                 } as ClassDetailType);
               }
             }
+            navigate(viewToPath("classes"), { replace: true });
             setView("class-detail");
           }}
-          onCancel={() => setView("classes")}
+          onCancel={() => {
+            navigate(viewToPath("classes"), { replace: true });
+            setView("classes");
+          }}
         />
       )}
 

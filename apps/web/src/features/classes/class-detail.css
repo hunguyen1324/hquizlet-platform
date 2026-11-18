@@ -170,3 +170,25 @@
 .group-detail-page .document-type { padding: 12px 8px; border-radius: 10px; background: var(--accent); color: #5967dc; font-size: 11px; font-weight: 750; }
 @media (max-width: 560px) { .group-detail-page .video-library-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px 12px; } .video-modal-backdrop { padding: 10px; } }
 @media (max-width: 340px) { .group-detail-page .video-library-grid { grid-template-columns: minmax(0,1fr); } }
+
+.class-invite-qr {
+  margin-block: 0.75rem;
+}
+
+.class-invite-qr summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.class-invite-qr svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-block: 0.5rem;
+  background: white;
+}
+
+.class-invite-qr a {
+  text-decoration: underline;
+}

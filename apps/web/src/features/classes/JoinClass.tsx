@@ -7,13 +7,14 @@ import { classApi } from "../../lib/api";
 import type { JoinClassResponse } from "../../types";
 
 type Props = {
+  initialCode?: string;
   onJoined: (resp: JoinClassResponse) => void;
   onCancel: () => void;
 };
 
-export function JoinClass({ onJoined, onCancel }: Props) {
+export function JoinClass({ initialCode = "", onJoined, onCancel }: Props) {
   const { token } = useAuth();
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 

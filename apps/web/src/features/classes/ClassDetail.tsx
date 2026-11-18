@@ -10,6 +10,7 @@ import { useAuth } from "../auth/AuthContext";
 import { classApi, memberApi, classStudySetApi, classAccessApi } from "../../lib/api";
 import type { ClassDetail as ClassDetailType, ClassMember, ClassStudySet } from "../../types";
 import "./class-detail.css";
+import { ClassInviteQr } from "./ClassInviteQr";
 const roleLabels = { owner: "Chủ nhóm", teacher: "Giáo viên", student: "Học viên" };
 function TabIcon({ kind }: {
     kind: "videos" | "study-sets" | "members";
@@ -104,6 +105,7 @@ export function ClassDetail({ classId, onBack, onEdit, onDelete, onStartLive, on
           <span>{cls.studySetCount} học phần</span>
           {can("class:ResetInvite") && <button className="group-code" onClick={() => void navigator.clipboard?.writeText(cls.inviteCode)} title="Sao chép mã mời">⌁ {cls.inviteCode}</button>}
           </div>
+          {can("class:ResetInvite") && <ClassInviteQr inviteCode={cls.inviteCode} />}
         </div>
         <div className="class-detail-actions">
           {can("class:ViewDashboard") && onOpenDashboard && (<button className="ghost-button" onClick={onOpenDashboard}>Tổng quan</button>)}

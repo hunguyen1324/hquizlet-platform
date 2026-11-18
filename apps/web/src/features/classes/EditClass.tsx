@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { classApi, classAccessApi, memberApi } from '../../lib/api';
 import type { ClassDetail, ClassMember } from '../../types';
+import { ClassInviteQr } from './ClassInviteQr';
 import { ClassRoles } from './ClassRoles';
 import { ClassVideos } from './ClassVideos';
 import './class-detail.css';
@@ -13,6 +14,7 @@ type Props = {
 };
 export function EditClass({ cls, onSaved, onCancel }: Props) {
     const { token } = useAuth();
+    const [inviteCode, setInviteCode] = useState(cls.inviteCode);
     const [name, setName] = useState(cls.name);
     const [description, setDescription] = useState(cls.description || '');
     const [actions, setActions] = useState<string[]>();
@@ -74,13 +76,14 @@ export function EditClass({ cls, onSaved, onCancel }: Props) {
      <label>Tên lớp *<input required maxLength={120} value={name} disabled={busy} onChange={e => setName(e.target.value)}/></label>
      <label>Mô tả<textarea rows={5} maxLength={5000} value={description} disabled={busy} onChange={e => setDescription(e.target.value)} placeholder="Mô tả mục tiêu, nội dung và cách học của lớp…"/></label>
      <div className="settings-row-actions"><button className="primary-button" disabled={busy || !name.trim()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi'}</button><button type="button" className="ghost-button" disabled={busy} onClick={onCancel}>Hủy</button></div>
-     {can('class:ResetInvite') && <div className="settings-invite"><h3>Mã tham gia lớp</h3><p>Mã hiện tại: <strong>{cls.inviteCode}</strong></p><button type="button" className="ghost-button" disabled={busy} onClick={async () => {
+     {can('class:ResetInvite') && <div className="settings-invite"><h3>Mã tham gia lớp</h3><p>Mã hiện tại: <strong>{inviteCode}</strong></p><ClassInviteQr inviteCode={inviteCode}/><button type="button" className="ghost-button" disabled={busy} onClick={async () => {
                         if (!token || !confirm('Đổi mã mời? Mã cũ sẽ không còn dùng được.'))
                             return;
                         setBusy(true);
                         setError('');
                         try {
                             const d = await classApi.resetInviteCode(token, cls.id);
+                            setInviteCode(d.inviteCode);
                             setSuccess(`Mã tham gia mới: ${d.inviteCode}`);
                         }
                         catch (e) {
