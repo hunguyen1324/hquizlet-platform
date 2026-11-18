@@ -1,3 +1,4 @@
+import { readVisibilityDefault } from "../settings/visibilityDefaults";
 // GrammarSetEditor — tạo bộ ngữ pháp
 // Tham chiếu: hquizlet/apps/nextjs/src/components/study-set/grammar-set-form.tsx
 
@@ -196,7 +197,7 @@ function GrammarPointCard({
 }
 
 export function GrammarSetEditor({ onSave, onCancel }: Props) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [points, setPoints] = useState<GrammarPoint[]>([newGrammarPoint(0)]);
@@ -237,6 +238,7 @@ export function GrammarSetEditor({ onSave, onCancel }: Props) {
         title: title.trim(),
         description: description.trim(),
         contentType: "grammar" as const,
+        visibility: readVisibilityDefault(user?.id, "study"),
         grammarPoints: points.map((p, i) => ({
           title: p.title.trim(),
           meaning: p.meaning.trim(),

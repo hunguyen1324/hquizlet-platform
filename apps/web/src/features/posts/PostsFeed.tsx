@@ -1,3 +1,4 @@
+import { readVisibilityDefault } from "../settings/visibilityDefaults";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -25,17 +26,18 @@ function PostComposer({
   onSaved: () => void;
 }) {
   const { token, user } = useAuth();
+  const defaultVisibility = readVisibilityDefault(user?.id, "post");
   const dialog = useRef<HTMLDialogElement>(null);
   const [body, setBody] = useState(post ? post.body || post.title : ""),
     [visibility, setVisibility] = useState<MediaInput["visibility"]>(
-      post?.visibility || "public",
+      post?.visibility ?? defaultVisibility,
     ),
     [viewers, setViewers] = useState(post?.viewerIds.join(", ") || ""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const dirty =
     body !== (post ? post.body || post.title : "") ||
-    visibility !== (post?.visibility || "public") ||
+    visibility !== (post?.visibility ?? defaultVisibility) ||
     viewers !== (post?.viewerIds.join(", ") || "");
   function close() {
     if (

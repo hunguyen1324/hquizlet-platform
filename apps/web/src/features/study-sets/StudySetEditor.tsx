@@ -1,3 +1,4 @@
+import { readVisibilityDefault } from "../settings/visibilityDefaults";
 // StudySetEditor — Dev 3 [P2-WEB-02]
 // Tạo/sửa study set và flashcards qua studySetApi + transactional bulkSave.
 // Phase 10: Thêm language selector, visibility toggle, import Excel.
@@ -80,7 +81,7 @@ function LangLabel({ code }: { code: string }) {
 }
 
 export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const isEditing = Boolean(existingSet);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [title, setTitle] = useState(existingSet?.title ?? "");
@@ -92,7 +93,7 @@ export function StudySetEditor({ existingSet, onSave, onCancel }: Props) {
   const [error, setError] = useState("");
   const [termLanguage, setTermLanguage] = useState(existingSet?.termLanguage ?? "en-US");
   const [definitionLanguage, setDefinitionLanguage] = useState(existingSet?.definitionLanguage ?? "en-US");
-  const [visibility, setVisibility] = useState<string>(existingSet?.visibility ?? "public");
+  const [visibility, setVisibility] = useState<string>(existingSet?.visibility ?? readVisibilityDefault(user?.id, "study"));
   const [showImport, setShowImport] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);

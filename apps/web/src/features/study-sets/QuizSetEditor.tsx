@@ -1,3 +1,4 @@
+import { readVisibilityDefault } from "../settings/visibilityDefaults";
 import { normalizeSubtitleText } from "../../lib/subtitles";
 // QuizSetEditor — tạo/sửa quiz set (multiple choice, true/false, written)
 // Tham chiếu: hquizlet/apps/nextjs/src/components/study-set/quiz-set-form.tsx
@@ -405,7 +406,7 @@ function QuestionCard({
 }
 
 export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [draftSetId, setDraftSetId] = useState(existingSetId);
   const draftRequest = React.useRef<Promise<number> | null>(null);
   const [busyQuestions, setBusyQuestions] = useState<Record<string, boolean>>({});
@@ -418,7 +419,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
   const [error, setError] = useState("");
   const [termLanguage, setTermLanguage] = useState("en-US");
   const [definitionLanguage, setDefinitionLanguage] = useState("en-US");
-  const [visibility, setVisibility] = useState("public");
+  const [visibility, setVisibility] = useState<string>(() => readVisibilityDefault(user?.id, "study"));
   const [showImport, setShowImport] = useState(false);
   const [questionSearch, setQuestionSearch] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);

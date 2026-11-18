@@ -1,3 +1,4 @@
+import { readVisibilityDefault } from "../settings/visibilityDefaults";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -171,9 +172,12 @@ function MediaEditor({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [input, setInput] = useState<MediaInput>(item ?? empty(kind)),
+  const [input, setInput] = useState<MediaInput>(() => item ?? {
+    ...empty(kind),
+    visibility: kind === "video" ? readVisibilityDefault(user?.id, "video") : "public",
+  }),
     [file, setFile] = useState<File>(),
     [source, setSource] = useState("link"),
     [viewers, setViewers] = useState(item?.viewerIds.join(", ") ?? ""),

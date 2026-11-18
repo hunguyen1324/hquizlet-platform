@@ -28,6 +28,8 @@ export const mediaApi = {
     apiFetch<void>(`/v1/media/${id}/items/${videoId}`, token, {
       method: remove ? "DELETE" : "POST",
     }),
+  ownContent: (token: string, kind: "post" | "video", offset: number, limit: number, signal?: AbortSignal) =>
+    apiFetch<MediaItem[]>("/v1/media", token, { signal }, { kind, mine: "true", offset, limit }),
   ownPlaylists: (token: string, signal?: AbortSignal) =>
     apiFetch<MediaItem[]>(
       "/v1/media",

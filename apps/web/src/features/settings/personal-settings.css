@@ -1,0 +1,49 @@
+.personal-settings {
+  max-width: 980px;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+.personal-permission-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  padding: clamp(14px, 3vw, 24px);
+}
+
+.personal-permission-defaults,
+.personal-permission-row,
+.personal-permission-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.personal-permission-panel label {
+  display: grid;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.personal-permission-panel select,
+.personal-permission-panel input {
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.personal-permission-row {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.personal-permission-row strong {
+  flex: 1 1 220px;
+}
