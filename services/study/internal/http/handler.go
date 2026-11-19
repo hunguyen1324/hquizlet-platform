@@ -269,6 +269,25 @@ func (h *Handler) studySetRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 3 && parts[1] == "quiz-questions" && r.Method == http.MethodPut {
+		questionID, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || questionID <= 0 {
+			WriteError(w, http.StatusBadRequest, "invalid question ID")
+			return
+		}
+		var input model.CreateQuizQuestionInput
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
+			WriteError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if err := h.quizQuestions.Update(r.Context(), setID, questionID, userIDFromHeader(r), input); err != nil {
+			WriteServiceError(w, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+
 	// Phase 10: Import routes (sync — blocks until complete)
 	if len(parts) == 3 && parts[1] == "import" && parts[2] == "flashcards" {
 		if r.Method == http.MethodPost {

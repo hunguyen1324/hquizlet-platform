@@ -353,6 +353,7 @@ export type QuizQuestionPayload = {
   correctAnswer?: string;
   timeInSeconds?: number;
   audioUrl?: string;
+  imageUrl?: string;
   srtText?: string;
   answerExplanation?: string;
   paragraphText?: string;
@@ -365,6 +366,8 @@ export type QuizQuestionPayload = {
 export const quizQuestionApi = {
   list: (token: string, studySetId: number): Promise<QuizQuestion[]> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token),
+  update: (token: string, studySetId: number, questionId: number, question: QuizQuestionPayload): Promise<void> =>
+    apiFetch(`/v1/study-sets/${studySetId}/quiz-questions/${questionId}`, token, { method: "PUT", body: JSON.stringify(question) }),
   bulkSave: (token: string, studySetId: number, questions: QuizQuestionPayload[]): Promise<void> =>
     apiFetch(`/v1/study-sets/${studySetId}/quiz-questions`, token, { method: "PUT", body: JSON.stringify({ questions }) }),
   deleteByStudySet: (token: string, studySetId: number): Promise<void> =>

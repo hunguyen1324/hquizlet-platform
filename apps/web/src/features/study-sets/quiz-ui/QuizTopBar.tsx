@@ -16,6 +16,9 @@ export function QuizTopBar({
   canSubmit = true,
   saveState = "idle",
   onRetrySave,
+  onOpenGrid,
+  onToggleFullscreen,
+  fullscreen = false,
   onExit,
   onSubmit,
 }: {
@@ -30,6 +33,9 @@ export function QuizTopBar({
   canSubmit?: boolean;
   saveState?: SaveState;
   onRetrySave?: () => void;
+  onOpenGrid: () => void;
+  onToggleFullscreen: () => void;
+  fullscreen?: boolean;
   onExit: () => void;
   onSubmit: () => void;
 }) {
@@ -49,6 +55,16 @@ export function QuizTopBar({
         <div className="qz-top-actions">
           <StatusPill state={saveState} onRetry={onRetrySave} />
           {timer}
+          <button type="button" className="qz-btn qz-btn--ghost qz-btn--sm" onClick={onOpenGrid} aria-haspopup="dialog">
+            <span aria-hidden="true">☰</span> Bảng câu
+          </button>
+          <button type="button" className="qz-icon-btn" onClick={onToggleFullscreen}
+            aria-label={fullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+            title={fullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d={fullscreen ? "M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6" : "M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"} />
+            </svg>
+          </button>
           {canMark ? (
             <button
               type="button"

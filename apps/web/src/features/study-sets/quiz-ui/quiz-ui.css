@@ -414,11 +414,6 @@
   gap: 8px;
 }
 
-.qz-bottom-nav {
-  display: flex;
-  gap: 8px;
-}
-
 .qz-pill {
   display: inline-flex;
   align-items: center;
@@ -950,4 +945,29 @@
 .dark .qz-icon-btn--on {
   background: #451a03;
   color: #fbbf24;
+}
+
+section.qz-shell:fullscreen {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+section.qz-shell:fullscreen .qz-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+section.qz-shell:fullscreen .qz-top,
+section.qz-shell:fullscreen .qz-bottom {
+  border-radius: 0;
+}
+
+@media (max-width: 560px) {
+  .qz-top-row { flex-wrap: wrap; }
+  .qz-top-actions { flex: 1 0 100%; flex-wrap: wrap; justify-content: flex-end; }
 }

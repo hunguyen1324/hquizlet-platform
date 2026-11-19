@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/subtitles"
+	"strings"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
@@ -36,22 +37,39 @@ func (s *QuizQuestionService) BulkSave(ctx context.Context, studySetID, userID i
 	if err := s.checkOwner(ctx, studySetID, userID); err != nil {
 		return err
 	}
-	// Validate each question
 	for i := range in.Questions {
-		q := &in.Questions[i]
-		text, err := subtitles.Normalize(q.SRTText)
-		if err != nil {
-			return ErrValidation
-		}
-		q.SRTText = text
-		switch q.QuestionType {
-		case "multiple_choice", "true_false", "written", "paragraph", "sorting":
-			// valid
-		default:
-			return ErrValidation
+		if err := normalizeQuizQuestion(&in.Questions[i]); err != nil {
+			return err
 		}
 	}
 	return s.quizQuestions.BulkSave(ctx, studySetID, in.Questions)
+}
+
+func (s *QuizQuestionService) Update(ctx context.Context, setID, questionID, uid int64, q model.CreateQuizQuestionInput) error {
+	if err := s.checkOwner(ctx, setID, uid); err != nil {
+		return err
+	}
+	if strings.TrimSpace(q.QuestionText) == "" {
+		return ErrValidation
+	}
+	if err := normalizeQuizQuestion(&q); err != nil {
+		return err
+	}
+	return s.quizQuestions.Update(ctx, setID, questionID, q)
+}
+
+func normalizeQuizQuestion(q *model.CreateQuizQuestionInput) error {
+	text, err := subtitles.Normalize(q.SRTText)
+	if err != nil {
+		return ErrValidation
+	}
+	q.SRTText = text
+	switch q.QuestionType {
+	case "multiple_choice", "true_false", "written", "paragraph", "sorting":
+		return nil
+	default:
+		return ErrValidation
+	}
 }
 
 // DeleteByStudySet removes all quiz questions for a study set. Only the owner can do this.

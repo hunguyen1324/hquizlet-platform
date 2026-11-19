@@ -7,7 +7,6 @@ export function QuizBottomBar({
   canNext,
   onPrev,
   onNext,
-  onOpenGrid,
   nextLabel = "Tiếp",
   hint,
   children,
@@ -16,7 +15,6 @@ export function QuizBottomBar({
   canNext: boolean;
   onPrev: () => void;
   onNext: () => void;
-  onOpenGrid: () => void;
   nextLabel?: string;
   hint?: string;
   children?: ReactNode;
@@ -29,17 +27,12 @@ export function QuizBottomBar({
         </p>
       ) : null}
       <div className="qz-bottom-row">
-        <button type="button" className="qz-btn qz-btn--ghost" onClick={onOpenGrid} aria-label="Mở bảng câu hỏi">
-          ☰ <span>Bảng câu</span>
+        <button type="button" className="qz-btn qz-btn--ghost" disabled={!canPrev} onClick={onPrev}>
+          ‹ Trước
         </button>
-        <div className="qz-bottom-nav">
-          <button type="button" className="qz-btn qz-btn--ghost" disabled={!canPrev} onClick={onPrev}>
-            ‹ Trước
-          </button>
-          <button type="button" className="qz-btn qz-btn--primary" disabled={!canNext} onClick={onNext}>
-            {nextLabel} ›
-          </button>
-        </div>
+        <button type="button" className="qz-btn qz-btn--primary" disabled={!canNext} onClick={onNext}>
+          {nextLabel} ›
+        </button>
       </div>
       {children}
     </nav>

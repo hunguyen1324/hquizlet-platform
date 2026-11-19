@@ -155,13 +155,8 @@ func (r *QuizQuestionRepository) BulkSave(ctx context.Context, studySetID int64,
 			return err
 		}
 
-		for _, opt := range qIn.Options {
-			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO quiz_question_option (question_id, text, position, is_correct)
-				VALUES ($1, $2, $3, $4)
-			`, qID, opt.Text, opt.Position, opt.IsCorrect); err != nil {
-				return err
-			}
+		if err := insertQuizOptions(ctx, tx, qID, qIn.Options); err != nil {
+			return err
 		}
 	}
 
@@ -172,4 +167,55 @@ func (r *QuizQuestionRepository) BulkSave(ctx context.Context, studySetID int64,
 func (r *QuizQuestionRepository) DeleteByStudySet(ctx context.Context, studySetID int64) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM quiz_question WHERE study_set_id = $1", studySetID)
 	return err
+}
+
+func (r *QuizQuestionRepository) Update(ctx context.Context, setID, questionID int64, q model.CreateQuizQuestionInput) error {
+	sub, err := json.Marshal(q.SubQuestions)
+	if err != nil {
+		return err
+	}
+	if string(sub) == "null" {
+		sub = nil
+	}
+	if q.Tags == nil {
+		q.Tags = []string{}
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE quiz_question SET
+		question_text=$3, question_type=$4, correct_answer=$5, time_in_seconds=$6,
+		audio_url=$7, answer_explanation=$8, paragraph_text=$9, sub_questions=$10,
+		tags=$11, image_url=$12, srt_text=$13 WHERE id=$1 AND study_set_id=$2`,
+		questionID, setID, q.QuestionText, q.QuestionType, q.CorrectAnswer, q.TimeInSeconds,
+		q.AudioURL, q.AnswerExplanation, q.ParagraphText, sub, q.Tags, q.ImageURL, q.SRTText)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM quiz_question_option WHERE question_id=$1", questionID); err != nil {
+		return err
+	}
+	if err := insertQuizOptions(ctx, tx, questionID, q.Options); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertQuizOptions(ctx context.Context, tx *sql.Tx, questionID int64, options []model.CreateOptionInput) error {
+	for _, opt := range options {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO quiz_question_option (question_id, text, position, is_correct)
+			VALUES ($1, $2, $3, $4)`, questionID, opt.Text, opt.Position, opt.IsCorrect); err != nil {
+			return err
+		}
+	}
+	return nil
 }

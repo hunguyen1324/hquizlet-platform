@@ -187,10 +187,10 @@ function RootApp() {
     if (selectedSet) await handleOpenSet(selectedSet.id);
   }
 
-  function handleEditSet() {
+  function handleEditSet(questionId?: number) {
     if (!selectedSet) return;
     setView(selectedSet.contentType === "quiz" ? "quiz-editor" : "editor");
-    navigate(`/study-sets/${selectedSet.id}/edit`);
+    navigate(`/study-sets/${selectedSet.id}/edit${questionId ? `?question=${questionId}` : ""}`);
   }
 
   async function handleDeleteSet() {
@@ -314,12 +314,17 @@ function RootApp() {
 
       {view === "quiz-editor" && (
         <QuizSetEditor
+          key={location.search}
+          questionId={Number(new URLSearchParams(location.search).get("question")) || undefined}
           existingSetId={selectedSet?.id}
           onSave={() => {
             if (selectedSet) void handleOpenSet(selectedSet.id);
             else setView("dashboard");
           }}
-          onCancel={() => setView(selectedSet ? "study" : "create-type")}
+          onCancel={() => {
+            if (selectedSet) navigate(`/study-sets/${selectedSet.id}`, { replace: true });
+            setView(selectedSet ? "study" : "create-type");
+          }}
         />
       )}
 

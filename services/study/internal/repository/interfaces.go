@@ -66,6 +66,7 @@ type LearningProgress interface {
 
 // QuizQuestions is the interface for quiz question data access.
 type QuizQuestions interface {
+	Update(context.Context, int64, int64, model.CreateQuizQuestionInput) error
 	ListByStudySet(ctx context.Context, studySetID int64) ([]model.QuizQuestion, error)
 	BulkSave(ctx context.Context, studySetID int64, questions []model.CreateQuizQuestionInput) error
 	DeleteByStudySet(ctx context.Context, studySetID int64) error

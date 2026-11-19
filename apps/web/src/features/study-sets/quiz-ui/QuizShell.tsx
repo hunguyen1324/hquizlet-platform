@@ -1,13 +1,13 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 import { ViewerWatermark } from "../../../components/learning/ViewerWatermark";
 import { contentProtection } from "../exam/contentProtection";
 
 /** One frame for every quiz layout: same protection, same watermark, same
  * fixed-height column so the top/bottom bars never scroll away on a phone. */
-export function QuizShell({ wide = false, pageFlow = false, game = false, children }: { wide?: boolean; pageFlow?: boolean; game?: boolean; children: ReactNode }) {
+export function QuizShell({ wide = false, pageFlow = false, game = false, shellRef, children }: { wide?: boolean; pageFlow?: boolean; game?: boolean; shellRef?: Ref<HTMLElement>; children: ReactNode }) {
   return (
-    <section {...contentProtection} className={`qz-shell${game ? " qz-shell--game" : ""}${wide ? " qz-shell--wide" : ""}${pageFlow ? " qz-shell--page-flow" : ""}`}>
+    <section {...contentProtection} ref={shellRef} className={`qz-shell${game ? " qz-shell--game" : ""}${wide ? " qz-shell--wide" : ""}${pageFlow ? " qz-shell--page-flow" : ""}`}>
       <ViewerWatermark />
       {children}
     </section>

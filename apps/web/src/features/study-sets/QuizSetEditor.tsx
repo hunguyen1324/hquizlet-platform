@@ -52,6 +52,7 @@ interface QuizQuestion {
 
 type Props = {
   existingSetId?: number;
+  questionId?: number;
   onSave: () => void;
   onCancel: () => void;
 };
@@ -87,21 +88,23 @@ function QuestionCard({
   studySetId,
   ensureStudySet,
   onBusyChange,
+  focused = false,
 }: {
   studySetId?: number;
+  focused?: boolean;
   ensureStudySet: () => Promise<number>;
   onBusyChange: (key: string, busy: boolean) => void;
   question: QuizQuestion;
   index: number;
   onChange: (q: QuizQuestion) => void;
-  onRemove: () => void;
-  onDuplicate: () => void;
+  onRemove?: () => void;
+  onDuplicate?: () => void;
   disabled: boolean;
 }) {
   const latestQuestion = React.useRef(question);
   latestQuestion.current = question;
   const mediaBusy = React.useCallback((busy: boolean) => onBusyChange(question.key, busy), [onBusyChange, question.key]);
-  const [editing, setEditing] = React.useState(!question.questionText.trim());
+  const [editing, setEditing] = React.useState(focused || !question.questionText.trim());
   const [editorMounted, setEditorMounted] = React.useState(editing);
   const [explanationOpen, setExplanationOpen] = React.useState(false);
   const [mediaMounted, setMediaMounted] = React.useState(false);
@@ -116,7 +119,9 @@ function QuestionCard({
     setCustomLabel("");
   }
   const typeLabel = { multiple_choice: "Nhiều lựa chọn", true_false: "Đúng / Sai", written: "Tự luận", paragraph: "Đọc hiểu", sorting: "Sắp xếp" }[question.questionType];
-  const correctOption = (text: string, index: number) => Boolean(question.correctAnswer) && (question.correctAnswer === text || question.correctAnswer.toUpperCase() === String.fromCharCode(65 + index));
+  const explicitAnswerIndex = question.options.findIndex(option => option.text === question.correctAnswer);
+  const correctOption = (_text: string, index: number) => Boolean(question.correctAnswer) &&
+    (explicitAnswerIndex >= 0 ? index === explicitAnswerIndex : question.correctAnswer.toUpperCase() === String.fromCharCode(65 + index));
   function setField<K extends keyof QuizQuestion>(key: K, value: QuizQuestion[K]) {
     onChange({ ...question, [key]: value });
   }
@@ -157,9 +162,9 @@ function QuestionCard({
       <header className="qedit-card-head">
         <div className="qedit-question-meta"><strong>{String(index + 1).padStart(2, "0")}</strong><span>{typeLabel}</span>{question.timeInSeconds ? <span>· {question.timeInSeconds} giây</span> : null}</div>
         <div className="qedit-question-actions">
-          <button type="button" className="qedit-icon-button" onClick={onDuplicate} disabled={disabled} title="Nhân bản câu hỏi" aria-label={`Nhân bản câu ${index + 1}`}><StudyActionIcon name="copy" /></button>
-          <button type="button" className="qedit-icon-button qedit-danger" onClick={onRemove} disabled={disabled} title="Xóa câu hỏi" aria-label={`Xóa câu ${index + 1}`}><StudyActionIcon name="trash" /></button>
-          <button type="button" className="qedit-edit-button" disabled={disabled} onClick={() => { setEditorMounted(true); setEditing(value => !value); }} aria-expanded={editing}><StudyActionIcon name={editing ? "check" : "edit"} />{editing ? "Xong" : "Chỉnh sửa"}</button>
+          {!focused && <><button type="button" className="qedit-icon-button" onClick={onDuplicate} disabled={disabled} title="Nhân bản câu hỏi" aria-label={`Nhân bản câu ${index + 1}`}><StudyActionIcon name="copy" /></button>
+          <button type="button" className="qedit-icon-button qedit-danger" onClick={onRemove} disabled={disabled} title="Xóa câu hỏi" aria-label={`Xóa câu ${index + 1}`}><StudyActionIcon name="trash" /></button></>}
+          <button type="button" className="qedit-edit-button" disabled={disabled} onClick={() => { setEditorMounted(true); setEditing(value => !value); }} aria-expanded={editing}><StudyActionIcon name={editing ? "check" : "edit"} />{editing ? (focused ? "Xem trước" : "Xong") : "Chỉnh sửa"}</button>
         </div>
       </header>
       {tags.length > 0 && <div className="qedit-labels" aria-label={`Nhãn câu ${index + 1}`}>{tags.map(tag => <span className="qedit-label" key={tag}>{tag}</span>)}</div>}
@@ -218,6 +223,10 @@ function QuestionCard({
           </label>
         </div>
 
+        {focused && <label>Thời gian (giây)
+          <input type="number" min={1} value={question.timeInSeconds ?? ""} placeholder="Mặc định"
+            onChange={event => setField("timeInSeconds", event.target.value ? Number(event.target.value) : undefined)} disabled={disabled} />
+        </label>}
         <fieldset className="qedit-label-editor" disabled={disabled}>
           <legend>Nhãn câu hỏi</legend>
           <div className="qedit-labels">{QUESTION_LABELS.map(label => <button
@@ -239,6 +248,7 @@ function QuestionCard({
         {question.questionType === "multiple_choice" && (
           <div className="quiz-options">
             <p className="quiz-options-label">Đáp án (chọn đáp án đúng)</p>
+            <div className="qedit-option-grid">
             {question.options.map((opt, optIdx) => (
               <div key={optIdx} className="quiz-option-row">
                 <input
@@ -269,6 +279,7 @@ function QuestionCard({
                 </button>
               </div>
             ))}
+            </div>
             <button type="button" className="secondary-button" onClick={addOption} disabled={disabled}>
               + Thêm đáp án
             </button>
@@ -405,7 +416,7 @@ function QuestionCard({
   );
 }
 
-export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
+export function QuizSetEditor({ existingSetId, questionId, onSave, onCancel }: Props) {
   const { token, user } = useAuth();
   const [draftSetId, setDraftSetId] = useState(existingSetId);
   const draftRequest = React.useRef<Promise<number> | null>(null);
@@ -451,7 +462,7 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
         setTitle(set.title); setDescription(set.description ?? ""); setTermLanguage(set.termLanguage); setDefinitionLanguage(set.definitionLanguage); setVisibility(set.visibility);
         setQuestions(loadedQuestions.map((q, index) => ({
           key: String(q.id ?? crypto.randomUUID()), questionText: q.questionText, questionType: q.questionType,
-          correctAnswer: q.correctAnswer || q.options?.find(option => option.isCorrect)?.text || "", answerExplanation: q.answerExplanation ?? "", paragraphText: q.paragraphText ?? "",
+          correctAnswer: q.options?.find(option => option.isCorrect)?.text || q.correctAnswer || "", answerExplanation: q.answerExplanation ?? "", paragraphText: q.paragraphText ?? "",
           imageUrl: q.imageUrl ?? "", audioUrl: q.audioUrl ?? "", srtText: q.srtText ?? "", options: (q.options ?? []).map((o, optionIndex) => ({ text: o.text, position: optionIndex })),
           position: q.position ?? index, subQuestions: q.subQuestions, tags: q.tags, timeInSeconds: q.timeInSeconds,
         })));
@@ -555,6 +566,61 @@ export function QuizSetEditor({ existingSetId, onSave, onCancel }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (existingSetId && questionId) {
+    const index = questions.findIndex(q => q.key === String(questionId));
+    const question = questions[index];
+    async function saveQuestion(event: React.FormEvent) {
+      event.preventDefault();
+      if (!question || !existingSetId || !questionId || loading || mediaBusy) return;
+      setError("");
+      setLoading(true);
+      try {
+        const { questionType, correctAnswer, timeInSeconds, subQuestions, tags } = question;
+        const questionText = question.questionText.trim();
+        const correctIndex = question.options.findIndex(option => option.text === correctAnswer);
+        const letterIndex = /^[A-Z]$/i.test(correctAnswer) ? correctAnswer.toUpperCase().charCodeAt(0) - 65 : -1;
+        const effectiveIndex = correctIndex >= 0 ? correctIndex : letterIndex;
+        const options = question.options.flatMap((option, position) => option.text.trim()
+          ? [{ text: option.text.trim(), position, isCorrect: questionType === "multiple_choice" && position === effectiveIndex }]
+          : []);
+        if (!questionText) throw new Error("Nhập nội dung câu hỏi.");
+        if (questionType !== "paragraph" && !correctAnswer.trim()) throw new Error("Chọn hoặc nhập đáp án đúng.");
+        if (questionType === "multiple_choice" && (options.length < 2 || !options.some(option => option.isCorrect))) {
+          throw new Error("Nhập ít nhất hai lựa chọn và chọn đáp án đúng.");
+        }
+        await quizQuestionApi.update(token, existingSetId, questionId, {
+          questionText, questionType, timeInSeconds, subQuestions, tags,
+          correctAnswer: questionType === "multiple_choice" ? options.find(option => option.isCorrect)?.text : correctAnswer,
+          options: options.map((option, position) => ({ ...option, position })),
+          imageUrl: question.imageUrl.trim() || undefined, audioUrl: question.audioUrl || undefined,
+          srtText: normalizeSubtitleText(question.srtText), answerExplanation: question.answerExplanation.trim() || undefined,
+          paragraphText: question.paragraphText.trim() || undefined, position: index,
+        });
+        onSave();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Không lưu được câu hỏi.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    return <form className="create-page qedit-page qedit-page--focused" onSubmit={saveQuestion}>
+      <header className="qedit-header">
+        <button type="button" className="qedit-back" onClick={onCancel} disabled={loading || mediaBusy} aria-label="Về chi tiết quiz"><StudyActionIcon name="back" /></button>
+        <div className="qedit-title"><strong>{index >= 0 ? `Chỉnh sửa câu ${index + 1}` : "Chỉnh sửa câu hỏi"}</strong><span>{title}</span></div>
+        <div className="qedit-header-actions">
+          <button type="button" className="ghost-button" disabled={loading || mediaBusy} onClick={onCancel}>Hủy</button>
+          <button type="submit" className="primary-button" disabled={loading || mediaBusy || !question}>Lưu câu hỏi</button>
+        </div>
+      </header>
+      {error && <p className="message message--error" role="alert">{error}</p>}
+      {!question && !error && <p role="status">{loading ? "Đang tải câu hỏi…" : "Không tìm thấy câu hỏi."}</p>}
+      {question && <QuestionCard key={question.key} focused question={question} index={index}
+        studySetId={existingSetId} ensureStudySet={ensureStudySet} onBusyChange={changeMediaBusy}
+        onChange={updated => updateQuestion(question.key, updated)}
+        disabled={loading || mediaBusy} />}
+    </form>;
   }
 
   return (

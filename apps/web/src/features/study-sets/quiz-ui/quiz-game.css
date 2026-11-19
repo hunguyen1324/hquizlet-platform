@@ -131,3 +131,40 @@
   .qz-shell--game .qz-top-row,
   .qz-shell--game .qz-bottom-row { flex-wrap: wrap; }
 }
+
+/* Keep the question and answer cards in place when feedback appears. */
+.qz-shell--game .qz-question-layout--revealed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.qz-shell--game .qz-question-feedback {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+.qz-shell--game .qz-feedback img,
+.qz-shell--game .qz-feedback video {
+  max-width: 100%;
+  height: auto;
+}
+
+.qz-shell--game .qz-answers--result {
+  display: flex;
+  justify-content: center;
+}
+
+.qz-shell--game .qz-answers--result .qz-answer {
+  width: calc((100% - 10px) / 2);
+  max-width: 320px;
+  animation: qz-result-card-in 220ms ease-out both;
+}
+
+@keyframes qz-result-card-in {
+  from { opacity: .55; transform: translateY(4px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qz-shell--game .qz-answers--result .qz-answer { animation: none; }
+}

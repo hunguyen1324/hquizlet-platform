@@ -130,9 +130,10 @@ function AnswerInput({
         ]
       : (question.options ?? []).map((option) => ({ text: option.text, label: option.text, isCorrect: option.isCorrect === true }));
   const shown = pending?.value ?? selected;
+  const showResultCards = game && revealed && selected !== undefined;
 
   return (
-    <div className={`qz-answers qz-answers--columns${options.length === 4 && (game || options.every((option) => option.label.length <= 12)) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
+    <div className={`qz-answers qz-answers--columns${showResultCards ? " qz-answers--result" : options.length === 4 && (game || options.every((option) => option.label.length <= 12)) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
       {options.map((option, i) => {
         const percentage = game && audience?.total ? Math.round((audience.counts[i] ?? 0) * 100 / audience.total) : undefined;
         if (!revealed && eliminated?.includes(i)) {
@@ -144,11 +145,13 @@ function AnswerInput({
           );
         }
         const isSelected = shown === option.text;
+        const isCorrectOption = option.isCorrect || option.text === correctText;
+        if (showResultCards && !isSelected && !isCorrectOption) return null;
+
         let state: OptionState = "idle";
         if (pending?.value === option.text) {
           state = "pending";
         } else if (revealed) {
-          const isCorrectOption = option.isCorrect || (correctText !== undefined && option.text === correctText);
           if (isCorrectOption) state = isSelected ? "correct" : "passed";
           else if (isSelected) state = "wrong";
         } else if (isSelected) {
@@ -203,6 +206,30 @@ export function ProtectedQuizPlayer({
   const [error, setError] = React.useState("");
   const [timeLeft, setTimeLeft] = React.useState(0);
   const [navigator, setNavigator] = React.useState(false);
+  const shellRef = React.useRef<HTMLElement>(null);
+  const [fullscreen, setFullscreen] = React.useState(false);
+  const [fullscreenError, setFullscreenError] = React.useState("");
+
+  React.useEffect(() => {
+    const onChange = () => {
+      setFullscreen(shellRef.current !== null && document.fullscreenElement === shellRef.current);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  async function toggleFullscreen() {
+    const shell = shellRef.current;
+    if (!shell) return;
+    setFullscreenError("");
+    try {
+      if (document.fullscreenElement === shell) await document.exitFullscreen();
+      else if (shell.requestFullscreen) await shell.requestFullscreen();
+      else setFullscreenError("Trình duyệt không hỗ trợ mở quiz toàn màn hình.");
+    } catch {
+      setFullscreenError("Không thể đổi chế độ toàn màn hình trên trình duyệt này.");
+    }
+  }
   const [flags, setFlags] = React.useState<boolean[]>([]);
   const [confirmSubmit, setConfirmSubmit] = React.useState(false);
   const [audio, setAudio] = React.useState<{ key: string; url: string } | null>(null);
@@ -646,7 +673,7 @@ export function ProtectedQuizPlayer({
 
   const game = view.mode === "practice" && view.layout === "default" && !view.submitted;
   return (
-    <QuizShell wide game={game} pageFlow={view.mode === "practice" && view.layout === "default"}>
+    <QuizShell shellRef={shellRef} wide game={game} pageFlow={view.mode === "practice" && view.layout === "default"}>
       <QuizTopBar
         title={view.submitted ? "Kết quả" : view.mode === "exam" ? "Thi thử" : "Luyện tập"}
         position={position}
@@ -665,9 +692,13 @@ export function ProtectedQuizPlayer({
         canSubmit={!view.submitted && !busy}
         saveState={saveState}
         onRetrySave={failedAnswer ? () => void answer(failedAnswer.index, failedAnswer.value) : undefined}
-        onExit={() => setView(null)}
+        onOpenGrid={() => setNavigator(true)}
+        fullscreen={fullscreen}
+        onToggleFullscreen={() => void toggleFullscreen()}
+        onExit={() => { setFullscreenError(""); setView(null); }}
         onSubmit={() => setConfirmSubmit(true)}
       />
+      {fullscreenError && <p role="status" className="qz-hint">{fullscreenError}</p>}
       {timeWarning && (
         <p className="qz-hint" role="status" aria-live="polite">
           {timeWarning}
@@ -814,7 +845,7 @@ export function ProtectedQuizPlayer({
                   )}
                   {view.submitted && !item.revealed && <p className="qz-muted">Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
                 </div>
-                {item.revealed && <aside className="qz-question-feedback" tabIndex={0} aria-label="Đáp án và giải thích — cuộn để xem thêm">
+                {item.revealed && <aside className="qz-question-feedback" tabIndex={0} aria-label="Đáp án và giải thích">
                   <div className={`qz-feedback ${view.results[item.index] ? "qz-feedback--ok" : "qz-feedback--bad"}`} aria-live="polite">
                     <strong>{view.results[item.index] ? "✓ Chính xác" : "✗ Chưa đúng"}</strong>
                     <p>Đáp án: {correctText}</p>
@@ -834,8 +865,6 @@ export function ProtectedQuizPlayer({
         canNext={!busy && view.currentIndex < manifest.length - 1}
         onPrev={() => navigate(view.currentIndex - 1)}
         onNext={() => navigate(view.currentIndex + 1)}
-        onOpenGrid={() => setNavigator(true)}
-        nextLabel={view.submitted ? "Tiếp" : "Tiếp"}
         hint={saveState === "saving" ? "Đang lưu đáp án…" : undefined}
       />
 

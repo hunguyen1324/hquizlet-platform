@@ -20,7 +20,7 @@ import { StudyActionIcon } from "./StudyActionIcon";
 
 type Props = {
   set: StudySet;
-  onEdit: () => void;
+  onEdit: (questionId?: number) => void;
   onDelete: () => void;
   onBack: () => void;
   onToggleStar?: (card: Flashcard) => void;
