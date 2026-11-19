@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/model"
@@ -54,6 +55,8 @@ type QuizSessions interface {
 	// Returns ErrNotFound if the session does not exist or belongs to another user.
 	// Returns ErrNotFound (idempotent) if already deleted.
 	Delete(ctx context.Context, id string, userID int64) error
+
+	AudienceCounts(ctx context.Context, snapshotID string, index int, excludeUser int64) (map[string]int, error)
 
 	// CountActive counts non-deleted, non-expired sessions for (user, quiz).
 	CountActive(ctx context.Context, userID, studySetID int64) (int, error)
@@ -369,4 +372,30 @@ func sessionItoa(n int) string {
 		n /= 10
 	}
 	return string(buf)
+}
+
+// AudienceCounts takes the most recent submitted response per learner for this snapshot.
+func (r *QuizSessionRepository) AudienceCounts(ctx context.Context, snapshotID string, index int, excludeUser int64) (map[string]int, error) {
+	rows, err := r.db.QueryContext(ctx, `
+  SELECT answer, count(*) FROM (
+   SELECT DISTINCT ON (user_id) state->'answers'->>$2::text AS answer
+   FROM protected_quiz_sessions
+   WHERE snapshot_id=$1 AND user_id<>$3 AND deleted_at IS NULL
+    AND state ? 'submittedAt' AND (state->'answers') ? $2::text
+   ORDER BY user_id, active_until DESC, id DESC
+  ) latest GROUP BY answer`, snapshotID, strconv.Itoa(index), excludeUser)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var answer string
+		var count int
+		if err := rows.Scan(&answer, &count); err != nil {
+			return nil, err
+		}
+		counts[answer] = count
+	}
+	return counts, rows.Err()
 }

@@ -155,6 +155,15 @@ func (h *Handler) protectedQuizRouter(w http.ResponseWriter, r *http.Request, se
 		http.ServeContent(w, r, "audio", time.Time{}, reader)
 		return
 	}
+	if action == "audience" && r.Method == http.MethodGet {
+		result, err := h.protectedQuiz.Audience(r.Context(), setID, uid, id, index)
+		if err != nil {
+			h.playError(w, r, err)
+			return
+		}
+		WriteJSON(w, 200, result)
+		return
+	}
 	if (action == "page" && r.Method != "GET") || (action != "page" && r.Method != "POST") {
 		WriteError(w, 405, "method not allowed")
 		return

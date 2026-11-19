@@ -17,12 +17,14 @@ export function AnswerOption({
   state,
   disabled,
   onSelect,
+  percentage,
 }: {
   letter: string;
   text: string;
   state: OptionState;
   disabled: boolean;
   onSelect: () => void;
+  percentage?: number;
 }) {
   const label = STATE_LABEL[state];
   return (
@@ -38,6 +40,7 @@ export function AnswerOption({
         {letter}
       </span>
       <span className="qz-answer-text">{text}</span>
+      {percentage !== undefined && <span className="qz-answer-percent">{percentage}%</span>}
       {label ? (
         <span className="qz-answer-state qz-answer-state--hidden">
           <span aria-hidden="true">{state === "pending" ? "◌" : state === "wrong" ? "✗" : "✓"}</span>

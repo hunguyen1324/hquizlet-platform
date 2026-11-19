@@ -5,9 +5,9 @@ import { contentProtection } from "../exam/contentProtection";
 
 /** One frame for every quiz layout: same protection, same watermark, same
  * fixed-height column so the top/bottom bars never scroll away on a phone. */
-export function QuizShell({ wide = false, pageFlow = false, children }: { wide?: boolean; pageFlow?: boolean; children: ReactNode }) {
+export function QuizShell({ wide = false, pageFlow = false, game = false, children }: { wide?: boolean; pageFlow?: boolean; game?: boolean; children: ReactNode }) {
   return (
-    <section {...contentProtection} className={`qz-shell${wide ? " qz-shell--wide" : ""}${pageFlow ? " qz-shell--page-flow" : ""}`}>
+    <section {...contentProtection} className={`qz-shell${game ? " qz-shell--game" : ""}${wide ? " qz-shell--wide" : ""}${pageFlow ? " qz-shell--page-flow" : ""}`}>
       <ViewerWatermark />
       {children}
     </section>

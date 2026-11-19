@@ -16,7 +16,7 @@ export type ProtectedQuizView = {
   serverTime: string; deadline?: string; submitted: boolean; currentIndex: number;
   total: number; answered: number;
   manifest?: { number: number; part: number; group: number }[];
-  page: { index: number; question: QuizQuestion; hasAudio: boolean; revealed: boolean }[];
+  page: { index: number; question: QuizQuestion; hasAudio: boolean; revealed: boolean; eliminated?: number[] }[];
   answers: Record<number, string>; results: Record<number, boolean>; score?: number; timeUsed: number;
 };
 
@@ -83,6 +83,10 @@ export const protectedQuizApi = {
     }),
   answer: (token: string, setId: number, id: string, index: number, answer: string) =>
     apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/answer`, token, { method: "POST", body: JSON.stringify({ index, answer }) }),
+  fiftyFifty: (token: string, setId: number, id: string, index: number) =>
+    apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/fifty-fifty`, token, { method: "POST" }, { index }),
+  audience: (token: string, setId: number, id: string, index: number) =>
+    apiFetch<{ total: number; counts: number[] }>(`${path(setId)}/${id}/audience`, token, {}, { index }),
   submit: (token: string, setId: number, id: string) =>
     apiFetch<ProtectedQuizView>(`${path(setId)}/${id}/submit`, token, { method: "POST" }),
   /** Warm the client cache for a page without marking it seen or granting audio. */

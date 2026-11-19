@@ -8,6 +8,7 @@ import (
 	"github.com/hunguyen1324/hquizlet-platform/services/study/internal/repository"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -34,10 +35,11 @@ func (f *protectedQuestions) ListByStudySet(context.Context, int64) ([]model.Qui
 }
 
 type memoryQuizSessions struct {
-	mu        sync.Mutex
-	states    map[string][]byte
-	allowHits int
-	now       time.Time
+	mu             sync.Mutex
+	states         map[string][]byte
+	allowHits      int
+	audienceCounts map[string]int
+	now            time.Time
 }
 
 func (f *memoryQuizSessions) Create(_ context.Context, s model.QuizSession) error {
@@ -428,5 +430,53 @@ func TestQuizPageResponseIsCompactAndManifestIsOptIn(t *testing.T) {
 	}
 	if answered.Results[0] || answered.Answers[0] != "wrong" || len(answered.Manifest) != 0 {
 		t.Fatalf("instant answer payload: %+v", answered)
+	}
+}
+
+func (f *memoryQuizSessions) AudienceCounts(context.Context, string, int, int64) (map[string]int, error) {
+	return f.audienceCounts, nil
+}
+
+func TestPracticeHelpKeepsCorrectOptionAndPersistsElimination(t *testing.T) {
+	svc, _, store, _ := securityFixture(t)
+	questions := svc.questions.(*protectedQuestions)
+	questions.items[0].Options = append(questions.items[0].Options,
+		model.QuizQuestionOption{Text: "another", Position: 2},
+		model.QuizQuestionOption{Text: "last", Position: 3},
+	)
+	store.audienceCounts = map[string]int{"wrong": 1, "right": 3}
+	ctx := context.Background()
+	view := startSecurityQuiz(t, svc, true)
+
+	stats, err := svc.Audience(ctx, 1, 10, view.ID, 0)
+	if err != nil || stats.Total != 4 || !slices.Equal(stats.Counts, []int{1, 3, 0, 0}) {
+		t.Fatalf("unexpected audience result: %+v, %v", stats, err)
+	}
+	if _, err := svc.Audience(ctx, 1, 10, view.ID, 1); !errors.Is(err, ErrValidation) {
+		t.Fatalf("audience on unseen question: %v", err)
+	}
+
+	help, err := svc.Act(ctx, 1, 10, view.ID, "fifty-fifty", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := help.Page[0].Eliminated
+	if len(removed) != 2 || slices.Contains(removed, 1) || help.Page[0].Question.CorrectAnswer != nil {
+		t.Fatalf("incorrect elimination or answer leak: %+v", help.Page[0])
+	}
+	reopened, err := svc.Act(ctx, 1, 10, view.ID, "page", 0, "")
+	if err != nil || len(reopened.Page) != 1 || !slices.Equal(reopened.Page[0].Eliminated, removed) {
+		t.Fatalf("elimination did not persist: %+v, %v", reopened, err)
+	}
+
+	exam, err := svc.Start(ctx, 1, 10, model.StartQuizInput{Mode: "exam", Layout: "default", DurationSeconds: 60})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Act(ctx, 1, 10, exam.ID, "fifty-fifty", 0, ""); !errors.Is(err, ErrValidation) {
+		t.Fatalf("50/50 in exam: %v", err)
+	}
+	if _, err := svc.Audience(ctx, 1, 10, exam.ID, 0); !errors.Is(err, ErrValidation) {
+		t.Fatalf("audience in exam: %v", err)
 	}
 }

@@ -24,6 +24,7 @@ type QuizSession struct {
 	Total        int            `json:"total,omitempty"`
 	SnapshotID   string         `json:"snapshotId,omitempty"`
 	CurrentIndex int            `json:"currentIndex"`
+	Eliminated   map[int][]int  `json:"eliminated,omitempty"`
 	// Sanitized records that Items already hold safe HTML, so read paths can
 	// skip re-running the sanitizer. Sessions created before this flag existed
 	// stay on the sanitizing path until they expire.
@@ -77,11 +78,17 @@ type QuizManifestItem struct {
 	Group  int `json:"group"`
 }
 
+type QuizAudience struct {
+	Total  int   `json:"total"`
+	Counts []int `json:"counts"`
+}
+
 type QuizPageItem struct {
-	Index    int          `json:"index"`
-	Question QuizQuestion `json:"question"`
-	HasAudio bool         `json:"hasAudio"`
-	Revealed bool         `json:"revealed"`
+	Eliminated []int        `json:"eliminated,omitempty"`
+	Index      int          `json:"index"`
+	Question   QuizQuestion `json:"question"`
+	HasAudio   bool         `json:"hasAudio"`
+	Revealed   bool         `json:"revealed"`
 }
 
 // QuizPeekView is the read-only payload used to pre-warm the next pages.
@@ -90,6 +97,7 @@ type QuizPeekView struct {
 	ID           string         `json:"id"`
 	ServerTime   time.Time      `json:"serverTime"`
 	CurrentIndex int            `json:"currentIndex"`
+	Eliminated   map[int][]int  `json:"eliminated,omitempty"`
 	Page         []QuizPageItem `json:"page"`
 }
 

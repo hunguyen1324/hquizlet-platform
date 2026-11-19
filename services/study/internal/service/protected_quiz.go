@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"regexp"
 	"sort"
@@ -258,6 +259,20 @@ func (s *ProtectedQuizService) ActWith(ctx context.Context, setID, uid int64, id
 		}
 		switch action {
 		case "page":
+		case "fifty-fifty":
+			if !canUseQuizHelp(session, index, now) {
+				return ErrValidation
+			}
+			if len(session.Eliminated[index]) == 0 {
+				removed, err := fiftyFifty(content.items[index].Question)
+				if err != nil {
+					return err
+				}
+				if session.Eliminated == nil {
+					session.Eliminated = make(map[int][]int)
+				}
+				session.Eliminated[index] = removed
+			}
 		case "answer":
 			if session.SubmittedAt == nil {
 				if !session.Seen[index] || len(answer) > 8000 {
@@ -283,6 +298,83 @@ func (s *ProtectedQuizService) ActWith(ctx context.Context, setID, uid int64, id
 		return nil
 	})
 	return view, err
+}
+
+func canUseQuizHelp(session *model.QuizSession, index int, now time.Time) bool {
+	_, answered := session.Answers[index]
+	return session.Mode == "practice" && session.Layout == "default" && session.Instant &&
+		session.Seen[index] && !answered && session.SubmittedAt == nil &&
+		(session.Deadline == nil || now.Before(*session.Deadline))
+}
+
+func fiftyFifty(q model.QuizQuestion) ([]int, error) {
+	if q.QuestionType != "multiple_choice" || len(q.Options) != 4 {
+		return nil, ErrValidation
+	}
+	wrong := make([]int, 0, 3)
+	for i, option := range q.Options {
+		if !quizCorrect(q, option.Text) {
+			wrong = append(wrong, i)
+		}
+	}
+	if len(wrong) != 3 {
+		return nil, ErrValidation
+	}
+	keep, err := rand.Int(rand.Reader, big.NewInt(3))
+	if err != nil {
+		return nil, err
+	}
+	i := int(keep.Int64())
+	return append(wrong[:i], wrong[i+1:]...), nil
+}
+
+func (s *ProtectedQuizService) Audience(ctx context.Context, setID, uid int64, id string, index int) (model.QuizAudience, error) {
+	result := model.QuizAudience{Counts: []int{}}
+	if err := s.access(ctx, setID, uid); err != nil {
+		return result, err
+	}
+	if err := s.Allow(ctx, uid, "quiz-audience", 30, time.Minute); err != nil {
+		return result, err
+	}
+	err := s.sessions.View(ctx, id, uid, setID, func(session *model.QuizSession) error {
+		if index < 0 || index >= session.QuestionCount() || !canUseQuizHelp(session, index, s.now()) {
+			return ErrValidation
+		}
+		content, err := s.content(ctx, session)
+		if err != nil {
+			return err
+		}
+		q := content.items[index].Question
+		var options []string
+		switch q.QuestionType {
+		case "multiple_choice":
+			for _, option := range q.Options {
+				options = append(options, option.Text)
+			}
+		case "true_false":
+			options = []string{"true", "false"}
+		}
+		if len(options) < 2 {
+			return ErrValidation
+		}
+		if session.SnapshotID == "" {
+			return nil
+		}
+		counts, err := s.sessions.AudienceCounts(ctx, session.SnapshotID, index, uid)
+		if err != nil {
+			return err
+		}
+		result.Counts = make([]int, len(options))
+		for i, option := range options {
+			result.Counts[i] = counts[option]
+			result.Total += result.Counts[i]
+		}
+		if result.Total < 3 {
+			result = model.QuizAudience{Counts: []int{}}
+		}
+		return nil
+	})
+	return result, err
 }
 
 // Audio must belong to a delivered question in this exact user's unexpired session.
@@ -399,7 +491,9 @@ func (s *ProtectedQuizService) buildView(session *model.QuizSession, content qui
 			}
 		}
 		revealed := answered && (submitted || session.Instant)
-		view.Page = append(view.Page, quizPageItem(content.items[i], i, answered, revealed, content.sanitize))
+		item := quizPageItem(content.items[i], i, answered, revealed, content.sanitize)
+		item.Eliminated = session.Eliminated[i]
+		view.Page = append(view.Page, item)
 	}
 	if submitted {
 		score := 0
@@ -496,7 +590,9 @@ func (s *ProtectedQuizService) Peek(ctx context.Context, setID, uid int64, id st
 		for _, i := range content.page(session.Layout, index) {
 			_, answered := session.Answers[i]
 			revealed := answered && (session.SubmittedAt != nil || session.Instant)
-			view.Page = append(view.Page, quizPageItem(content.items[i], i, answered, revealed, content.sanitize))
+			item := quizPageItem(content.items[i], i, answered, revealed, content.sanitize)
+			item.Eliminated = session.Eliminated[i]
+			view.Page = append(view.Page, item)
 		}
 		return nil
 	})

@@ -18,6 +18,7 @@ import {
   type SaveState,
 } from "./quiz-ui";
 import "./quiz-ui/quiz-ui.css";
+import "./quiz-ui/quiz-game.css";
 import type { ExamItem } from "./exam/types";
 import type { QuizQuestion } from "../../types";
 
@@ -41,6 +42,9 @@ function AnswerInput({
   revealed,
   disabled,
   onAnswer,
+  eliminated,
+  audience,
+  game,
 }: {
   question: QuizQuestion;
   selected?: string;
@@ -49,6 +53,9 @@ function AnswerInput({
   revealed: boolean;
   disabled: boolean;
   onAnswer: (answer: string) => void;
+  eliminated?: number[];
+  audience?: { total: number; counts: number[] };
+  game: boolean;
 }) {
   const [draft, setDraft] = React.useState(selected ?? "");
   const [order, setOrder] = React.useState(() => (question.options ?? []).map((o) => o.text));
@@ -125,8 +132,17 @@ function AnswerInput({
   const shown = pending?.value ?? selected;
 
   return (
-    <div className={`qz-answers qz-answers--columns${options.every((option) => option.label.length <= 12) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
+    <div className={`qz-answers qz-answers--columns${options.length === 4 && (game || options.every((option) => option.label.length <= 12)) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
       {options.map((option, i) => {
+        const percentage = game && audience?.total ? Math.round((audience.counts[i] ?? 0) * 100 / audience.total) : undefined;
+        if (!revealed && eliminated?.includes(i)) {
+          return (
+            <div key={i} className="qz-answer qz-answer--eliminated">
+              <span>Đã loại {letterFor(i)}</span>
+              {percentage !== undefined && <span className="qz-answer-percent">{percentage}%</span>}
+            </div>
+          );
+        }
         const isSelected = shown === option.text;
         let state: OptionState = "idle";
         if (pending?.value === option.text) {
@@ -143,6 +159,7 @@ function AnswerInput({
             key={i}
             letter={letterFor(i)}
             text={option.label}
+            percentage={percentage}
             state={state}
             disabled={disabled || revealed || !!pending}
             onSelect={() => onAnswer(option.text)}
@@ -173,6 +190,7 @@ export function ProtectedQuizPlayer({
     studySetId: number;
   } | null>(null);
   const [sessionLimitError, setSessionLimitError] = React.useState(false);
+  const [audienceResults, setAudienceResults] = React.useState<Record<string, { total: number; counts: number[] }>>({});
   const [view, setView] = React.useState<ProtectedQuizView | null>(null);
   const [savedId, setSavedId] = React.useState<string | null>(() => localStorage.getItem(storageKey));
   const [layout, setLayout] = React.useState<QuizStart["layout"]>("default");
@@ -270,6 +288,7 @@ export function ProtectedQuizPlayer({
 
   function start(mode: QuizStart["mode"]) {
     setFlags([]);
+    setAudienceResults({});
     expirySubmitted.current = null;
     peekCache.current.clear();
     peekInFlight.current.clear();
@@ -303,6 +322,23 @@ export function ProtectedQuizPlayer({
       setLoadingPage(true);
     }
     void run(() => protectedQuizApi.page(token, studySetId, view.id, index)).finally(() => setLoadingPage(false));
+  }
+
+  async function checkAudience(index: number) {
+    if (!view || busyRef.current || !pageConfirmed) return;
+    const key = `${view.id}:${index}`;
+    busyRef.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await protectedQuizApi.audience(token, studySetId, view.id, index);
+      setAudienceResults((current) => ({ ...current, [key]: result }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không tải được tỷ lệ lựa chọn.");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   function submit() {
@@ -606,13 +642,11 @@ export function ProtectedQuizPlayer({
     </p>
   ) : null;
 
-  const pageItem = view.page[0];
-  const correctText =
-    (pageItem?.question.options?.find((option) => option.isCorrect)?.text ?? pageItem?.question.correctAnswer) || undefined;
   const timeWarning = !view.deadline || view.submitted ? "" : timeLeft <= 60 ? "Còn dưới 1 phút" : timeLeft <= 300 ? "Còn dưới 5 phút" : "";
 
+  const game = view.mode === "practice" && view.layout === "default" && !view.submitted;
   return (
-    <QuizShell wide pageFlow={view.mode === "practice" && view.layout === "default"}>
+    <QuizShell wide game={game} pageFlow={view.mode === "practice" && view.layout === "default"}>
       <QuizTopBar
         title={view.submitted ? "Kết quả" : view.mode === "exam" ? "Thi thử" : "Luyện tập"}
         position={position}
@@ -723,41 +757,75 @@ export function ProtectedQuizPlayer({
         ) : loadingPage ? (
           <QuizPageSkeleton />
         ) : (
-          view.page.map((item) => (
-            <article key={item.index} className={`qz-question-layout${item.revealed ? " qz-question-layout--revealed" : ""}`}>
-              <div className="qz-question-main">
-              <p className="qz-eyebrow">
-                Câu {view.manifest?.[item.index]?.number} / {manifest.length}
-                {view.manifest?.[item.index]?.part ? ` · ${PART_LABELS[view.manifest[item.index]!.part] ?? `Part ${view.manifest[item.index]!.part}`}` : ""}
-              </p>
-              {item.question.paragraphText && <RichTextContent value={item.question.paragraphText} className="qz-passage" />}
-              <RichTextContent value={item.question.questionText} className="qz-question" />
-              {item.question.imageUrl && (
-                <img className="qz-image" src={item.question.imageUrl} alt="Hình minh hoạ câu hỏi" decoding="async" draggable={false} />
-              )}
-              <AnswerInput
-                key={`${view.id}:${item.index}`}
-                question={item.question}
-                selected={view.answers[item.index]}
-                pending={pending?.index === item.index ? pending : undefined}
-                correctText={correctText}
-                revealed={item.revealed}
-                disabled={busy || view.submitted || (view.instant && view.answers[item.index] !== undefined)}
-                onAnswer={(value) => void answer(item.index, value)}
-              />
-              {view.submitted && !item.revealed && <p className="qz-muted">Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
-              </div>
-              {item.revealed && <aside className="qz-question-feedback" tabIndex={0} aria-label="Đáp án và giải thích — cuộn để xem thêm">
-                <div className={`qz-feedback ${view.results[item.index] ? "qz-feedback--ok" : "qz-feedback--bad"}`} aria-live="polite">
-                  <strong>{view.results[item.index] ? "✓ Chính xác" : "✗ Chưa đúng"}</strong>
-                  <p>Đáp án: {item.question.options?.find((o) => o.isCorrect)?.text ?? item.question.correctAnswer}</p>
-                  <h3>Giải thích</h3>
-                  <RichTextContent value={item.question.answerExplanation} />
-                  {!item.question.answerExplanation && <p className="qz-muted">Câu hỏi này chưa có giải thích.</p>}
+          view.page.map((item) => {
+            const key = `${view.id}:${item.index}`;
+            const audience = audienceResults[key];
+            const options = item.question.options ?? [];
+            const optionsCount = options.length;
+            const answerKey = item.question.correctAnswer?.trim().toUpperCase() ?? "";
+            const correctText = options.find(option => option.isCorrect)?.text ??
+              (/^[A-Z]$/.test(answerKey) ? options[answerKey.charCodeAt(0) - 65]?.text : undefined) ??
+              item.question.correctAnswer ?? undefined;
+            const choice = item.question.questionType === "multiple_choice";
+            const fiftyAvailable = choice && optionsCount === 4;
+            const audienceAvailable = (choice && optionsCount >= 2) || item.question.questionType === "true_false";
+            const showHelp = game && view.instant && !item.revealed && (fiftyAvailable || audienceAvailable);
+            return (
+              <article key={item.index} className={`qz-question-layout${item.revealed ? " qz-question-layout--revealed" : ""}`}>
+                <div className="qz-question-main">
+                  <p className="qz-eyebrow">
+                    Câu {view.manifest?.[item.index]?.number} / {manifest.length}
+                    {view.manifest?.[item.index]?.part ? ` · ${PART_LABELS[view.manifest[item.index]!.part] ?? `Part ${view.manifest[item.index]!.part}`}` : ""}
+                  </p>
+                  {item.question.paragraphText && <RichTextContent value={item.question.paragraphText} className="qz-passage" />}
+                  <RichTextContent value={item.question.questionText} className="qz-question" />
+                  {item.question.imageUrl && (
+                    <img className="qz-image" src={item.question.imageUrl} alt="Hình minh hoạ câu hỏi" decoding="async" draggable={false} />
+                  )}
+                  <AnswerInput
+                    key={key}
+                    game={game}
+                    eliminated={item.eliminated}
+                    audience={audience}
+                    question={item.question}
+                    selected={view.answers[item.index]}
+                    pending={pending?.index === item.index ? pending : undefined}
+                    correctText={correctText}
+                    revealed={item.revealed}
+                    disabled={busy || !pageConfirmed || view.submitted || (view.instant && view.answers[item.index] !== undefined)}
+                    onAnswer={(value) => void answer(item.index, value)}
+                  />
+                  {showHelp && (
+                    <div className="qz-powerups">
+                      {fiftyAvailable && (
+                        <button type="button" disabled={busy || !pageConfirmed || !!item.eliminated?.length}
+                          onClick={() => void run(() => protectedQuizApi.fiftyFifty(token, studySetId, view.id, item.index))}>
+                          <strong>50/50</strong> {item.eliminated?.length ? "Đã loại 2 đáp án" : "Loại 2 đáp án"}
+                        </button>
+                      )}
+                      {audienceAvailable && (
+                        <button type="button" disabled={busy || !pageConfirmed || !!audience?.total}
+                          onClick={() => void checkAudience(item.index)}>
+                          <strong>%</strong> Tỷ lệ người chọn
+                        </button>
+                      )}
+                      {audience && <p role="status">{audience.total ? `Dựa trên ${audience.total} người đã nộp bài.` : "Chưa đủ lượt trả lời để hiển thị tỷ lệ."}</p>}
+                    </div>
+                  )}
+                  {view.submitted && !item.revealed && <p className="qz-muted">Câu bỏ trống. Hãy luyện lại để xem giải thích sau khi trả lời.</p>}
                 </div>
-              </aside>}
-            </article>
-          ))
+                {item.revealed && <aside className="qz-question-feedback" tabIndex={0} aria-label="Đáp án và giải thích — cuộn để xem thêm">
+                  <div className={`qz-feedback ${view.results[item.index] ? "qz-feedback--ok" : "qz-feedback--bad"}`} aria-live="polite">
+                    <strong>{view.results[item.index] ? "✓ Chính xác" : "✗ Chưa đúng"}</strong>
+                    <p>Đáp án: {correctText}</p>
+                    <h3>Giải thích</h3>
+                    <RichTextContent value={item.question.answerExplanation} />
+                    {!item.question.answerExplanation && <p className="qz-muted">Câu hỏi này chưa có giải thích.</p>}
+                  </div>
+                </aside>}
+              </article>
+            );
+          })
         )}
       </div>
 
