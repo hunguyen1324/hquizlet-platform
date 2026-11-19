@@ -133,12 +133,12 @@ function AnswerInput({
   const showResultCards = game && revealed && selected !== undefined;
 
   return (
-    <div className={`qz-answers qz-answers--columns${showResultCards ? " qz-answers--result" : options.length === 4 && (game || options.every((option) => option.label.length <= 12)) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
+    <div className={`qz-answers qz-answers--columns${options.length === 4 && (game || options.every((option) => option.label.length <= 12)) ? " qz-answers--compact" : ""}`} role="group" aria-label="Các đáp án">
       {options.map((option, i) => {
         const percentage = game && audience?.total ? Math.round((audience.counts[i] ?? 0) * 100 / audience.total) : undefined;
-        if (!revealed && eliminated?.includes(i)) {
+        if (eliminated?.includes(i) && (!revealed || showResultCards)) {
           return (
-            <div key={i} className="qz-answer qz-answer--eliminated">
+            <div key={i} className={`qz-answer qz-answer--eliminated${showResultCards ? " qz-slot-hidden" : ""}`}>
               <span>Đã loại {letterFor(i)}</span>
               {percentage !== undefined && <span className="qz-answer-percent">{percentage}%</span>}
             </div>
@@ -146,7 +146,7 @@ function AnswerInput({
         }
         const isSelected = shown === option.text;
         const isCorrectOption = option.isCorrect || option.text === correctText;
-        if (showResultCards && !isSelected && !isCorrectOption) return null;
+        const hideOption = showResultCards && !isSelected && !isCorrectOption;
 
         let state: OptionState = "idle";
         if (pending?.value === option.text) {
@@ -164,6 +164,7 @@ function AnswerInput({
             text={option.label}
             percentage={percentage}
             state={state}
+            hideOption={hideOption}
             disabled={disabled || revealed || !!pending}
             onSelect={() => onAnswer(option.text)}
           />
@@ -800,7 +801,7 @@ export function ProtectedQuizPlayer({
             const choice = item.question.questionType === "multiple_choice";
             const fiftyAvailable = choice && optionsCount === 4;
             const audienceAvailable = (choice && optionsCount >= 2) || item.question.questionType === "true_false";
-            const showHelp = game && view.instant && !item.revealed && (fiftyAvailable || audienceAvailable);
+            const hasHelp = game && view.instant && (fiftyAvailable || audienceAvailable);
             return (
               <article key={item.index} className={`qz-question-layout${item.revealed ? " qz-question-layout--revealed" : ""}`}>
                 <div className="qz-question-main">
@@ -826,8 +827,8 @@ export function ProtectedQuizPlayer({
                     disabled={busy || !pageConfirmed || view.submitted || (view.instant && view.answers[item.index] !== undefined)}
                     onAnswer={(value) => void answer(item.index, value)}
                   />
-                  {showHelp && (
-                    <div className="qz-powerups">
+                  {hasHelp && (
+                    <div className={`qz-powerups${item.revealed ? " qz-slot-hidden" : ""}`}>
                       {fiftyAvailable && (
                         <button type="button" disabled={busy || !pageConfirmed || !!item.eliminated?.length}
                           onClick={() => void run(() => protectedQuizApi.fiftyFifty(token, studySetId, view.id, item.index))}>

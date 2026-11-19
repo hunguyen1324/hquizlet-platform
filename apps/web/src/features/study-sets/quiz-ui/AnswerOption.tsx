@@ -18,6 +18,7 @@ export function AnswerOption({
   disabled,
   onSelect,
   percentage,
+  hideOption = false,
 }: {
   letter: string;
   text: string;
@@ -25,12 +26,13 @@ export function AnswerOption({
   disabled: boolean;
   onSelect: () => void;
   percentage?: number;
+  hideOption?: boolean;
 }) {
   const label = STATE_LABEL[state];
   return (
     <button
       type="button"
-      className={`qz-answer qz-answer--${state}`}
+      className={`qz-answer qz-answer--${state}${hideOption ? " qz-slot-hidden" : ""}`}
       aria-pressed={state === "selected" || state === "pending" || state === "correct"}
       aria-busy={state === "pending" || undefined}
       disabled={disabled}

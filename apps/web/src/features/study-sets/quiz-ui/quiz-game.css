@@ -12,6 +12,7 @@
   background: radial-gradient(ellipse at top, #2a2c5a, #16192e 65%);
   color: var(--foreground);
   color-scheme: dark;
+  container: quiz-game / inline-size;
 }
 
 .qz-shell--game .qz-top {
@@ -33,6 +34,12 @@
   display: grid;
   gap: 16px;
   justify-items: stretch;
+}
+
+@container quiz-game (max-width: 859px) {
+  .qz-shell--game .qz-question-main > :is(.qz-answers, .qz-written) {
+    margin-top: clamp(12px, 4dvh, 32px);
+  }
 }
 
 .qz-shell--game .qz-question {
@@ -132,7 +139,7 @@
   .qz-shell--game .qz-bottom-row { flex-wrap: wrap; }
 }
 
-/* Keep the question and answer cards in place when feedback appears. */
+/* Keep feedback below the round whenever the quiz itself is narrow. */
 .qz-shell--game .qz-question-layout--revealed {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -149,22 +156,32 @@
   height: auto;
 }
 
-.qz-shell--game .qz-answers--result {
-  display: flex;
-  justify-content: center;
+@container quiz-game (min-width: 860px) {
+  .qz-shell--game .qz-question-main {
+    display: flex;
+    flex-direction: column;
+    min-height: clamp(420px, 68dvh, 700px);
+  }
+
+  .qz-shell--game .qz-question-main > :is(.qz-answers, .qz-written) {
+    margin-top: auto;
+  }
+
+  .qz-shell--game .qz-question-layout--revealed {
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 29%);
+    gap: clamp(16px, 2cqw, 32px);
+  }
+
+  .qz-shell--game .qz-question-feedback {
+    align-self: stretch;
+    padding: clamp(14px, 2cqw, 24px);
+  }
 }
 
-.qz-shell--game .qz-answers--result .qz-answer {
-  width: calc((100% - 10px) / 2);
-  max-width: 320px;
-  animation: qz-result-card-in 220ms ease-out both;
+.qz-shell--game .qz-slot-hidden {
+  visibility: hidden;
 }
 
-@keyframes qz-result-card-in {
-  from { opacity: .55; transform: translateY(4px) scale(.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .qz-shell--game .qz-answers--result .qz-answer { animation: none; }
+section.qz-shell--game:fullscreen .qz-body {
+  scrollbar-gutter: stable;
 }
