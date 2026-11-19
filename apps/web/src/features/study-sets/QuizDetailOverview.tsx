@@ -3,6 +3,7 @@ import type { QuizQuestion, StudySet } from "../../types";
 import { ApiError, quizQuestionApi } from "../../lib/api";
 import { useAuth } from "../auth/AuthContext";
 import { ProtectedQuizPlayer } from "./ProtectedQuizPlayer";
+import { StudyActionIcon } from "./StudyActionIcon";
 import { RichTextContent } from "./exam/RichTextContent";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -16,7 +17,7 @@ function QuestionPreview({ question, number, showAnswers, onEdit }: { question: 
     ? [{ text: "true", label: "Đúng", isCorrect: question.correctAnswer === "true" }, { text: "false", label: "Sai", isCorrect: question.correctAnswer === "false" }]
     : (question.options ?? []).map(option => ({ ...option, label: option.text }));
   return <article className="qd-question">
-    <header className="qd-question-head"><p className="qd-question-meta">{number}. {TYPE_LABELS[question.questionType] ?? "Câu hỏi"}{question.timeInSeconds ? ` · ${question.timeInSeconds} giây` : ""}</p>{onEdit && <button type="button" className="secondary-button" onClick={onEdit} aria-label={`Chỉnh sửa câu ${number}`}>✎ Sửa câu</button>}</header>
+    <header className="qd-question-head"><p className="qd-question-meta">{number}. {TYPE_LABELS[question.questionType] ?? "Câu hỏi"}{question.timeInSeconds ? ` · ${question.timeInSeconds} giây` : ""}</p>{onEdit && <button type="button" className="qd-edit-link" onClick={onEdit} aria-label={`Chỉnh sửa câu ${number}`}><StudyActionIcon name="edit" /> Chỉnh sửa</button>}</header>
     {question.paragraphText && <RichTextContent value={question.paragraphText} className="qd-passage" />}
     <RichTextContent value={question.questionText} className="qd-question-title" />
     {question.imageUrl && <img className="qd-question-image" src={question.imageUrl} alt="Hình ảnh câu hỏi" loading="lazy" />}
@@ -142,11 +143,11 @@ export function QuizDetailOverview({ set, onEdit, onSave, resumeSessionId, onMan
   </div>;
   return <>
     <div className="qd-toolbar">
-      <div><button type="button" className="secondary-button" onClick={() => onEdit()}>✎ Chỉnh sửa</button><button type="button" className="secondary-button" onClick={onSave}>Lưu vào thư mục</button></div>
+      <div><button type="button" className="qd-edit-link" onClick={() => onEdit()}><StudyActionIcon name="edit" /> Chỉnh sửa</button><button type="button" className="secondary-button" onClick={onSave}>Lưu vào thư mục</button></div>
       <div><button type="button" className="secondary-button" disabled={loading || restricted || !!error || !questions.length} onClick={() => setPreviewOpen(true)}>Xem trước</button><button type="button" className="primary-button qd-start" onClick={() => setPlaying(true)}>▶ Bắt đầu ngay</button></div>
     </div>
     <div className="qd-layout">
-      <aside className="qd-sidebar"><h2>Hoạt động với quiz</h2><div className="qd-side-card">
+      <aside className="qd-sidebar" aria-labelledby="qd-activity-title"><h2 id="qd-activity-title">Hoạt động với quiz</h2><div className="qd-side-card">
         <strong>Sẵn sàng thử sức?</strong><p>Luyện tập và xem đáp án sau mỗi câu, hoặc thi thử có tính giờ.</p>
         <button type="button" className="primary-button qd-start" onClick={() => setPlaying(true)}>Bắt đầu làm bài</button>
         {onManageSessions && <button type="button" className="secondary-button" onClick={() => onManageSessions(set.id)}>Quản lý phiên làm bài</button>}

@@ -1769,11 +1769,12 @@
 .qd-toolbar { justify-content: space-between; padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid #dbe0eb; }
 .qd-start { background: #c61694; border-color: #c61694; color: white; }
 .qd-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; align-items: start; }
-.qd-sidebar h2 { font-size: .875rem; color: #586380; margin: 0 0 14px; }
-.qd-side-card { background: white; border: 1px solid #dbe0eb; border-radius: 8px; padding: 22px; display: grid; gap: 16px; }
+.qd-sidebar { background: white; border: 1px solid #dbe0eb; border-radius: 8px; }
+.qd-sidebar h2 { font-size: .875rem; color: #586380; font-weight: 600; margin: 0; }
+.qd-side-card { padding: 22px; display: grid; gap: 16px; }
 .qd-side-card p { color: #586380; font-size: .875rem; line-height: 1.7; margin: 0; }
 .qd-preview { background: white; border: 1px solid #dbe0eb; border-radius: 8px; overflow: hidden; scroll-margin-top: 80px; }
-.qd-preview-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px; border-bottom: 1px solid #dbe0eb; color: #586380; font-size: .875rem; }
+.qd-sidebar h2, .qd-preview-head { display: flex; min-height: 60px; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #dbe0eb; color: #586380; font-size: .875rem; }
 .qd-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .qd-toggle input { appearance: none; width: 40px; height: 22px; border-radius: 20px; background: #b6bece; cursor: pointer; position: relative; flex-shrink: 0; }
 .qd-toggle input:checked { background: #0da76b; }
@@ -1875,3 +1876,19 @@
 .qd-play-feedback h3 { margin-bottom: 8px; }
 @media (max-width: 720px) { .qd-play-options[data-four="true"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 460px) { .qd-play-footer > div { order: -1; flex-basis: 100%; } }
+
+.qd-edit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  color: #4c5d7b;
+  background: transparent;
+  font-size: .875rem;
+  white-space: nowrap;
+}
+.qd-edit-link svg { width: 17px; height: 17px; flex-shrink: 0; }
+.qd-edit-link:hover { background: #eef1f9; color: #3447a4; }
+.qd-edit-link:focus-visible { outline: 2px solid #4255ff; outline-offset: 2px; }

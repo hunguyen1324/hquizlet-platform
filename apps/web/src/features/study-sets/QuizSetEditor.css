@@ -187,3 +187,24 @@
   }
   .qedit-page--focused .quiz-option-row .icon-button { grid-column: 3; grid-row: 1; }
 }
+
+.qedit-header { align-items: flex-end; }
+.qedit-header .qedit-back,
+.qedit-header .qedit-title input,
+.qedit-header-actions > button {
+  box-sizing: border-box;
+  height: 44px;
+  padding-block: 0;
+}
+.qedit-header .qedit-back { width: 44px; }
+
+@media (min-width: 1001px) {
+  .qedit-workspace .cards-editor-heading { min-height: 64px; align-items: center; }
+  .qedit-workspace .qedit-question-finder { padding-top: 0; }
+  .qedit-workspace .qedit-question-finder h2 {
+    display: flex;
+    align-items: center;
+    min-height: 64px;
+    margin-bottom: 0;
+  }
+}
